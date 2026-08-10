@@ -1,0 +1,59 @@
+{
+  "name": "pracindo-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:unit": "vitest",
+    "lint": "run-s \"lint:*\"",
+    "lint:oxlint": "oxlint . --fix",
+    "lint:eslint": "eslint . --fix --cache",
+    "format": "oxfmt src/"
+  },
+  "dependencies": {
+    "@primevue/themes": "^4.5.4",
+    "@tailwindcss/vite": "^4.3.3",
+    "axios": "^1.19.0",
+    "chart.js": "^4.5.1",
+    "nprogress": "^0.2.0",
+    "pinia": "^3.0.4",
+    "primeicons": "^8.0.0",
+    "primevue": "^4.5.5",
+    "vue": "^3.5.38",
+    "vue-chartjs": "^5.3.4",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitejs/plugin-vue-jsx": "^5.1.5",
+    "@vitest/eslint-plugin": "^1.6.20",
+    "@vue/test-utils": "^2.2.7",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-oxlint": "~1.69.0",
+    "eslint-plugin-vue": "~10.9.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "npm-run-all2": "^9.0.2",
+    "oxfmt": "^0.54.0",
+    "oxlint": "~1.69.0",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.0.16",
+    "vite-plugin-vue-devtools": "^8.2.1",
+    "vitest": "^4.1.9",
+    "vue-eslint-parser": "^10.4.1"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "overrides": {
+    "minimatch": "^9.0.5",
+    "brace-expansion": "2.0.1"
+  }
+}

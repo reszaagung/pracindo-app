@@ -1,0 +1,90 @@
+/**
+ * assets/tema.css
+ * ================
+ * Impor sekali di main.js:  import '@/assets/tema.css'
+ *
+ * Semua warna hidup di sini. Komponen TIDAK boleh menulis hex langsung —
+ * kalau nanti perlu mode gelap atau penyesuaian kontras, satu file ini
+ * yang disunting, bukan puluhan komponen.
+ */
+
+:root {
+  /* permukaan */
+  --latar: #F7F8FA;
+  --panel: #FFFFFF;
+  --panel-hover: #FAFBFC;
+  --garis: #E8EAED;
+  --garis-tegas: #C6CBD1;
+
+  /* teks */
+  --teks: #1A1D21;
+  --teks-2: #4B5563;
+  --redup: #6B7280;
+  --redup-2: #9AA0A6;
+
+  /* status — dipakai konsisten di seluruh sistem */
+  --merah: #DC2626;
+  --merah-latar: #FEF2F2;
+  --kuning: #B45309;
+  --kuning-latar: #FFFBEB;
+  --kuning-garis: #FDE68A;
+  --hijau: #059669;
+  --hijau-latar: #ECFDF5;
+  --biru: #2563EB;
+  --biru-latar: #EFF6FF;
+
+  /* bentuk */
+  --lengkung: 14px;
+  --lengkung-kecil: 8px;
+  --bayang: 0 1px 2px rgba(0, 0, 0, .05);
+  --bayang-angkat: 0 6px 20px rgba(0, 0, 0, .06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--latar);
+  color: var(--teks);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-variant-numeric: tabular-nums;
+  /* angka sejajar di kolom */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Label kecil berspasi lebar — dipakai berulang sebagai penanda blok. */
+.stensil {
+  margin: 0;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--redup-2);
+}
+
+/* Fokus keyboard yang selalu terlihat. */
+:focus-visible {
+  outline: 2px solid var(--biru);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+#nprogress .bar {
+  background: #10B981 !important;
+  height: 3px !important;
+}
+
+#nprogress .peg {
+  box-shadow: 0 0 10px #10B981, 0 0 5px #10B981 !important;
+}
