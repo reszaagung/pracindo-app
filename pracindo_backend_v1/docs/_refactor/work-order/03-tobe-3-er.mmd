@@ -1,0 +1,100 @@
+%% FASE 3 — OPSI 3 ER: dua domain dipisah
+%% work_order = kolaborasi. produksi = pesanan produksi (pemilik domain).
+%% Arah relasi: produksi -> work_order (FK string, tanpa import).
+%% render: mmdc -i 03-tobe-3-er.mmd -o 03-tobe-3-er.svg
+erDiagram
+
+  WorkOrder ||--o{ WorkOrderPenugasan : "penugasan (PROTECT)"
+  WorkOrder ||--o{ WorkOrderPesan     : "pesan_chat (PROTECT)"
+  WorkOrder ||--o{ WorkOrderTransisi  : "transisi (PROTECT), append-only"
+
+  PesananProduksi }o--o| WorkOrder : "work_order (null, SET_NULL) -- utas diskusi"
+  PesananProduksi }o--|| Resep     : "resep (PROTECT) -- BARU, tidak ada di AS-IS"
+  PesananProduksi }o--o| SesiProduksi : "sesi (null) -- terisi saat produksi jalan"
+
+  Profil ||--o{ WorkOrder          : "dibuat_oleh (PROTECT)"
+  Profil ||--o{ WorkOrderPenugasan : "staff (PROTECT)"
+  Profil ||--o{ WorkOrderPesan     : "pengirim (PROTECT)"
+  Profil ||--o{ WorkOrderTransisi  : "aktor (PROTECT)"
+  Profil ||--o{ PesananProduksi    : "dibuat_oleh (PROTECT)"
+
+  Entitas ||--o{ PesananProduksi : "entitas (PROTECT) -- BARU, wajib untuk penjaga periode"
+
+  WorkOrder {
+    bigint  id       PK
+    varchar nomor    "unique, dari CounterDokumen"
+    varchar status   "BARU|BERJALAN|SELESAI|DIBATALKAN"
+    bool    selesai  "cache — kontrak frontend"
+    varchar kategori "UMUM|PRODUKSI|PRIVATE — kini hanya label visibilitas"
+    varchar judul
+    text    deskripsi
+    varchar aturan_penyelesaian
+    date    tanggal
+    date    deadline
+    bigint  dibuat_oleh FK
+    datetime dibuat_pada
+    datetime diubah_pada
+  }
+
+  PesananProduksi {
+    bigint  id           PK "bekas DetailPesananProduksi, kini berdiri sendiri"
+    varchar nomor        "unique, CounterDokumen jenis 'PP'"
+    bigint  entitas      FK "BARU — tanpa ini penjaga periode tidak bisa jalan"
+    bigint  resep        FK "BARU — mengikat ke Resep, bukan teks bebas"
+    varchar nama_item    "dipertahankan sebagai label tampilan"
+    varchar unit         "PCS_1|GALON_5|DUS_12|PAIL_20|PAIL_25|PAIL_30"
+    varchar stiker       "POLOS|PT|CV"
+    decimal qty          "BARU — AS-IS tidak punya jumlah sama sekali"
+    varchar status       "DRAFT|DISETUJUI|DIPRODUKSI|SELESAI|DIBATALKAN"
+    bigint  work_order   FK "null — utas diskusi di papan tugas"
+    bigint  sesi         FK "null — terisi saat SesiProduksi dibuat"
+    bigint  dibuat_oleh  FK
+    datetime dibuat_pada
+  }
+
+  WorkOrderTransisi {
+    bigint   id              PK
+    bigint   work_order      FK
+    varchar  dari_status
+    varchar  ke_status
+    bigint   aktor           FK
+    text     alasan
+    varchar  idempotency_key "UNIQUE"
+    datetime dibuat_pada
+  }
+
+  WorkOrderPenugasan {
+    bigint id                  PK
+    bigint work_order          FK
+    bigint staff               FK "PROTECT"
+    bool   is_pic
+    bool   is_selesai_personal
+  }
+
+  WorkOrderPesan {
+    bigint   id         PK
+    bigint   work_order FK
+    bigint   pengirim   FK "PROTECT"
+    text     teks
+    datetime dibuat_pada
+  }
+
+  Resep {
+    bigint  id          PK "produksi/models.py:? — SUDAH ADA"
+    bigint  produk_jadi FK
+  }
+
+  SesiProduksi {
+    bigint id     PK "SUDAH ADA"
+    varchar status
+  }
+
+  Entitas {
+    bigint  id   PK "core.Entitas — SUDAH ADA"
+    varchar kode
+  }
+
+  Profil {
+    bigint  id PK
+    varchar nama_lengkap
+  }

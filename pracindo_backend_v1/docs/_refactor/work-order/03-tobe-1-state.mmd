@@ -1,0 +1,44 @@
+%% FASE 3 — OPSI 1 STATE: boolean `selesai` dipertahankan, tapi dijaga
+%% Semua transisi merah putus-putus dari AS-IS kini punya penjaga.
+%% render: mmdc -i 03-tobe-1-state.mmd -o 03-tobe-1-state.svg
+stateDiagram-v2
+  direction TB
+
+  [*] --> BELUM_SELESAI : services.buat_work_order()<br/>atomic + CounterDokumen<br/>nomor dijamin unik
+
+  state BELUM_SELESAI {
+    direction TB
+    [*] --> MenungguAksi
+    MenungguAksi --> MenungguCeklis : setujui() aturan=SEMUA<br/>is_selesai_personal=True<br/>select_for_update pada WO
+    MenungguCeklis --> MenungguCeklis : anggota lain menyetujui
+  }
+
+  BELUM_SELESAI --> SELESAI : setujui() aturan=SALAH_SATU
+  BELUM_SELESAI --> SELESAI : setujui() aturan=PIC dan is_pic<br/>INV-9 menjamin tepat 1 PIC
+  BELUM_SELESAI --> SELESAI : setujui() aturan=SEMUA<br/>dan seluruh ceklis terisi (INV-8)
+
+  SELESAI : selesai=True<br/>waktu_selesai NOT NULL<br/>diselesaikan_oleh NOT NULL<br/>dijaga CheckConstraint (INV-7)
+
+  BELUM_SELESAI --> BELUM_SELESAI : PUT / PATCH oleh pembuat<br/>selesai & aturan_penyelesaian read_only
+
+  SELESAI --> SELESAI : setujui() lagi -> 400<br/>idempoten, tidak menggandakan
+
+  BELUM_SELESAI --> [*] : DELETE oleh pembuat
+  SELESAI --> Ditolak : DELETE ditolak<br/>destroy() di-override 405<br/>BARU
+
+  Ditolak --> SELESAI
+
+  %% penjaga baru terhadap transisi liar AS-IS
+  SELESAI --> BELUM_SELESAI : ✔ admin TIDAK bisa lagi<br/>membalik selesai sendirian<br/>CheckConstraint menolak baris<br/>selesai=False + waktu_selesai terisi
+
+  note right of SELESAI
+    Masih TIDAK ada riwayat transisi.
+    Yang tercatat hanya keadaan terakhir.
+    "Siapa menyetujui pukul berapa, lalu
+    siapa membatalkan" tetap tidak terjawab.
+    Ini batas sengaja Opsi 1.
+  end note
+
+  classDef baru fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  classDef tolak fill:#fff8e1,stroke:#f9a825,color:#795548
+  class Ditolak tolak

@@ -1,0 +1,56 @@
+%% FASE 3 — OPSI 3 STATE: dua siklus hidup terpisah, saling tidak mengunci
+%% render: mmdc -i 03-tobe-3-state.mmd -o 03-tobe-3-state.svg
+stateDiagram-v2
+  direction LR
+
+  state "app work_order — papan tugas" as WOAPP {
+    direction TB
+    [*] --> BARU_WO : buat_work_order()
+    BARU_WO --> BERJALAN_WO : setujui() aturan=SEMUA
+    BARU_WO --> SELESAI_WO : setujui() SALAH_SATU / PIC
+    BERJALAN_WO --> SELESAI_WO : ceklis terakhir (INV-8)
+    BARU_WO --> DIBATALKAN_WO : batalkan()
+    BERJALAN_WO --> DIBATALKAN_WO : batalkan()
+    SELESAI_WO --> BERJALAN_WO : buka_kembali() SUPERVISOR
+
+    BARU_WO : status=BARU · selesai=False
+    SELESAI_WO : status=SELESAI · selesai=True
+    DIBATALKAN_WO : status=DIBATALKAN
+  }
+
+  state "app produksi — pesanan produksi" as PRODAPP {
+    direction TB
+    [*] --> DRAFT_PP : services.buat_pesanan()<br/>pastikan_periode_terbuka()
+    DRAFT_PP --> DISETUJUI_PP : services.setujui_pesanan()<br/>hitung_kapasitas() lolos
+    DRAFT_PP --> DIBATALKAN_PP : batalkan
+    DISETUJUI_PP --> DIPRODUKSI_PP : SesiProduksi dibuat<br/>produksi.services.buat_sesi()
+    DIPRODUKSI_PP --> SELESAI_PP : selesaikan_sesi()
+    DISETUJUI_PP --> DIBATALKAN_PP : batalkan, alasan wajib
+
+    DRAFT_PP : belum mengikat stok
+    DIPRODUKSI_PP : ‼ di sinilah invariant SZA hidup<br/>pakai_dari_pool / hasil_ke_pool<br/>temuan C6 BELUM diperbaiki
+    SELESAI_PP : sesi selesai
+  }
+
+  DISETUJUI_PP -.->|"utas diskusi (opsional, FK null)<br/>tidak mengunci apa pun"| BARU_WO
+
+  note right of DIPRODUKSI_PP
+    RISIKO OPSI 3:
+    menyambungkan pesanan produksi ke
+    SesiProduksi berarti masuk ke jalur
+    yang invariant-nya MASIH RUSAK (C6:
+    pakai_dari_pool/hasil_ke_pool tidak
+    menulis MutasiKlaim).
+    Opsi ini sebaiknya menunggu C6 beres.
+  end note
+
+  note right of SELESAI_WO
+    Papan tugas TIDAK pernah menyentuh
+    stok/klaim/jurnal — INV-1 s/d INV-4
+    tetap berlaku untuk app work_order.
+  end note
+
+  classDef akhir fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  classDef bahaya fill:#ffebee,stroke:#c62828,color:#b71c1c
+  class SELESAI_WO,SELESAI_PP akhir
+  class DIPRODUKSI_PP bahaya

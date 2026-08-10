@@ -1,0 +1,50 @@
+erDiagram
+    STAFF_USER_PROFIL |o--o{ WO_WORK_ORDER : "wo_diselesaikan luar: staff_user"
+    STAFF_USER_PROFIL ||--o{ WO_PENUGASAN : "UNKNOWN related_name luar: staff_user"
+    STAFF_USER_PROFIL ||--o{ WO_PESAN : "UNKNOWN related_name luar: staff_user"
+    STAFF_USER_PROFIL ||--o{ WO_WORK_ORDER : "wo_dibuat luar: staff_user"
+    WO_WORK_ORDER ||--o{ WO_PENUGASAN : "penugasan"
+    WO_WORK_ORDER ||--o{ WO_PESAN : "pesan_chat"
+    WO_WORK_ORDER ||--|| WO_DETAIL_PRODUKSI : "detail_produksi"
+
+    WO_WORK_ORDER {
+        BigAutoField id PK "blank"
+        CharField nomor UK "max 50, editable=False"
+        CharField kategori "max 15, UMUMPRODUKSIPRIVATE, default UMUM"
+        CharField judul "max 255"
+        TextField deskripsi "blank"
+        CharField aturan_penyelesaian "max 15, SALAH_SATUSEMUAPIC, default SALAH_SATU"
+        DateField tanggal "default 2026-08-05"
+        DateField deadline "null, blank"
+        BooleanField selesai "default False"
+        TextField catatan_selesai "blank"
+        DateTimeField waktu_selesai "null, blank"
+        ForeignKey diselesaikan_oleh_id FK "null, blank"
+        ForeignKey dibuat_oleh_id FK "editable=False"
+        DateTimeField dibuat_pada "blank, editable=False"
+    }
+
+    WO_DETAIL_PRODUKSI {
+        BigAutoField id PK "blank"
+        OneToOneField work_order_id FK
+        CharField nama_item "max 255"
+        CharField unit "max 10, PCS_1GALON_5DUS_12PAIL_20PAIL_25PAIL_30"
+        CharField stiker "max 10, POLOSPTCV"
+    }
+
+    WO_PENUGASAN {
+        BigAutoField id PK "blank"
+        ForeignKey work_order_id FK
+        ForeignKey staff_id FK
+        BooleanField is_pic "default False"
+        BooleanField is_selesai_personal "default False"
+    }
+
+    WO_PESAN {
+        BigAutoField id PK "blank"
+        ForeignKey work_order_id FK
+        ForeignKey pengirim_id FK
+        TextField teks
+        DateTimeField dibuat_pada "blank, editable=False"
+    }
+

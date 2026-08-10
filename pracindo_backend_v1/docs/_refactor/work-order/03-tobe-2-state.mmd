@@ -1,0 +1,50 @@
+%% FASE 3 — OPSI 2 STATE: status eksplisit, setiap panah menulis 1 baris event
+%% Tidak ada transisi tanpa penjaga — semua lewat services._catat_transisi()
+%% render: mmdc -i 03-tobe-2-state.mmd -o 03-tobe-2-state.svg
+stateDiagram-v2
+  direction TB
+
+  [*] --> BARU : buat_work_order()<br/>event: null -> BARU<br/>idem_key = 'wo-buat-{nomor}'
+
+  BARU --> BERJALAN : setujui() pertama, aturan=SEMUA<br/>event: BARU -> BERJALAN<br/>idem_key = 'wo-{id}-ceklis-{staff_id}'
+  BARU --> SELESAI  : setujui() aturan=SALAH_SATU<br/>event: BARU -> SELESAI
+  BARU --> SELESAI  : setujui() aturan=PIC dan is_pic<br/>event: BARU -> SELESAI
+
+  BERJALAN --> BERJALAN : anggota berikutnya menyetujui<br/>event per anggota, idem_key unik per staf<br/>klik ganda = 1 baris, bukan 2
+  BERJALAN --> SELESAI  : ceklis terakhir terisi (INV-8)<br/>event: BERJALAN -> SELESAI
+
+  BARU     --> DIBATALKAN : batalkan_work_order()<br/>hanya pembuat atau SUPERVISOR
+  BERJALAN --> DIBATALKAN : batalkan_work_order()
+
+  SELESAI : status=SELESAI<br/>selesai=True (cache)<br/>waktu_selesai & diselesaikan_oleh<br/>disalin dari event terakhir
+
+  DIBATALKAN : status=DIBATALKAN<br/>selesai=False (cache)<br/>alasan WAJIB diisi
+
+  SELESAI --> BERJALAN : buka_kembali() — BARU, opsional<br/>event: SELESAI -> BERJALAN<br/>hanya SUPERVISOR, alasan wajib<br/>ceklis personal TIDAK di-reset diam-diam
+
+  SELESAI --> [*] : arsip (bukan DELETE)
+  DIBATALKAN --> [*] : arsip
+
+  note right of BARU
+    Status adalah TURUNAN dari
+    baris terakhir wo_transisi.
+    Kolom `status` dan `selesai`
+    hanyalah cache yang ditulis
+    di dalam atomic yang sama.
+    Kalau cache dan event berbeda,
+    event yang benar.
+  end note
+
+  note right of SELESAI
+    Pertanyaan yang kini bisa dijawab
+    dan TIDAK bisa dijawab Opsi 1:
+    - siapa menyetujui, pukul berapa
+    - siapa membatalkan, alasannya apa
+    - berapa kali dibuka kembali
+    - berapa lama dari BARU ke SELESAI
+  end note
+
+  classDef akhir fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  classDef batal fill:#fff8e1,stroke:#f9a825,color:#795548
+  class SELESAI akhir
+  class DIBATALKAN batal

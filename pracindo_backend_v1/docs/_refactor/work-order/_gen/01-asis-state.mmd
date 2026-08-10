@@ -1,0 +1,23 @@
+stateDiagram-v2
+    [*] --> Terbuka : selesai = False
+    Terbuka --> Selesai : selesai = True
+
+    note right of Terbuka
+        Penulisan selesai ditemukan di 3 lokasi:
+        work_order/views.py:36 (kwarg)
+        work_order/views.py:39 (kwarg)
+        work_order/views.py:102 (assign)
+    end note
+
+    note left of Selesai
+        aturan_penyelesaian: SALAH_SATU | SEMUA | PIC
+        Dibaca di 3 lokasi:
+        work_order/admin.py:21
+        work_order/serializers.py:50
+        work_order/views.py:71
+    end note
+
+    note right of Selesai
+        UNKNOWN: apakah ada transisi balik Selesai -> Terbuka.
+        Periksa manual apakah ada endpoint 'buka kembali'.
+    end note

@@ -1,0 +1,1081 @@
+{
+ "resolver": [
+  {
+   "method": "GET",
+   "path": "/api/docs/",
+   "view": "drf_spectacular.views.SpectacularSwaggerView",
+   "action": "get",
+   "url_name": "swagger-ui"
+  },
+  {
+   "method": "GET",
+   "path": "/api/schema/",
+   "view": "drf_spectacular.views.SpectacularAPIView",
+   "action": "get",
+   "url_name": "schema"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/akun/",
+   "view": "akunting.views.AkunViewSet",
+   "action": "list",
+   "url_name": "akun-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/akun/{id}/",
+   "view": "akunting.views.AkunViewSet",
+   "action": "retrieve",
+   "url_name": "akun-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/faktur/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "list",
+   "url_name": "faktur-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/faktur/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "create",
+   "url_name": "faktur-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/faktur/aging/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "aging",
+   "url_name": "faktur-aging"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/faktur/dari-penerimaan/{penerimaan_id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "dari_penerimaan",
+   "url_name": "faktur-dari-penerimaan"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/faktur/draft-dari-penerimaan/{penerimaan_id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "draft_dari_penerimaan",
+   "url_name": "faktur-draft-dari-penerimaan"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/faktur/jatuh-tempo/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "jatuh_tempo",
+   "url_name": "faktur-jatuh-tempo"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/akunting/faktur/{id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "destroy",
+   "url_name": "faktur-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/faktur/{id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "retrieve",
+   "url_name": "faktur-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/akunting/faktur/{id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "partial_update",
+   "url_name": "faktur-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/akunting/faktur/{id}/",
+   "view": "akunting.views.FakturPembelianViewSet",
+   "action": "update",
+   "url_name": "faktur-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/jurnal/",
+   "view": "akunting.views.JurnalUmumViewSet",
+   "action": "list",
+   "url_name": "jurnal-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/jurnal/{id}/",
+   "view": "akunting.views.JurnalUmumViewSet",
+   "action": "retrieve",
+   "url_name": "jurnal-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/jurnal/{id}/balik/",
+   "view": "akunting.views.JurnalUmumViewSet",
+   "action": "balik",
+   "url_name": "jurnal-balik"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/pembayaran/",
+   "view": "akunting.views.PembayaranView",
+   "action": "create",
+   "url_name": "pembayaran-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/purchase-order/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "list",
+   "url_name": "purchase-order-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/purchase-order/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "create",
+   "url_name": "purchase-order-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/purchase-order/outstanding/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "outstanding",
+   "url_name": "purchase-order-outstanding"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/purchase-order/preview-nomor/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "preview_nomor",
+   "url_name": "purchase-order-preview-nomor"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/akunting/purchase-order/{id}/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "destroy",
+   "url_name": "purchase-order-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/purchase-order/{id}/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "retrieve",
+   "url_name": "purchase-order-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/akunting/purchase-order/{id}/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "partial_update",
+   "url_name": "purchase-order-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/akunting/purchase-order/{id}/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "update",
+   "url_name": "purchase-order-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/purchase-order/{id}/batalkan/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "batalkan",
+   "url_name": "purchase-order-batalkan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/purchase-order/{id}/kirim/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "kirim",
+   "url_name": "purchase-order-kirim"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/purchase-order/{id}/ringkasan/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "ringkasan",
+   "url_name": "purchase-order-ringkasan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/akunting/purchase-order/{id}/ubah-item/",
+   "view": "akunting.views.PurchaseOrderViewSet",
+   "action": "ubah_item",
+   "url_name": "purchase-order-ubah-item"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/uang-muka/",
+   "view": "akunting.views.UangMukaViewSet",
+   "action": "list",
+   "url_name": "uang-muka-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/akunting/uang-muka/{id}/",
+   "view": "akunting.views.UangMukaViewSet",
+   "action": "retrieve",
+   "url_name": "uang-muka-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/daftar/",
+   "view": "staff_user.views.DaftarView",
+   "action": "post",
+   "url_name": "daftar"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/ganti-password/",
+   "view": "staff_user.views.GantiPasswordView",
+   "action": "post",
+   "url_name": "ganti-password"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/jabatan/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "list",
+   "url_name": "jabatan-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/jabatan/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "create",
+   "url_name": "jabatan-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/auth/jabatan/{id}/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "destroy",
+   "url_name": "jabatan-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/jabatan/{id}/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "retrieve",
+   "url_name": "jabatan-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/auth/jabatan/{id}/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "partial_update",
+   "url_name": "jabatan-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/auth/jabatan/{id}/",
+   "view": "staff_user.views.JabatanViewSet",
+   "action": "update",
+   "url_name": "jabatan-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/kepegawaian/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "list",
+   "url_name": "kepegawaian-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/kepegawaian/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "create",
+   "url_name": "kepegawaian-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/auth/kepegawaian/{id}/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "destroy",
+   "url_name": "kepegawaian-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/kepegawaian/{id}/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "retrieve",
+   "url_name": "kepegawaian-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/auth/kepegawaian/{id}/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "partial_update",
+   "url_name": "kepegawaian-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/auth/kepegawaian/{id}/",
+   "view": "staff_user.views.DataKepegawaianViewSet",
+   "action": "update",
+   "url_name": "kepegawaian-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/login/",
+   "view": "staff_user.views.LoginView",
+   "action": "post",
+   "url_name": "login"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/logout/",
+   "view": "staff_user.views.LogoutView",
+   "action": "post",
+   "url_name": "logout"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/portal/",
+   "view": "staff_user.views.PortalView",
+   "action": "get",
+   "url_name": "portal"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/profil/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "list",
+   "url_name": "profil-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "create",
+   "url_name": "profil-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/profil/menunggu/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "menunggu",
+   "url_name": "profil-menunggu"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/profil/saya/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "saya",
+   "url_name": "profil-saya"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/auth/profil/{id}/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "destroy",
+   "url_name": "profil-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/profil/{id}/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "retrieve",
+   "url_name": "profil-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/auth/profil/{id}/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "partial_update",
+   "url_name": "profil-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/auth/profil/{id}/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "update",
+   "url_name": "profil-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/aktifkan-kembali/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "aktifkan_kembali",
+   "url_name": "profil-aktifkan-kembali"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/aktifkan/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "aktifkan",
+   "url_name": "profil-aktifkan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/nonaktifkan/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "nonaktifkan",
+   "url_name": "profil-nonaktifkan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/reset-password/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "reset_password",
+   "url_name": "profil-reset-password"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/tolak/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "tolak",
+   "url_name": "profil-tolak"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/profil/{id}/ubah-role/",
+   "view": "staff_user.views.ProfilViewSet",
+   "action": "ubah_role",
+   "url_name": "profil-ubah-role"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/auth/register/",
+   "view": "staff_user.views.DaftarView",
+   "action": "post",
+   "url_name": "register"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/riwayat-akses/",
+   "view": "staff_user.views.RiwayatAksesViewSet",
+   "action": "list",
+   "url_name": "riwayat-akses-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/auth/riwayat-akses/{id}/",
+   "view": "staff_user.views.RiwayatAksesViewSet",
+   "action": "retrieve",
+   "url_name": "riwayat-akses-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/entitas/",
+   "view": "core.views.EntitasViewSet",
+   "action": "list",
+   "url_name": "entitas-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/entitas/{id}/",
+   "view": "core.views.EntitasViewSet",
+   "action": "retrieve",
+   "url_name": "entitas-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/grup-bahan/",
+   "view": "core.views.GrupBahanViewSet",
+   "action": "list",
+   "url_name": "grup-bahan-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/grup-bahan/{id}/",
+   "view": "core.views.GrupBahanViewSet",
+   "action": "retrieve",
+   "url_name": "grup-bahan-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/periode/",
+   "view": "core.views.PeriodeAkuntansiViewSet",
+   "action": "list",
+   "url_name": "periode-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/core/periode/buka/",
+   "view": "core.views.PeriodeAkuntansiViewSet",
+   "action": "buka",
+   "url_name": "periode-buka"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/periode/status/",
+   "view": "core.views.PeriodeAkuntansiViewSet",
+   "action": "status",
+   "url_name": "periode-status"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/core/periode/tutup/",
+   "view": "core.views.PeriodeAkuntansiViewSet",
+   "action": "tutup",
+   "url_name": "periode-tutup"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/core/periode/{id}/",
+   "view": "core.views.PeriodeAkuntansiViewSet",
+   "action": "retrieve",
+   "url_name": "periode-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/isi-pool/",
+   "view": "inventory.views.IsiPoolView",
+   "action": "get",
+   "url_name": "isi-pool"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/inventory/klaim-hasil/",
+   "view": "inventory.views.KlaimHasilView",
+   "action": "post",
+   "url_name": "klaim-hasil"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/mutasi/",
+   "view": "inventory.views.MutasiStokViewSet",
+   "action": "list",
+   "url_name": "mutasi-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/mutasi/{id}/",
+   "view": "inventory.views.MutasiStokViewSet",
+   "action": "retrieve",
+   "url_name": "mutasi-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/nilai-ekuivalen/",
+   "view": "inventory.views.NilaiEkuivalenViewSet",
+   "action": "list",
+   "url_name": "nilai-ekuivalen-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/nilai-ekuivalen/{id}/",
+   "view": "inventory.views.NilaiEkuivalenViewSet",
+   "action": "retrieve",
+   "url_name": "nilai-ekuivalen-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/inventory/opname/",
+   "view": "inventory.views.OpnameView",
+   "action": "post",
+   "url_name": "opname"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/posisi-klaim/",
+   "view": "inventory.views.PosisiKlaimViewSet",
+   "action": "list",
+   "url_name": "posisi-klaim-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/posisi-klaim/{id}/",
+   "view": "inventory.views.PosisiKlaimViewSet",
+   "action": "retrieve",
+   "url_name": "posisi-klaim-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/inventory/setor-ke-pool/",
+   "view": "inventory.views.SetorKePoolView",
+   "action": "post",
+   "url_name": "setor-ke-pool"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/stok/",
+   "view": "inventory.views.StokViewSet",
+   "action": "list",
+   "url_name": "stok-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/stok/{id}/",
+   "view": "inventory.views.StokViewSet",
+   "action": "retrieve",
+   "url_name": "stok-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/tangki/",
+   "view": "inventory.views.TangkiViewSet",
+   "action": "list",
+   "url_name": "tangki-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/tangki/{id}/",
+   "view": "inventory.views.TangkiViewSet",
+   "action": "retrieve",
+   "url_name": "tangki-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/inventory/verifikasi/",
+   "view": "inventory.views.VerifikasiView",
+   "action": "get",
+   "url_name": "verifikasi"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/keuangan/pengeluaran/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "list",
+   "url_name": "pengeluaran-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/keuangan/pengeluaran/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "create",
+   "url_name": "pengeluaran-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/keuangan/pengeluaran/dashboard-summary/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "dashboard_summary",
+   "url_name": "pengeluaran-dashboard-summary"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/keuangan/pengeluaran/{id}/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "destroy",
+   "url_name": "pengeluaran-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/keuangan/pengeluaran/{id}/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "retrieve",
+   "url_name": "pengeluaran-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/keuangan/pengeluaran/{id}/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "partial_update",
+   "url_name": "pengeluaran-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/keuangan/pengeluaran/{id}/",
+   "view": "keuangan.views.PengeluaranViewSet",
+   "action": "update",
+   "url_name": "pengeluaran-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/master/produk/",
+   "view": "master.views.ProdukViewSet",
+   "action": "list",
+   "url_name": "produk-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/master/produk/",
+   "view": "master.views.ProdukViewSet",
+   "action": "create",
+   "url_name": "produk-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/master/produk/{id}/",
+   "view": "master.views.ProdukViewSet",
+   "action": "destroy",
+   "url_name": "produk-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/master/produk/{id}/",
+   "view": "master.views.ProdukViewSet",
+   "action": "retrieve",
+   "url_name": "produk-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/master/produk/{id}/",
+   "view": "master.views.ProdukViewSet",
+   "action": "partial_update",
+   "url_name": "produk-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/master/produk/{id}/",
+   "view": "master.views.ProdukViewSet",
+   "action": "update",
+   "url_name": "produk-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/master/suplier/",
+   "view": "master.views.SuplierViewSet",
+   "action": "list",
+   "url_name": "suplier-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/master/suplier/",
+   "view": "master.views.SuplierViewSet",
+   "action": "create",
+   "url_name": "suplier-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/master/suplier/{id}/",
+   "view": "master.views.SuplierViewSet",
+   "action": "destroy",
+   "url_name": "suplier-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/master/suplier/{id}/",
+   "view": "master.views.SuplierViewSet",
+   "action": "retrieve",
+   "url_name": "suplier-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/master/suplier/{id}/",
+   "view": "master.views.SuplierViewSet",
+   "action": "partial_update",
+   "url_name": "suplier-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/master/suplier/{id}/",
+   "view": "master.views.SuplierViewSet",
+   "action": "update",
+   "url_name": "suplier-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/produksi/sesi/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "list",
+   "url_name": "sesi-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/produksi/sesi/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "create",
+   "url_name": "sesi-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/produksi/sesi/{id}/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "destroy",
+   "url_name": "sesi-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/produksi/sesi/{id}/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "retrieve",
+   "url_name": "sesi-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/produksi/sesi/{id}/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "partial_update",
+   "url_name": "sesi-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/produksi/sesi/{id}/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "update",
+   "url_name": "sesi-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/produksi/sesi/{id}/batalkan/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "batalkan",
+   "url_name": "sesi-batalkan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/produksi/sesi/{id}/mulai/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "mulai",
+   "url_name": "sesi-mulai"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/produksi/sesi/{id}/selesaikan/",
+   "view": "produksi.views.SesiViewSet",
+   "action": "selesaikan",
+   "url_name": "sesi-selesaikan"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/laporan-selisih/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "list",
+   "url_name": "laporan-selisih-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/laporan-selisih/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "create",
+   "url_name": "laporan-selisih-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/laporan-selisih/terbuka/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "terbuka",
+   "url_name": "laporan-selisih-terbuka"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "destroy",
+   "url_name": "laporan-selisih-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "retrieve",
+   "url_name": "laporan-selisih-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "partial_update",
+   "url_name": "laporan-selisih-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "update",
+   "url_name": "laporan-selisih-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/ajukan/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "ajukan",
+   "url_name": "laporan-selisih-ajukan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/selesaikan/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "selesaikan",
+   "url_name": "laporan-selisih-selesaikan"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/laporan-selisih/{id}/tutup/",
+   "view": "warehouse.views.LaporanSelisihViewSet",
+   "action": "tutup",
+   "url_name": "laporan-selisih-tutup"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/packaging/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "list",
+   "url_name": "packaging-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/packaging/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "create",
+   "url_name": "packaging-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/warehouse/packaging/{id}/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "destroy",
+   "url_name": "packaging-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/packaging/{id}/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "retrieve",
+   "url_name": "packaging-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/warehouse/packaging/{id}/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "partial_update",
+   "url_name": "packaging-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/warehouse/packaging/{id}/",
+   "view": "warehouse.views.PackagingViewSet",
+   "action": "update",
+   "url_name": "packaging-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/penerimaan/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "list",
+   "url_name": "penerimaan-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/warehouse/penerimaan/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "create",
+   "url_name": "penerimaan-list"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/warehouse/penerimaan/{id}/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "destroy",
+   "url_name": "penerimaan-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/penerimaan/{id}/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "retrieve",
+   "url_name": "penerimaan-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/warehouse/penerimaan/{id}/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "partial_update",
+   "url_name": "penerimaan-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/warehouse/penerimaan/{id}/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "update",
+   "url_name": "penerimaan-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/penerimaan/{id}/ringkasan/",
+   "view": "warehouse.views.PenerimaanViewSet",
+   "action": "ringkasan",
+   "url_name": "penerimaan-ringkasan"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/po-siap-terima/",
+   "view": "warehouse.views.POSiapTerimaViewSet",
+   "action": "list",
+   "url_name": "po-siap-terima-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/warehouse/po-siap-terima/{id}/",
+   "view": "warehouse.views.POSiapTerimaViewSet",
+   "action": "retrieve",
+   "url_name": "po-siap-terima-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/work-order/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "list",
+   "url_name": "workorder-list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/work-order/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "create",
+   "url_name": "workorder-list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/work-order/mading/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "mading",
+   "url_name": "workorder-mading"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/work-order/staff/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "staff",
+   "url_name": "workorder-staff"
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/work-order/{id}/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "destroy",
+   "url_name": "workorder-detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/work-order/{id}/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "retrieve",
+   "url_name": "workorder-detail"
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/work-order/{id}/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "partial_update",
+   "url_name": "workorder-detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/work-order/{id}/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "update",
+   "url_name": "workorder-detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/work-order/{id}/approve/",
+   "view": "work_order.views.WorkOrderViewSet",
+   "action": "approve",
+   "url_name": "workorder-approve"
+  }
+ ],
+ "counts": {
+  "resolver": 152,
+  "openapi": 151,
+  "api_map_json_pairs": 152,
+  "api_map_json_entries": 115
+ },
+ "dropped_by_resolver": {
+  "format_suffix": 96,
+  "api_root": 9,
+  "non_api": 233
+ },
+ "missing_from_api_map": [],
+ "extra_in_api_map": []
+}

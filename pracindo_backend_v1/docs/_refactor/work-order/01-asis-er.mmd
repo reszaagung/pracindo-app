@@ -1,0 +1,63 @@
+%% FASE 1 — AS-IS model work_order + FK keluar ke app lain
+%% Semua kardinalitas & on_delete diambil dari work_order/models.py
+%% render: mmdc -i 01-asis-er.mmd -o 01-asis-er.svg
+erDiagram
+
+  WorkOrder ||--o| DetailPesananProduksi : "detail_produksi (1-1, CASCADE) models.py:77"
+  WorkOrder ||--o{ WorkOrderPenugasan    : "penugasan (CASCADE) models.py:109"
+  WorkOrder ||--o{ WorkOrderPesan        : "pesan_chat (CASCADE) models.py:127"
+
+  Profil ||--o{ WorkOrder          : "dibuat_oleh (PROTECT) models.py:41"
+  Profil ||--o{ WorkOrder          : "diselesaikan_oleh (PROTECT, null) models.py:37"
+  Profil ||--o{ WorkOrderPenugasan : "staff (CASCADE) models.py:110 -- M20"
+  Profil ||--o{ WorkOrderPesan     : "pengirim (CASCADE) models.py:128 -- N5"
+
+  WorkOrder {
+    bigint  id                  PK
+    varchar nomor               "unique, editable=False -- H7 penomoran rawan balapan models.py:61-70"
+    varchar kategori            "UMUM|PRODUKSI|PRIVATE default UMUM models.py:20"
+    varchar judul               "max 255"
+    text    deskripsi           "blank"
+    varchar aturan_penyelesaian "SALAH_SATU|SEMUA|PIC default SALAH_SATU models.py:25"
+    date    tanggal             "default localdate"
+    date    deadline            "null"
+    bool    selesai             "default False -- SATU-SATUNYA penyimpan status"
+    text    catatan_selesai     "blank"
+    datetime waktu_selesai      "null"
+    bigint  diselesaikan_oleh   FK
+    bigint  dibuat_oleh         FK "editable=False"
+    datetime dibuat_pada        "auto_now_add -- tidak ada diubah_pada (N4)"
+  }
+
+  DetailPesananProduksi {
+    bigint  id           PK
+    bigint  work_order   FK "OneToOne, CASCADE"
+    varchar nama_item    "max 255"
+    varchar unit         "PCS_1|GALON_5|DUS_12|PAIL_20|PAIL_25|PAIL_30"
+    varchar stiker       "POLOS|PT|CV"
+  }
+
+  WorkOrderPenugasan {
+    bigint id                  PK
+    bigint work_order          FK "CASCADE"
+    bigint staff               FK "CASCADE ke staff_user.Profil -- M20"
+    bool   is_pic              "default False -- N2 tidak pernah True dari frontend"
+    bool   is_selesai_personal "default False, dipakai aturan SEMUA"
+  }
+
+  WorkOrderPesan {
+    bigint   id          PK
+    bigint   work_order  FK "CASCADE"
+    bigint   pengirim    FK "CASCADE ke AUTH_USER_MODEL -- N5"
+    text     teks
+    datetime dibuat_pada "auto_now_add"
+  }
+
+  Profil {
+    bigint  id           PK "AUTH_USER_MODEL = staff_user.Profil"
+    varchar username
+    varchar nama_lengkap
+    bigint  jabatan      FK
+    bool    is_active
+    varchar TIDAK_ADA_profil_staff_id "atribut hantu yang dibaca views.py:32,61 dan permissions.py:13"
+  }
