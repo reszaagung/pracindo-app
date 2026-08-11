@@ -14,7 +14,6 @@
                     </div>
                 </div>
             </div>
-
             <div class="header-actions">
                 <button @click="bukaModalBuat" class="btn-primary-tech">
                     <i class="pi pi-plus"></i> <span>Buat Tugas Baru</span>
@@ -36,98 +35,30 @@
             <div class="empty-glow">
                 <i class="pi pi-check-circle"></i>
             </div>
-            <h3>Sistem Kosong</h3>
+            <h3>Panel Tugas</h3>
             <p>Tidak ada antrean pesanan atau tugas aktif. Ruang kerja bersih!</p>
-            <button @click="bukaModalBuat" class="btn-outline-tech mt-4">
-                Inisiasi Tugas Baru
-            </button>
         </div>
 
-        <!-- GRID MADING -->
+        <!-- GRID MADING DENGAN KOMPONEN CARD -->
         <div v-else class="wo-grid" :data-count="madingList.length > 4 ? 'more' : madingList.length">
-            <div v-for="wo in madingList" :key="wo.id" class="tech-card">
-                <!-- Highlight Bar Indicator -->
-                <div class="card-indicator" :class="'ind-' + wo.kategori.toLowerCase()"></div>
 
-                <div class="card-inner">
-                    <!-- Top / Metadata -->
-                    <div class="card-top">
-                        <span class="tech-badge" :class="'badge-' + wo.kategori.toLowerCase()">
-                            <span class="dot"></span> {{ wo.kategori }}
-                        </span>
-                        <span class="tech-id">#{{ wo.nomor }}</span>
-                    </div>
+            <PostWorkOrderCard v-for="wo in madingList" :key="wo.id" :wo="wo" :currentUserId="currentUserId"
+                @open-chat="openChatModal" @approve="handleApprove" />
 
-                    <!-- Main Content -->
-                    <div class="card-body">
-                        <h3 class="judul">{{ wo.judul }}</h3>
-                        <p class="deskripsi">{{ wo.deskripsi }}</p>
-
-                        <!-- Tech Specs (Produksi) -->
-                        <div v-if="wo.kategori === 'PRODUKSI' && wo.detail_produksi" class="specs-panel">
-                            <div class="specs-header">
-                                <i class="pi pi-cog"></i> PARAMETER MANUFAKTUR
-                            </div>
-                            <div class="specs-grid">
-                                <div class="spec-item">
-                                    <span class="lbl">VARIAN</span>
-                                    <span class="val">{{ wo.detail_produksi.nama_item }}</span>
-                                </div>
-                                <div class="spec-item">
-                                    <span class="lbl">KEMASAN</span>
-                                    <span class="val">{{ wo.detail_produksi.unit_display }}</span>
-                                </div>
-                                <div class="spec-item full">
-                                    <span class="lbl">STIKER</span>
-                                    <span class="val">{{ wo.detail_produksi.stiker_display }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Footer / Meta -->
-                    <div class="card-footer">
-                        <div class="meta-info">
-                            <i class="pi pi-clock"></i>
-                            <span :class="{ 'text-danger': wo.terlambat }">
-                                {{ wo.deadline || 'Tanpa Tenggat' }}
-                            </span>
-                        </div>
-
-                        <div class="avatar-group">
-                            <div v-for="tag in wo.penugasan" :key="tag.id" class="avatar-tech"
-                                :class="{ 'avatar-done': tag.is_selesai_personal }"
-                                v-tooltip.top="tag.staff_nama + (tag.is_pic ? ' (PIC)' : '')">
-                                {{ tag.staff_nama.charAt(0) }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card-actions">
-                        <button class="btn-action chat" @click="openChatModal(wo)">
-                            <i class="pi pi-comments"></i>
-                            <span class="count" v-if="wo.jumlah_pesan">{{ wo.jumlah_pesan }}</span>
-                        </button>
-                        <button class="btn-action complete" @click="handleApprove(wo.id)">
-                            <i class="pi pi-check"></i> Selesaikan
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
 
+        <!-- MODAL INISIASI TUGAS BARU -->
         <Dialog v-model:visible="isCreateOpen" modal header="Inisiasi Tugas Baru" :style="{ width: '500px' }"
             class="tech-modal">
             <form @submit.prevent="handleCreate" class="tech-form">
+
                 <div class="form-row">
                     <div class="input-wrap">
-                        <label>Klasifikasi</label>
-                        <select v-model="formCreate.kategori" required class="neo-input">
-                            <option value="UMUM">Umum</option>
-                            <option value="PRODUKSI">Produksi</option>
-                            <option value="GUDANG">Gudang</option>
-                        </select>
+                        <label>Target Penerima Tugas (PIC)</label>
+                        <MultiSelect v-model="formCreate.staff_ids" :options="staffList" optionLabel="nama_lengkap"
+                            optionValue="id" placeholder="Pilih pelaksana..." display="chip" fluid />
                     </div>
+
                     <div class="input-wrap">
                         <label>Tenggat Waktu</label>
                         <DatePicker v-model="formCreate.deadline" showTime hourFormat="24" dateFormat="dd/mm/yy"
@@ -135,6 +66,13 @@
                                 input: { class: 'neo-input' }
                             }" />
                     </div>
+                </div>
+
+                <div class="input-wrap">
+                    <label>Target Penerima Tugas (PIC)</label>
+                    <!-- Menggunakan staffTanpaPembuat agar user aktif tidak bisa tag dirinya sendiri -->
+                    <MultiSelect v-model="formCreate.staff_ids" :options="staffTanpaPembuat" optionLabel="nama_lengkap"
+                        optionValue="id" placeholder="Pilih pelaksana..." display="chip" fluid />
                 </div>
 
                 <div class="input-wrap">
@@ -189,14 +127,29 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+// Menambahkan import computed
+import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { useWorkOrder } from '@/features/work-order/composables/useWorkOrder'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
+import MultiSelect from 'primevue/multiselect'
+
+// Import komponen child
+import PostWorkOrderCard from '../components/PostWorkOrderCard.vue'
+
 const {
     isLoading, isSending, isCreating, isChatLoading,
-    madingList, fetchMading, approveTask, sendReply, createTask, fetchChat
+    madingList, staffList, fetchMading, fetchStaff,
+    approveTask, sendReply, createTask, fetchChat
 } = useWorkOrder()
+
+// PENTING: Sesuaikan ID ini dengan ID user yang sedang login di sistem Anda
+const currentUserId = ref(1)
+
+// FILTER LOGIC: Menyembunyikan user yang sedang login dari pilihan dropdown
+const staffTanpaPembuat = computed(() => {
+    return staffList.value.filter(staff => staff.id !== currentUserId.value)
+})
 
 const isChatOpen = ref(false)
 const isCreateOpen = ref(false)
@@ -208,15 +161,19 @@ const formCreate = reactive({
     judul: '',
     deskripsi: '',
     kategori: 'UMUM',
-    deadline: ''
+    deadline: '',
+    staff_ids: []
 })
 
 onMounted(() => {
     fetchMading()
+    fetchStaff()
 })
 
 const bukaModalBuat = () => {
-    Object.assign(formCreate, { judul: '', deskripsi: '', kategori: 'UMUM', deadline: '' })
+    Object.assign(formCreate, {
+        judul: '', deskripsi: '', kategori: 'UMUM', deadline: '', staff_ids: []
+    })
     isCreateOpen.value = true
 }
 
@@ -226,7 +183,10 @@ const handleCreate = async () => {
     if (!payload.deadline) {
         delete payload.deadline
     } else if (payload.deadline instanceof Date) {
-        payload.deadline = payload.deadline.toISOString()
+        const year = payload.deadline.getFullYear();
+        const month = String(payload.deadline.getMonth() + 1).padStart(2, '0');
+        const day = String(payload.deadline.getDate()).padStart(2, '0');
+        payload.deadline = `${year}-${month}-${day}`;
     }
 
     const res = await createTask(payload)
@@ -237,24 +197,28 @@ const handleCreate = async () => {
     }
 }
 
-const handleApprove = async (woId) => {
+const handleApprove = async (wo) => {
+    if (wo.pembuat_id === currentUserId.value) {
+        alert('Akses Ditolak: Anda adalah pemberi tugas. Hanya penerima tugas (PIC) yang dapat menyelesaikan tugas ini.');
+        return;
+    }
+
     if (confirm('Konfirmasi: Tandai tugas ini sebagai selesai?')) {
-        await approveTask(woId)
+        await approveTask(wo.id)
     }
 }
 
 const openChatModal = async (wo) => {
     activeWO.value = { ...wo, pesan_chat: [] }
     isChatOpen.value = true
-
     activeWO.value.pesan_chat = await fetchChat(wo.id)
     scrollToBottom()
 }
 
 const kirimPesan = async () => {
     if (!activeWO.value || !chatInput.value.trim()) return
-    const pesanBaru = await sendReply(activeWO.value.id, chatInput.value)
 
+    const pesanBaru = await sendReply(activeWO.value.id, chatInput.value)
     if (pesanBaru) {
         activeWO.value.pesan_chat.push(pesanBaru)
         chatInput.value = ''
@@ -274,8 +238,7 @@ const scrollToBottom = () => {
 
 <style scoped>
 /* ====================================================
-   TECH / SAAS DASHBOARD STYLE
-   Murni Custom CSS, sangat tajam dan futuristik
+   TECH / SAAS DASHBOARD STYLE (BOARD & MODAL SAJA)
 ==================================================== */
 * {
     box-sizing: border-box;
@@ -289,7 +252,6 @@ const scrollToBottom = () => {
     color: #0f172a;
 }
 
-/* --- HEADER --- */
 .wo-header {
     display: flex;
     justify-content: space-between;
@@ -331,7 +293,6 @@ const scrollToBottom = () => {
     margin: 0;
 }
 
-/* --- BUTTONS --- */
 .header-actions {
     display: flex;
     gap: 0.75rem;
@@ -376,7 +337,6 @@ const scrollToBottom = () => {
     border-color: #cbd5e1;
 }
 
-/* --- STATE: LOADING & EMPTY --- */
 .wo-loading {
     display: flex;
     flex-direction: column;
@@ -449,24 +409,6 @@ const scrollToBottom = () => {
     margin: 0;
 }
 
-.btn-outline-tech {
-    background: transparent;
-    border: 1px solid #cbd5e1;
-    color: #334155;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.2s;
-}
-
-.btn-outline-tech:hover {
-    border-color: #0f172a;
-    color: #0f172a;
-}
-
-
-/* --- GRID --- */
 .wo-grid {
     display: grid;
     gap: 1.5rem;
@@ -491,290 +433,6 @@ const scrollToBottom = () => {
     grid-template-columns: repeat(4, 1fr);
 }
 
-/* --- TECH CARDS --- */
-.tech-card {
-    background: #ffffff;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 12px;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.02), 0 1px 2px rgba(15, 23, 42, 0.03);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.tech-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 20px -8px rgba(15, 23, 42, 0.1), 0 4px 6px -3px rgba(15, 23, 42, 0.05);
-    border-color: #cbd5e1;
-}
-
-.card-indicator {
-    height: 4px;
-    width: 100%;
-    border-radius: 12px 12px 0 0;
-}
-
-.ind-produksi {
-    background: linear-gradient(90deg, #f43f5e, #fb7185);
-}
-
-.ind-gudang {
-    background: linear-gradient(90deg, #f59e0b, #fbbf24);
-}
-
-.ind-umum {
-    background: linear-gradient(90deg, #3b82f6, #60a5fa);
-}
-
-.card-inner {
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-}
-
-.card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.tech-badge {
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.tech-badge .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-}
-
-.badge-produksi {
-    background: #fff1f2;
-    color: #be123c;
-    border: 1px solid #ffe4e6;
-}
-
-.badge-produksi .dot {
-    background: #e11d48;
-}
-
-.badge-gudang {
-    background: #fffbeb;
-    color: #b45309;
-    border: 1px solid #fef3c7;
-}
-
-.badge-gudang .dot {
-    background: #d97706;
-}
-
-.badge-umum {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #dbeafe;
-}
-
-.badge-umum .dot {
-    background: #2563eb;
-}
-
-.tech-id {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.75rem;
-    color: #94a3b8;
-    font-weight: 600;
-}
-
-.card-body {
-    flex: 1;
-    margin-bottom: 1.5rem;
-}
-
-.judul {
-    font-size: 1.0625rem;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 0.35rem 0;
-    line-height: 1.4;
-}
-
-.deskripsi {
-    font-size: 0.875rem;
-    color: #64748b;
-    margin: 0;
-    line-height: 1.5;
-}
-
-/* TECH SPECS PANEL */
-.specs-panel {
-    margin-top: 1rem;
-    background: #0f172a;
-    border-radius: 8px;
-    padding: 0.75rem;
-    border: 1px solid #1e293b;
-}
-
-.specs-header {
-    font-size: 0.625rem;
-    font-family: monospace;
-    color: #14b8a6;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.specs-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.spec-item {
-    display: flex;
-    flex-direction: column;
-    width: calc(50% - 0.25rem);
-}
-
-.spec-item.full {
-    width: 100%;
-}
-
-.spec-item .lbl {
-    font-size: 0.55rem;
-    color: #64748b;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.1rem;
-}
-
-.spec-item .val {
-    font-size: 0.75rem;
-    color: #f8fafc;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* FOOTER META */
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 1rem;
-    border-bottom: 1px dashed #e2e8f0;
-    margin-bottom: 1rem;
-}
-
-.meta-info {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    color: #64748b;
-    font-weight: 500;
-}
-
-.text-danger {
-    color: #e11d48;
-    font-weight: 700;
-}
-
-.avatar-group {
-    display: flex;
-    flex-direction: row-reverse;
-}
-
-.avatar-tech {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #f1f5f9;
-    color: #475569;
-    font-size: 0.625rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid #ffffff;
-    margin-left: -6px;
-    cursor: help;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.avatar-done {
-    border-color: #10b981;
-    color: #fff;
-    background: #10b981;
-}
-
-/* CARD ACTIONS */
-.card-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.btn-action {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem;
-    border-radius: 6px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.2s;
-    border: none;
-}
-
-.btn-action.chat {
-    background: #f8fafc;
-    color: #475569;
-    border: 1px solid #e2e8f0;
-}
-
-.btn-action.chat:hover {
-    background: #f1f5f9;
-    color: #0f172a;
-}
-
-.btn-action.chat .count {
-    background: #e2e8f0;
-    padding: 0.1rem 0.4rem;
-    border-radius: 99px;
-    font-size: 0.65rem;
-}
-
-.btn-action.complete {
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-}
-
-.btn-action.complete:hover {
-    background: #dcfce7;
-    color: #14532d;
-    border-color: #86efac;
-}
-
-
-/* ====================================================
-   NEO FORMS & MODALS
-==================================================== */
 :deep(.tech-modal .p-dialog-header) {
     background: #ffffff;
     border-bottom: 1px solid #f1f5f9;
@@ -860,7 +518,6 @@ const scrollToBottom = () => {
     color: #0f172a;
 }
 
-/* CHAT TERMINAL */
 .chat-wrapper {
     display: flex;
     flex-direction: column;
@@ -958,7 +615,6 @@ const scrollToBottom = () => {
     border-radius: 10px;
 }
 
-/* Responsive adjustments */
 @media (max-width: 1024px) {
 
     .wo-grid[data-count="3"],
@@ -979,7 +635,6 @@ const scrollToBottom = () => {
     }
 }
 
-/* Animations */
 .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
 }

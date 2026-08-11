@@ -37,9 +37,8 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
         WorkOrder.objects
         .select_related('dibuat_oleh', 'diselesaikan_oleh', 'detail_produksi')
         .prefetch_related('penugasan__staff')
-        .annotate(jumlah_pesan=Count('pesan_chat', distinct=True))
+        .annotate(total_pesan=Count('pesan_chat', distinct=True))
     )
-
     def get_queryset(self):
         qs = services.wo_terlihat(super().get_queryset(), self.request.user)
 
@@ -121,10 +120,10 @@ class WorkOrderViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def staff(self, request):
         """Daftar staf aktif untuk form penandaan. Array polos."""
+        qs = Profil.objects.aktif().exclude(id=request.user.id)
+        
         return Response(
-            s.ProfilStaffRingkasSerializer(Profil.objects.aktif(), many=True).data)
-
-    # ---------- penyelesaian ----------
+            s.ProfilStaffRingkasSerializer(qs, many=True).data)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):

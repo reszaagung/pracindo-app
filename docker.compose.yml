@@ -2,47 +2,58 @@ services:
   db:
     image: postgres:15-alpine
     container_name: pracindo_db
-    restart: always
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${DB_USER} -d ${DB_NAME}
       interval: 5s
       timeout: 5s
-      retries: 10
-
+      retries: 5
+    restart: always
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
   backend:
     build:
-      context: ./pracindo_backendv1
+      context: ./pracindo_backend_v1
     container_name: pracindo_backend
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
     restart: always
     ports:
-      - "8000:8000"
+      - 8000:8000
     depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=db
-      - DB_PORT=5432
-
+      - db
   frontend:
     build:
-      context: ./pracindo-frontend-v1
+      context: ./pracindo-frontend
+      dockerfile: DOCKERFILE
     container_name: pracindo_frontend
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pracindo.rule=Host(`pracindo-marshitek.company`)
+      - traefik.http.routers.pracindo.entrypoints=websecure
+      - traefik.http.routers.pracindo.tls.certresolver=letsencrypt
+      - traefik.http.services.pracindo.loadbalancer.server.port=80
+      - traefik.docker.network=pracindo-app_default
     restart: always
-    ports:
-      - "8080:80"
     depends_on:
       - backend
-
+      - db
+    networks:
+      - default
+networks:
+  default:
+    name: pracindo-app_default
+    external: true
 volumes:
   postgres_data:

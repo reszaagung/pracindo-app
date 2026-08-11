@@ -89,13 +89,14 @@ class WorkOrderRingkasSerializer(serializers.ModelSerializer):
     saya_ditandai = serializers.SerializerMethodField()
     saya_sudah_menandai = serializers.SerializerMethodField()
 
-    class Meta:
+    jumlah_pesan = serializers.IntegerField(source='total_pesan', read_only=True)
+    class Meta: 
         model = WorkOrder
         fields = [
             'id', 'nomor', 'kategori', 'kategori_label', 'judul', 'deskripsi',
             'aturan_penyelesaian', 'aturan_label', 'tanggal', 'deadline',
             'selesai', 'catatan_selesai', 'waktu_selesai', 'terlambat',
-            'dibuat_oleh_nama', 'diselesaikan_oleh_nama', 'dibuat_pada',
+            'dibuat_oleh', 'dibuat_oleh_nama', 'diselesaikan_oleh_nama', 'dibuat_pada', # <-- Tambahkan 'dibuat_oleh' di sini
             'penugasan', 'detail_produksi', 'jumlah_pesan', 'progres',
             'saya_ditandai', 'saya_sudah_menandai',
         ]
