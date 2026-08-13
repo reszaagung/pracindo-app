@@ -72,12 +72,16 @@ export const MODUL = [
     nama: 'Produksi',
     ringkas: 'Sesi produksi rutin dan percobaan R&D',
     ikon: 'produksi',
-    rute: '/produksi',
+    rute: '/produksi/mixing',
     siap: true,
     menu: [
-      { label: 'Sesi', rute: '/produksi' },
-      { label: 'Banding Batch', rute: '/produksi/banding' },
-    ],
+      { label: 'Pengadonan (Mixing)', rute: '/produksi/mixing' },
+      { label: 'Monitor Tangki', rute: '/produksi/tangki' },
+      { label: 'Daftar Sesi', rute: '/produksi/sesi' },
+      { label: 'Eksperimen R&D', rute: '/produksi/sesi/rnd' },
+      { label: 'Banding Batch', rute: '/produksi/sesi/banding' },
+      { label: 'Transfer Pool', rute: '/produksi/sesi/transfer-pool' }
+    ]
   },
   {
     id: 'logistik',
@@ -109,7 +113,7 @@ export const MODUL = [
     sembunyiDiDashboardUntuk: ['AKUNTING'],
     menu: [
       { label: 'Stok', rute: '/inventory' },
-      { label: 'Monitor Tangki', rute: '/inventory/tangki' },
+      { label: 'Kalkulasi Klaim', rute: '/inventory/formulation' },
     ],
   },
   {
@@ -132,8 +136,6 @@ export const MODUL = [
     catatan: 'Layar belum dibangun',
     menu: [],
   },
-
-
   {
     id: 'work_order',
     nama: 'Papan Tugas',
@@ -164,7 +166,6 @@ export const MODUL = [
     sembunyiDiDashboard: true,
     menu: [],
   },
-
   {
     id: 'dashboard',
     nama: 'Dashboard',

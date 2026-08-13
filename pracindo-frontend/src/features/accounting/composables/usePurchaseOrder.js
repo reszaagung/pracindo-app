@@ -209,12 +209,15 @@ export function usePurchaseOrder() {
                 return { success: false, message: pesanError.value }
             }
 
+            // Di dalam function simpanPO()
             const payload = {
                 entitas_id: form.entitas_id,
                 suplier_id: form.suplier_id,
                 tanggal: form.tanggal,
                 tanggal_kirim_diminta: form.tanggal_kirim_diminta || null,
                 catatan: form.catatan,
+                pakai_ppn: form.pakai_ppn,
+                ppn_persen: form.ppn_persen || 11.00,
                 items: payloadItems
             }
 

@@ -1,250 +1,173 @@
-<!--
-   features/warehouse/views/Packageing.vue
-   ===============================================
-   Transfer Hasil Produksi & Pengemasan
-   Desain seragam dengan ekosistem Gudang/Akuntansi (Responsive).
--->
 <template>
-    <div class="flex flex-col w-full animate-fade-in relative space-y-6">
+    <div class="max-w-4xl mx-auto p-4 md:p-6 lg:p-8 animate-fade-in">
+        <header class="mb-8">
+            <h1 class="text-2xl font-black text-slate-800 flex items-center gap-3">
+                <i class="pi pi-box text-indigo-600"></i> Pengepakan (Packaging)
+            </h1>
+            <p class="text-sm text-slate-500 mt-1 ml-9">
+                Proses konversi curah (POOL) menjadi SKU Barang Jadi. Hak kepemilikan Entitas akan dipotong secara
+                proporsional.
+            </p>
+        </header>
 
-        <!-- Header Halaman -->
-        <div class="flex justify-between items-end">
-            <div>
-                <p class="text-xs text-slate-400 mb-1">
-                    <span class="hover:text-slate-700 transition-colors">Warehouse</span> /
-                    <span class="hover:text-slate-700 transition-colors font-semibold">Packaging & Hasil</span>
-                </p>
-                <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Transfer Hasil Produksi</h2>
-                <p class="text-xs md:text-sm text-slate-500 mt-1">Catat hasil akhir produk jadi atau varian ke gudang
-                    penyimpanan.</p>
-            </div>
+        <div v-if="galat"
+            class="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-800 rounded-r-md text-sm font-semibold">
+            {{ galat }}
         </div>
 
-        <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full">
-            <!-- Header Form (Informasi Produksi) -->
-            <div class="mb-6 pb-6 border-b border-slate-100">
-                <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <i class="pi pi-info-circle text-emerald-600"></i> Informasi Produksi
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="flex flex-col gap-2">
-                        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">No. Batch /
-                            Sesi</label>
-                        <input type="text" v-model="formHeader.batch_no" placeholder="Contoh: BATCH-2026-04"
-                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-800 font-medium transition-colors">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <!-- AREA FORM INPUT -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Blok Dokumen -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <h2 class="text-xs font-black tracking-wider text-slate-400 uppercase mb-2">Informasi Pengepakan
+                    </h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-sm font-bold text-slate-700">Tanggal</span>
+                            <input type="date" v-model="form.tanggal"
+                                class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                        </label>
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-sm font-bold text-slate-700">Referensi / No. Batch</span>
+                            <input type="text" v-model="form.referensi" placeholder="Otomatis jika kosong"
+                                class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
+                        </label>
                     </div>
-                    <div class="flex flex-col gap-2">
-                        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Gudang Tujuan</label>
-                        <div class="relative">
-                            <select v-model="formHeader.gudang_tujuan"
-                                class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-800 font-medium appearance-none cursor-pointer transition-colors">
-                                <option value="" disabled>-- Pilih Gudang --</option>
-                                <option value="PT">Gudang PT (Utama)</option>
-                                <option value="CV">Gudang CV (Cabang)</option>
-                            </select>
-                            <i
-                                class="pi pi-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-2">
-                        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Tanggal Catat</label>
-                        <input type="date" v-model="formHeader.tanggal"
-                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-800 font-medium transition-colors">
-                    </div>
-                </div>
-            </div>
 
-            <!-- Bagian Item Produk -->
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        <i class="pi pi-box text-blue-600"></i> Detail Item Produk
-                    </h3>
-                    <button @click="addRow"
-                        class="px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] md:text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
-                        <i class="pi pi-plus"></i> Tambah Baris
-                    </button>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-sm font-bold text-slate-700">Entitas Pemilik Hak</span>
+                        <select v-model="form.entitas_id"
+                            class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                            :disabled="memuat.awal">
+                            <option value="">-- Pilih Entitas yang dikurangi haknya --</option>
+                            <option v-for="e in opsi.entitas" :key="e.id" :value="e.id">{{ e.kode }} - {{ e.nama }}
+                            </option>
+                        </select>
+                    </label>
                 </div>
 
-                <!-- Tampilan Desktop (Tabel) -->
-                <div class="hidden md:block overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-left text-sm table-fixed min-w-[50rem]">
-                        <thead class="text-slate-500 bg-slate-50/50">
-                            <tr>
-                                <th class="py-3 px-3 font-semibold rounded-tl-xl w-[25%]">Varian / Nama Produk</th>
-                                <th class="py-3 px-3 font-semibold w-[20%]">Jenis Kemasan</th>
-                                <th class="py-3 px-3 font-semibold w-[15%] text-right">Berat/Unit (Kg)</th>
-                                <th class="py-3 px-3 font-semibold w-[15%] text-right">Jml Koli/Unit</th>
-                                <th class="py-3 px-3 font-semibold w-[15%] text-right">Total Berat</th>
-                                <th class="py-3 px-3 font-semibold w-[10%] text-center rounded-tr-xl">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="(item, index) in formItems" :key="index"
-                                class="hover:bg-slate-50/30 transition-colors">
-                                <td class="py-2 px-2 align-top">
-                                    <input type="text" v-model="item.nama_produk" placeholder="Misal: Super White SC SC"
-                                        class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-800 transition-colors">
-                                </td>
-                                <td class="py-2 px-2 align-top">
-                                    <input type="text" v-model="item.packaging" placeholder="Contoh: Karung / Sak"
-                                        class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 transition-colors">
-                                </td>
-                                <td class="py-2 px-2 align-top">
-                                    <input type="number" v-model.number="item.unit_kg" @input="calcWeight(index)"
-                                        min="0" step="0.01"
-                                        class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 transition-colors">
-                                </td>
-                                <td class="py-2 px-2 align-top">
-                                    <input type="number" v-model.number="item.total_unit" @input="calcWeight(index)"
-                                        min="0"
-                                        class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800 transition-colors">
-                                </td>
-                                <td class="py-2 px-2 align-top">
-                                    <input type="number" v-model.number="item.berat" readonly
-                                        class="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-right font-bold text-slate-600 cursor-not-allowed">
-                                </td>
-                                <td class="py-2 px-2 align-top text-center pt-3">
-                                    <button @click="removeRow(index)"
-                                        class="w-8 h-8 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors flex items-center justify-center mx-auto"
-                                        title="Hapus Baris">
-                                        <i class="pi pi-trash text-xs"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <!-- Blok Detail Kemasan -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4"
+                    :class="{ 'opacity-50 pointer-events-none': !form.entitas_id }">
+                    <h2 class="text-xs font-black tracking-wider text-slate-400 uppercase mb-2">Target Konversi</h2>
 
-                <!-- Tampilan Mobile (Card) -->
-                <div class="md:hidden flex flex-col gap-4">
-                    <div v-for="(item, index) in formItems" :key="'mob-' + index"
-                        class="border border-slate-200 rounded-xl p-4 bg-slate-50/30">
-                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
-                            <span class="font-bold text-slate-600 text-xs uppercase tracking-wider">Item #{{ index + 1
-                                }}</span>
-                            <button @click="removeRow(index)"
-                                class="text-rose-500 bg-rose-50 p-1.5 rounded-lg hover:bg-rose-100">
-                                <i class="pi pi-trash text-[10px]"></i>
-                            </button>
-                        </div>
-                        <div class="flex flex-col gap-3">
-                            <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-bold text-slate-500 uppercase">Varian / Nama
-                                    Produk</label>
-                                <input type="text" v-model="item.nama_produk" placeholder="Misal: Super White SC SC"
-                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-800">
-                            </div>
-                            <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-bold text-slate-500 uppercase">Jenis Kemasan</label>
-                                <input type="text" v-model="item.packaging" placeholder="Contoh: Karung / Sak"
-                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800">
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-bold text-slate-500 uppercase">Berat/Unit
-                                        (Kg)</label>
-                                    <input type="number" v-model.number="item.unit_kg" @input="calcWeight(index)"
-                                        min="0" step="0.01"
-                                        class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800">
-                                </div>
-                                <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-bold text-slate-500 uppercase">Jml Koli/Unit</label>
-                                    <input type="number" v-model.number="item.total_unit" @input="calcWeight(index)"
-                                        min="0"
-                                        class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-800">
-                                </div>
-                            </div>
-                            <div
-                                class="flex justify-between items-center bg-slate-100 p-2.5 rounded-lg mt-1 border border-slate-200">
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">Total Berat (Kg):</span>
-                                <span class="font-black text-slate-800">{{ item.berat || '0' }}</span>
-                            </div>
-                        </div>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-sm font-bold text-slate-700">Pilih SKU Kemasan</span>
+                        <select v-model="form.kemasan_id"
+                            class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
+                            <option value="">-- Pilih --</option>
+                            <option v-for="k in opsi.kemasan" :key="k.id" :value="k.id">{{ k.nama_kemasan }}</option>
+                        </select>
+                    </label>
+
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-sm font-bold text-slate-700">Sumber Tangki WIP (POOL)</span>
+                        <select v-model="form.tangki_pool_id"
+                            class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500">
+                            <option value="">Sembarang Tangki (Sistem akan mencari otomatis)</option>
+                            <option v-for="t in tangkiSesuaiGrup" :key="t.id" :value="t.id">{{ t.kode }} - {{ t.nama }}
+                            </option>
+                        </select>
+                    </label>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-sm font-bold text-slate-700">Jumlah Hasil (PCS)</span>
+                            <input type="number" v-model="form.jumlah" placeholder="0"
+                                class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-lg font-mono text-right outline-none focus:border-indigo-500 font-bold">
+                        </label>
+                        <label class="flex flex-col gap-1.5"
+                            title="Isi jika hasil timbangan selang/tetesan berbeda dari standar kemasan">
+                            <span class="text-sm font-bold text-slate-700">Timbangan Curah (KG)</span>
+                            <input type="number" v-model="form.qty_curah_aktual" placeholder="Opsional"
+                                class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-lg font-mono text-right outline-none focus:border-indigo-500 text-slate-500 placeholder-slate-300">
+                            <span class="text-[10px] text-slate-400 text-right uppercase">Aktual yg Keluar</span>
+                        </label>
                     </div>
                 </div>
             </div>
 
-            <!-- Kontrol Bawah & Tombol Simpan -->
-            <div class="flex flex-col sm:flex-row justify-end items-center gap-3 pt-4 border-t border-slate-100">
-                <button @click="resetForm"
-                    class="w-full sm:w-auto px-6 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-sm rounded-xl transition-colors text-center">
-                    Reset Form
-                </button>
-                <button @click="saveData" :disabled="isSaving"
-                    class="w-full sm:w-auto px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5">
-                    <i v-if="isSaving" class="pi pi-spin pi-spinner text-xs"></i>
-                    <i v-else class="pi pi-save text-xs"></i>
-                    <span>{{ isSaving ? 'Menyimpan...' : 'Simpan Hasil Produksi' }}</span>
-                </button>
+            <!-- AREA PREVIEW (NERACA) -->
+            <div class="lg:col-span-2">
+                <div
+                    class="bg-slate-800 text-white rounded-2xl shadow-lg overflow-hidden sticky top-8 flex flex-col h-[calc(100%-2rem)]">
+                    <div class="p-5 border-b border-slate-700 bg-slate-900/50">
+                        <h2 class="text-sm font-black tracking-wider text-slate-400 uppercase flex items-center gap-2">
+                            <i class="pi pi-calculator"></i> Pratinjau Aliran
+                            <i v-if="memuat.rencana" class="pi pi-spin pi-spinner ml-auto text-indigo-400"></i>
+                        </h2>
+                    </div>
+
+                    <div class="p-6 flex-1 flex flex-col justify-center">
+                        <template v-if="pratinjau">
+                            <div class="space-y-6">
+                                <!-- Status Cukup/Tidak -->
+                                <div class="text-center p-3 rounded-lg border"
+                                    :class="pratinjau.cukup ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400' : 'bg-red-900/30 border-red-500/30 text-red-400'">
+                                    <div class="text-xs font-bold uppercase mb-1">Status Ketersediaan</div>
+                                    <div class="text-sm">{{ pratinjau.cukup ? 'Tangki Cukup' : pratinjau.pesan || 'Stok
+                                        Curah Kurang' }}</div>
+                                </div>
+
+                                <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                                    <span class="text-slate-400 text-sm">Target Barang Jadi</span>
+                                    <span class="font-mono font-bold text-xl">{{ pratinjau.jumlah }} <span
+                                            class="text-xs text-slate-500">PCS</span></span>
+                                </div>
+
+                                <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                                    <span class="text-slate-400 text-sm">Sumbangan Curah Keluar</span>
+                                    <span class="font-mono font-bold text-xl text-amber-400">{{ pratinjau.qty_curah }}
+                                        <span class="text-xs text-amber-600">KG</span></span>
+                                </div>
+
+                                <div class="flex justify-between items-center pt-2">
+                                    <span class="text-slate-400 text-sm">Pemotongan Hak Klaim</span>
+                                    <span class="font-mono font-bold text-lg text-emerald-400">Rp {{
+                                        Number(pratinjau.nilai).toLocaleString('id-ID') }}</span>
+                                </div>
+                                <p class="text-[10px] text-slate-500 text-right mt-1 leading-tight">
+                                    Dihitung menggunakan persentase harga rata-rata<br />isi tangki saat ini.
+                                </p>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div class="text-center opacity-40 py-10">
+                                <i class="pi pi-box text-5xl mb-4 block"></i>
+                                <p class="text-sm font-semibold">Pilih Entitas, Kemasan, dan Jumlah untuk melihat
+                                    kalkulasi nilai.</p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="p-4 bg-slate-900">
+                        <button @click="kirim" :disabled="!bisaKirim"
+                            class="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider transition-all"
+                            :class="bisaKirim ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-slate-800 text-slate-600 border border-slate-700 cursor-not-allowed'">
+                            {{ memuat.kirim ? 'Memproses...' : 'Eksekusi Pengemasan' }}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import api from '@/utils/api'
+import { onMounted } from 'vue'
+import { usePackaging } from '../composables/usePackaging'
 
-const isSaving = ref(false)
+const emit = defineEmits(['tersimpan'])
 
-const formHeader = reactive({
-    batch_no: '',
-    gudang_tujuan: 'PT',
-    tanggal: new Date().toISOString().split('T')[0]
+const {
+    form, opsi, memuat, pratinjau, galat, bisaKirim, tangkiSesuaiGrup,
+    muatDataAwal, kirim
+} = usePackaging(emit)
+
+onMounted(() => {
+    muatDataAwal()
 })
-
-const formItems = ref([
-    { nama_produk: '', packaging: '', unit_kg: 0, total_unit: 0, berat: 0 }
-])
-
-const calcWeight = (index) => {
-    const item = formItems.value[index]
-    item.berat = (parseFloat(item.unit_kg) * parseFloat(item.total_unit)) || 0
-}
-
-const addRow = () => {
-    formItems.value.push({ nama_produk: '', packaging: '', unit_kg: 0, total_unit: 0, berat: 0 })
-}
-
-const removeRow = (index) => {
-    if (formItems.value.length > 1) {
-        formItems.value.splice(index, 1)
-    } else {
-        alert("Minimal harus ada 1 item produk!")
-    }
-}
-
-const resetForm = () => {
-    formHeader.batch_no = ''
-    formHeader.gudang_tujuan = 'PT'
-    formHeader.tanggal = new Date().toISOString().split('T')[0]
-    formItems.value = [{ nama_produk: '', packaging: '', unit_kg: 0, total_unit: 0, berat: 0 }]
-}
-
-const saveData = async () => {
-    if (!formHeader.batch_no) return alert("Nomor Batch / Sesi Produksi wajib diisi!")
-
-    isSaving.value = true
-    try {
-        const payload = {
-            header: formHeader,
-            items: formItems.value
-        }
-
-        const response = await api.post('warehouse/packaging-hasil-produksi/', payload)
-
-        if (response.status === 200 || response.status === 201) {
-            alert("Transfer Hasil Produksi Berhasil Disimpan!")
-            resetForm()
-        }
-    } catch (error) {
-        console.error("Gagal menyimpan packaging:", error)
-        alert("Gagal menyimpan data ke server.")
-    } finally {
-        isSaving.value = false
-    }
-}
 </script>
 
 <style scoped>
@@ -262,22 +185,5 @@ const saveData = async () => {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-    height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
 }
 </style>

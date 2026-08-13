@@ -19,18 +19,15 @@ export function useDocument() {
     const fetchDocuments = async () => {
         isLoading.value = true
         try {
-            // PERBAIKAN: Menambahkan prefix 'akunting/' agar sesuai dengan backend
             const response = await api.get('akunting/purchase-order/')
 
             let realPOs = Array.isArray(response.data) ? response.data
                 : (response.data?.results || response.data?.data || [response.data])
 
             const mappedData = realPOs.map(po => {
-                const poId = po.id_transaksi || po.po_no || po.nomor || 'UNKNOWN_PO'
+                const poId = po.no_po || 'UNKNOWN_PO'
 
                 const financeStatus = statusTagihan(po) || 'Pending'
-
-                // AMBIL DARI BACKEND
                 let savedFiles = po.dokumen_audit || {
                     invoice: { exists: false, doc_no: '-', date: '-' },
                     faktur_pajak: { exists: false, doc_no: '-', date: '-' },

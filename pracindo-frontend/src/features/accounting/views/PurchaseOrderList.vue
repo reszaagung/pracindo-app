@@ -58,7 +58,6 @@
                             class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-700" />
                     </div>
 
-                    <!-- Tab Status (Sudah Ditambahkan DISETUJUI & DITOLAK) -->
                     <div class="flex bg-slate-50 p-1 rounded-xl w-full md:w-auto overflow-x-auto custom-scrollbar">
                         <button
                             v-for="tab in ['semua', 'DRAFT', 'TERKIRIM', 'DISETUJUI', 'DITOLAK', 'SEBAGIAN', 'SELESAI', 'BATAL']"
@@ -94,7 +93,6 @@
                             <th class="py-3 px-4 font-semibold rounded-tl-xl w-[25%]">No. PO</th>
                             <th class="py-3 px-4 font-semibold w-[15%]">Tanggal</th>
                             <th class="py-3 px-4 font-semibold w-[25%]">Supplier</th>
-                            <th class="py-3 px-4 font-semibold w-[15%] text-right">Total Nilai</th>
                             <th class="py-3 px-4 font-semibold w-[15%] text-center rounded-tr-xl">Status</th>
                         </tr>
                     </thead>
@@ -102,13 +100,10 @@
                         <tr v-for="po in tampil" :key="po.id"
                             class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors cursor-pointer"
                             @click="$router.push(`/accounting/input/po/${po.id}`)">
-                            <!-- Tambahan interaksi klik baris -->
                             <td class="py-3 px-4 font-bold text-slate-800">{{ po.no_po || po.nomor }}</td>
                             <td class="py-3 px-4 text-slate-600">{{ po.tanggal }}</td>
                             <td class="py-3 px-4 text-slate-700 truncate" :title="po.suplier_nama">{{ po.suplier_nama }}
                             </td>
-                            <td class="py-3 px-4 font-semibold text-slate-800 text-right">Rp {{ (Number(po.total_nilai)
-                                || 0).toLocaleString('id-ID') }}</td>
                             <td class="py-3 px-4 text-center">
                                 <span :class="badgeColor(po.status)"
                                     class="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase">
@@ -179,3 +174,5 @@ const badgeColor = (status) => {
     border-radius: 4px;
 }
 </style>
+
+PurchaseOrderList.vue

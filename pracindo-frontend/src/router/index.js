@@ -22,6 +22,10 @@ const routes = [
     component: () => import('@/views/DashboardView.vue'),
     meta: { perluLogin: true }
   },
+
+  // ==========================================
+  // BLOK AKUNTING
+  // ==========================================
   {
     path: '/accounting',
     meta: { perluLogin: true, modul: 'akunting' },
@@ -100,10 +104,15 @@ const routes = [
         component: () => import('@/features/accounting/views/Expense.vue')
       }
     ]
-  }, {
+  },
+
+  // ==========================================
+  // BLOK GUDANG (WAREHOUSE)
+  // ==========================================
+  {
     path: '/warehouse',
     meta: { perluLogin: true, modul: 'gudang' },
-    component: ModulLayout, // Pastikan ModulLayout sudah di-import di atas file ini
+    component: ModulLayout,
     children: [
       {
         path: '',
@@ -145,7 +154,6 @@ const routes = [
   },
   {
     path: '/warehouse/distribution',
-    // Gunakan 'gudang' jika akses distribusi otomatis ikut saat punya akses gudang
     meta: { perluLogin: true, modul: 'gudang' },
     component: () => import('@/features/warehouse/layout/DistributionLayout.vue'),
     children: [
@@ -165,6 +173,10 @@ const routes = [
       }
     ]
   },
+
+  // ==========================================
+  // BLOK MASTER
+  // ==========================================
   {
     path: '/master/suplier',
     name: 'master-suplier',
@@ -172,7 +184,9 @@ const routes = [
     component: () => import('@/features/master/views/Supplier.vue')
   },
 
-
+  // ==========================================
+  // BLOK INVENTORY
+  // ==========================================
   {
     path: '/inventory',
     meta: { perluLogin: true, modul: 'inventory' },
@@ -190,18 +204,17 @@ const routes = [
         props: true
       },
       {
-        path: 'tangki',
-        name: 'inventory-tangki',
-        component: () => import('@/features/inventory/views/TankMonitor.vue')
-      },
-      {
         path: 'klaim/:grup',
         name: 'inventory-klaim',
         component: () => import('@/features/inventory/views/ClaimPosition.vue'),
         props: true
-      }
+      },
     ]
   },
+
+  // ==========================================
+  // BLOK DISTRIBUSI & LOGISTIK
+  // ==========================================
   {
     path: '/distribusi',
     meta: { perluLogin: true, modul: 'distribusi' },
@@ -246,40 +259,53 @@ const routes = [
       }
     ]
   },
+
+  // ==========================================
+  // BLOK PRODUKSI
+  // ==========================================
   {
     path: '/produksi',
     meta: { perluLogin: true, modul: 'produksi' },
-    component: ModulLayout,
+    component: () => import('@/features/produksi/layout/SessionLayout.vue'),
+    redirect: '/produksi/mixing',
     children: [
       {
-        path: '',
-        name: 'produksi-sesi-list',
-        component: () => import('@/features/produksi/views/SesiList.vue')
+        path: 'mixing',
+        name: 'produksi-mixing',
+        component: () => import('@/features/produksi/views/FormMixing.vue')
       },
       {
-        path: 'sesi/buat',
-        name: 'produksi-sesi-buat',
-        component: () => import('@/features/produksi/views/SesiForm.vue')
+        path: 'tangki',
+        name: 'produksi-tangki',
+        component: () => import('@/features/produksi/views/TankMonitoring.vue')
       },
       {
-        path: 'sesi/:id',
-        name: 'produksi-sesi-detail',
-        component: () => import('@/features/produksi/views/SesiDetail.vue'),
-        props: true
+        path: 'sesi',
+        name: 'produksi-sesi',
+        component: () => import('@/features/produksi/views/DaftarSesi.vue')
       },
       {
-        path: 'sesi/:id/kerja',
-        name: 'produksi-sesi-berjalan',
-        component: () => import('@/features/produksi/views/SesiBerjalan.vue'),
-        props: true
+        path: 'sesi/transfer-pool',
+        name: 'produksi-sesi-transfer',
+        component: () => import('@/features/produksi/views/FormPoolRaw.vue')
+      },
+      // --- PENAMBAHAN RUTE BARU AGAR MENU TIDAK 404 ---
+      {
+        path: 'sesi/rnd',
+        name: 'produksi-sesi-rnd',
+        component: () => import('@/features/produksi/views/FormMixing.vue')
       },
       {
-        path: 'banding',
-        name: 'produksi-banding',
-        component: () => import('@/features/produksi/views/BandingBatch.vue')
+        path: 'sesi/banding',
+        name: 'produksi-sesi-banding',
+        component: () => import('@/features/produksi/views/DaftarSesi.vue')
       }
     ]
   },
+
+  // ==========================================
+  // BLOK LAIN-LAIN
+  // ==========================================
   {
     path: '/work-order',
     name: 'work-order',

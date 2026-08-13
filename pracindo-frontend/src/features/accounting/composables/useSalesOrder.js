@@ -34,7 +34,7 @@ export function useSalesOrder() {
         isLoading.value = true
         pesanError.value = ''
         try {
-            const response = await api.get('akunting/sales-order/')
+            const response = await api.get('sales-order/')
 
             let rawData = Array.isArray(response.data) ? response.data
                 : (response.data?.results || response.data?.data || [response.data])

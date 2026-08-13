@@ -44,16 +44,6 @@ api.interceptors.response.use(
   }
 )
 
-api.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('token')
 
-  // TAMBAHKAN BARIS INI UNTUK CEK TOKEN:
-  console.log("Token yang diambil dari Local Storage:", token)
-
-  if (token && !endpointPublik(cfg.url)) {
-    cfg.headers.Authorization = `Token ${token}`
-  }
-  return cfg
-})
 
 export default api
