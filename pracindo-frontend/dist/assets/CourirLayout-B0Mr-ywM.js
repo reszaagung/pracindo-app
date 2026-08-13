@@ -1,0 +1,1 @@
+import{M as e,k as t,m as n,y as r}from"./core-vendor-BsiU_aQL.js";import{n as i}from"./index-FNHr0aN0.js";var a={},o={class:`bg-slate-100 min-h-screen font-sans text-slate-800 selection:bg-teal-200`};function s(i,a){let s=e(`router-view`);return t(),n(`div`,o,[r(s)])}var c=i(a,[[`render`,s]]);export{c as default};

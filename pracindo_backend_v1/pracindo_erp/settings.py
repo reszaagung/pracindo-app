@@ -6,6 +6,7 @@ Semua rahasia dibaca dari .env. Jangan pernah menaruh nilai asli di file ini.
 """
 
 import os
+BUKA_API = os.environ.get('BUKA_API') == '1'
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -103,7 +104,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -149,6 +150,7 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',
         'staff_user.authentication.ExpiringTokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
@@ -186,6 +188,8 @@ CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS') or [
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS') or [
     'https://pracindo-marshitek.company',
     'https://www.pracindo-marshitek.company',
+    'http://localhost:5173',     
+    'http://127.0.0.1:5173',
 ]
 
 

@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from rest_framework.permissions import IsAuthenticated
 from staff_user.permissions import HanyaSupervisor, SudahLogin
 from . import services
 from .models import Entitas, GrupBahan, PeriodeAkuntansi
@@ -25,21 +25,26 @@ def _galat(e):
     return Response(pesan, status=status.HTTP_400_BAD_REQUEST)
 
 
-class EntitasViewSet(viewsets.ReadOnlyModelViewSet):
-    modul = 'master'
-    queryset = Entitas.objects.select_related('grup_bahan').order_by('kode')
-    serializer_class = EntitasSerializer
-    permission_classes = [HanyaSupervisor]
-    filterset_fields = ['jenis', 'aktif']
-    search_fields = ['kode', 'nama', 'npwp']
-
-
-class GrupBahanViewSet(viewsets.ReadOnlyModelViewSet):
-    modul = 'master'
-    queryset = GrupBahan.objects.all().order_by('kode')
+class GrupBahanViewSet(viewsets.ModelViewSet):
+    queryset = GrupBahan.objects.all()
     serializer_class = GrupBahanSerializer
-    permission_classes = [HanyaSupervisor]
-    search_fields = ['kode', 'nama']
+    
+    def get_permissions(self):
+
+        if self.action in ['list', 'retrieve']:
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+
+class EntitasViewSet(viewsets.ModelViewSet):
+    queryset = Entitas.objects.all()
+    serializer_class = EntitasSerializer
+
+    def get_permissions(self):
+        # Membuka akses Read-Only (GET) untuk keperluan dropdown di frontend
+        if self.action in ['list', 'retrieve']:
+            return [IsAuthenticated()]
+        return super().get_permissions()
 
 
 class PeriodeAkuntansiViewSet(viewsets.ReadOnlyModelViewSet):

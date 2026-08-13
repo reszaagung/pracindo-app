@@ -416,7 +416,7 @@ def lampirkan_dokumen(*, po_id, jenis, berkas, user, keterangan=''):
     ditandai `digantikan_oleh`, sehingga jejak audit tetap utuh.
     """
     from django.contrib.contenttypes.models import ContentType
-    from dokumen.models import Lampiran
+    from inventory.dokumen.models import Lampiran
 
     from .models import PurchaseOrder, StatusPO
 

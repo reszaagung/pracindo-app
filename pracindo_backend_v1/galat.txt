@@ -1,0 +1,9 @@
+﻿py : Traceback (most recent call last):
+At line:1 char:1
++ py -c "import pracindo_erp.settings_lokal" 2>&1 | Out-File -Encoding  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'pracindo_erp.settings_lokal'

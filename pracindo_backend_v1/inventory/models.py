@@ -10,17 +10,56 @@ Kepemilikan tidak hilang saat masuk POOL — dia berubah bentuk dari
 kepemilikan fisik menjadi KLAIM. Persis seperti setoran bank: lembar
 uangnya bukan milik Anda lagi, tapi Anda memegang saldo.
 
-INVARIANT UTAMA
-    SUM(PosisiKlaim.nilai_bersih untuk satu grup) == nilai sisa POOL
+=========================================================================
+PERUBAHAN BESAR: NILAI RIIL MELEKAT DI STOK
+=========================================================================
 
-Kalau melenceng, perhitungan siapa berhutang ke siapa sudah salah tanpa
-ada error yang muncul.
+Dulu nilai pool dihitung ulang setiap kali dibaca, dari tarif tetap
+NilaiEkuivalen. Itu membuat invariant (2) mustahil dijaga: begitu satu
+batch produksi berjalan, nilai bahan yang keluar dan nilai produk yang
+masuk tidak pernah sama, dan selisihnya tidak ada yang menanggung.
+
+Sekarang `Stok.nilai` menyimpan nilai rupiah yang BENAR-BENAR melekat
+pada kuantitas itu. Produksi memindahkan nilai, tidak menciptakan atau
+memusnahkannya:
+
+    Bahan A  10 kg @ Rp1.000  = Rp10.000
+    Bahan B  20 kg @ Rp1.500  = Rp30.000
+    Bahan C   5 kg @ Rp2.000  = Rp10.000
+    -------------------------------------
+    Masuk    35 kg              Rp50.000      Rp1.428,57/kg
+    Hasil    33 kg              Rp47.142,86   Rp1.428,57/kg
+    Susut     2 kg              Rp 2.857,14   -> dibebankan
+
+HARGA PER SATUAN TETAP. Yang susut kehilangan nilainya, tidak
+menitipkannya ke produk yang selamat. Kalau sebaliknya, siapa pun yang
+kebetulan mengklaim dari batch bersusut tinggi akan membayar lebih mahal
+per kg -- padahal susut itu milik bersama.
+
+Saat packaging, entitas mengklaim barang jadi senilai PORSI nilai tangki
+pada saat pengambilan. Inilah yang dimaksud "klaim tergantung nominal di
+tangki".
+
+Nilai hanya HILANG lewat jalur yang menerbitkan MutasiKlaim RUGI, yang
+membagi kerugian pro-rata ke pemegang klaim dalam grup:
+    - susut produksi
+    - sesi produksi GAGAL
+    - sesi R&D yang hasilnya tidak masuk pool
+    - opname kurang di lapis POOL
+
+INVARIANT UTAMA
+    (1a) SUM(SaldoEntitas.qty)   == Stok.qty    untuk RAW dan JADI
+    (1b) SUM(SaldoEntitas.nilai) == Stok.nilai  untuk RAW dan JADI
+    (2)  SUM(PosisiKlaim.nilai_bersih) == SUM(Stok.nilai) lapis POOL,
+         per grup bahan
+    (3)  saldo_akhir baris n == saldo_akhir n-1 + masuk - keluar
+         (berlaku untuk qty maupun nilai)
 
 NILAI EKUIVALEN
-    Tarif tetap per produk, bukan harga pasar. Dipakai menyetarakan barang
-    yang berbeda jenis supaya posisi multi-produk runtuh jadi satu angka.
-    Tarif yang dipakai DISIMPAN di setiap baris MutasiKlaim, sehingga
-    perubahan tarif di kemudian hari tidak menulis ulang sejarah.
+    Sekarang hanya BENIH, bukan sumber kebenaran. Dipakai kalau barang
+    masuk pool tanpa dasar biaya sama sekali: kelebihan opname, atau
+    produk R&D yang tidak berasal dari bahan mana pun. Setelah masuk,
+    nilai riil yang berlaku.
 """
 from decimal import Decimal
 
@@ -91,7 +130,14 @@ class Tangki(TimeStampedModel):
 
 
 class Stok(TimeStampedModel):
-    """Kuantitas FISIK. Pemilik tidak pernah disimpan di sini."""
+    """
+    Kuantitas FISIK beserta nilai rupiah yang melekat padanya.
+
+    Pemilik tidak pernah disimpan di sini. Untuk RAW dan JADI, rincian
+    siapa memiliki berapa ada di SaldoEntitas -- dan jumlahnya wajib sama
+    dengan qty/nilai baris ini. Untuk POOL tidak ada rincian pemilik sama
+    sekali; haknya ada di PosisiKlaim.
+    """
 
     produk = models.ForeignKey('master.Produk', on_delete=models.PROTECT,
                                related_name='stok')
@@ -103,6 +149,12 @@ class Stok(TimeStampedModel):
 
     qty = models.DecimalField(
         max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
+        default=Decimal('0'), editable=False,
+    )
+    # Nilai rupiah yang melekat. Bergerak bersama qty, kecuali saat susut
+    # produksi -- di situ qty turun dan nilai tetap.
+    nilai = models.DecimalField(
+        max_digits=NILAI_DIGITS, decimal_places=NILAI_PLACES,
         default=Decimal('0'), editable=False,
     )
     urutan_terakhir = models.BigIntegerField(default=0, editable=False)
@@ -121,6 +173,13 @@ class Stok(TimeStampedModel):
                 condition=Q(tangki__isnull=True), name='uq_stok_rak',
             ),
             models.CheckConstraint(condition=Q(qty__gte=0), name='ck_stok_nonneg'),
+            models.CheckConstraint(condition=Q(nilai__gte=0),
+                                   name='ck_stok_nilai_nonneg'),
+            # Stok habis wajib bernilai nol. Tanpa ini, pembulatan
+            # meninggalkan receh di baris kosong dan invariant (2)
+            # melenceng sedikit demi sedikit tanpa ada yang sadar.
+            models.CheckConstraint(condition=Q(qty__gt=0) | Q(nilai=0),
+                                   name='ck_stok_kosong_tanpa_nilai'),
         ]
         indexes = [
             models.Index(fields=['grup_bahan', 'lapis'], name='ix_stok_grup_lapis'),
@@ -133,6 +192,13 @@ class Stok(TimeStampedModel):
     def berpemilik(self):
         """POOL tidak pernah punya SaldoEntitas."""
         return self.lapis in (Lapis.RAW, Lapis.JADI)
+
+    @property
+    def harga_rata(self):
+        """Rupiah per satuan. Inilah tarif klaim saat barang diambil."""
+        if not self.qty:
+            return Decimal('0')
+        return (self.nilai / self.qty).quantize(Decimal('0.0001'))
 
 
 class JenisMutasiStok(models.TextChoices):
@@ -148,7 +214,10 @@ class JenisMutasiStok(models.TextChoices):
 
 
 class MutasiStok(models.Model):
-    """Append-only, saldo berjalan tersimpan di setiap baris."""
+    """
+    Append-only. Saldo berjalan qty DAN nilai tersimpan di setiap baris,
+    sehingga rantai keduanya bisa diperiksa ulang kapan saja.
+    """
 
     stok    = models.ForeignKey(Stok, on_delete=models.PROTECT, related_name='mutasi')
     urutan  = models.BigIntegerField()
@@ -160,6 +229,16 @@ class MutasiStok(models.Model):
     keluar = models.DecimalField(max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
                                  default=Decimal('0'))
     saldo_akhir = models.DecimalField(max_digits=QTY_DIGITS, decimal_places=QTY_PLACES)
+
+    nilai_masuk = models.DecimalField(max_digits=NILAI_DIGITS,
+                                      decimal_places=NILAI_PLACES,
+                                      default=Decimal('0'))
+    nilai_keluar = models.DecimalField(max_digits=NILAI_DIGITS,
+                                       decimal_places=NILAI_PLACES,
+                                       default=Decimal('0'))
+    saldo_nilai = models.DecimalField(max_digits=NILAI_DIGITS,
+                                      decimal_places=NILAI_PLACES,
+                                      default=Decimal('0'))
 
     referensi = models.CharField(max_length=64, blank=True)
     idempotency_key = models.CharField(max_length=96, unique=True)
@@ -176,6 +255,12 @@ class MutasiStok(models.Model):
                                    name='ck_mutasi_stok_nonneg'),
             models.CheckConstraint(condition=Q(masuk=0) | Q(keluar=0),
                                    name='ck_mutasi_stok_satu_sisi'),
+            models.CheckConstraint(
+                condition=Q(nilai_masuk__gte=0) & Q(nilai_keluar__gte=0),
+                name='ck_mutasi_nilai_nonneg',
+            ),
+            models.CheckConstraint(condition=Q(nilai_masuk=0) | Q(nilai_keluar=0),
+                                   name='ck_mutasi_nilai_satu_sisi'),
         ]
         indexes = [models.Index(fields=['stok', '-urutan'], name='ix_mutasi_stok_urut')]
 
@@ -218,10 +303,18 @@ class SaldoEntitas(TimeStampedModel):
                                     name='uq_saldo_entitas'),
             models.CheckConstraint(condition=Q(qty__gte=0),
                                    name='ck_saldo_entitas_nonneg'),
+            models.CheckConstraint(condition=Q(qty__gt=0) | Q(nilai=0),
+                                   name='ck_saldo_kosong_tanpa_nilai'),
         ]
 
     def __str__(self):
         return f"{self.entitas.kode}: {self.qty} dari {self.stok.produk.kode}"
+
+    @property
+    def harga_rata(self):
+        if not self.qty:
+            return Decimal('0')
+        return (self.nilai / self.qty).quantize(Decimal('0.0001'))
 
     def clean(self):
         if self.stok_id and self.stok.lapis == Lapis.POOL:
@@ -231,18 +324,79 @@ class SaldoEntitas(TimeStampedModel):
 
 
 # =========================================================
+# KEMASAN — jembatan satuan curah ke satuan jual
+# =========================================================
+
+class Kemasan(TimeStampedModel):
+    """
+    Berapa curah yang habis untuk satu unit kemasan.
+
+    Tangki dihitung kg, barang jadi dihitung pcs. Tanpa jembatan ini,
+    "10 pcs @ 1 kg" tidak punya tempat disimpan dan angka 10 kg-nya
+    hanya ada di kepala operator.
+
+        Monitor Blue curah   satuan kg
+        Monitor Blue 1kg     satuan pcs,  isi = 1.000
+        Monitor Blue 500g    satuan pcs,  isi = 0.500
+
+    Konversi ini TIDAK menyentuh nilai. Rupiah tetap mengikuti kg yang
+    benar-benar keluar dari tangki -- itulah sebabnya "ekuivalen terjadi
+    saat klaim": tarifnya dibaca dari isi tangki pada detik pengambilan,
+    bukan dari tabel harga yang disiapkan sebelumnya.
+    """
+
+    produk_curah = models.ForeignKey(
+        'master.Produk', on_delete=models.PROTECT, related_name='kemasan',
+        help_text='Produk yang tersimpan di tangki, satuan curah.',
+    )
+    produk_kemasan = models.ForeignKey(
+        'master.Produk', on_delete=models.PROTECT, related_name='dari_curah',
+        help_text='Produk yang keluar setelah dikemas, satuan jual.',
+    )
+    isi = models.DecimalField(
+        max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
+        validators=[MinValueValidator(Decimal('0.001'))],
+        help_text='Curah yang habis untuk satu unit kemasan.',
+    )
+    aktif = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'inventory_kemasan'
+        ordering = ['produk_curah__kode', 'isi']
+        verbose_name_plural = 'Kemasan'
+        constraints = [
+            models.UniqueConstraint(fields=['produk_curah', 'produk_kemasan'],
+                                    name='uq_kemasan_pasangan'),
+            models.CheckConstraint(condition=Q(isi__gt=0), name='ck_kemasan_isi'),
+        ]
+
+    def __str__(self):
+        return f"{self.produk_kemasan.kode} = {self.isi} {self.produk_curah.kode}"
+
+    def clean(self):
+        if self.produk_curah_id == self.produk_kemasan_id:
+            raise ValidationError(
+                {'produk_kemasan': 'Produk curah dan kemasan harus berbeda.'})
+
+    def curah_untuk(self, jumlah):
+        """Kg yang dibutuhkan untuk `jumlah` unit kemasan."""
+        return (Decimal(jumlah) * self.isi).quantize(Decimal('0.001'))
+
+
+# =========================================================
 # NILAI EKUIVALEN & BUKU KLAIM
 # =========================================================
 
 class NilaiEkuivalen(TimeStampedModel):
     """
-    Tarif tetap penyetaraan antar produk. BUKAN harga pasar.
+    BENIH nilai, bukan sumber kebenaran.
 
-    Contoh: gula 1 per gram, teh celup 50 per pcs. Dengan ini setoran
-    35 g gula dan pengambilan 12 teh kemasan bisa dibandingkan langsung.
+    Dipakai hanya kalau barang masuk pool tanpa dasar biaya apa pun:
+    kelebihan opname, atau produk R&D yang tidak menyerap bahan. Begitu
+    masuk, `Stok.nilai` yang berlaku dan tarif ini tidak dilihat lagi.
 
-    Perubahan tarif berlaku PROSPEKTIF — baris MutasiKlaim menyimpan tarif
-    yang dipakai saat itu, jadi sejarah tidak pernah ditulis ulang.
+    Perubahan tarif berlaku PROSPEKTIF -- baris MutasiKlaim menyimpan
+    tarif yang dipakai saat itu, jadi sejarah tidak pernah ditulis ulang.
     """
 
     produk = models.ForeignKey('master.Produk', on_delete=models.PROTECT,
@@ -267,21 +421,30 @@ class NilaiEkuivalen(TimeStampedModel):
         return f"{self.produk.kode} = {self.nilai_per_satuan}/{self.produk.satuan.kode}"
 
     @classmethod
-    def tarif(cls, produk_id, tanggal):
-        """Tarif yang berlaku pada tanggal tertentu. Raise kalau belum ada."""
+    def tarif(cls, produk_id, tanggal, wajib=True):
+        """
+        Tarif benih pada tanggal tertentu.
+
+        wajib=False mengembalikan 0 kalau belum ditetapkan -- dipakai di
+        jalur yang boleh memasukkan barang tanpa nilai (opname lebih),
+        karena qty bertambah tanpa nilai tetap menjaga invariant (2).
+        """
         row = (cls.objects.filter(produk_id=produk_id, berlaku_sejak__lte=tanggal)
                           .order_by('-berlaku_sejak').first())
-        if not row:
-            raise ValidationError(
-                f'Nilai ekuivalen produk {produk_id} belum ditetapkan '
-                f'untuk tanggal {tanggal}.'
-            )
-        return row.nilai_per_satuan
+        if row:
+            return row.nilai_per_satuan
+        if not wajib:
+            return Decimal('0')
+        raise ValidationError(
+            f'Nilai ekuivalen produk {produk_id} belum ditetapkan '
+            f'untuk tanggal {tanggal}.'
+        )
 
 
 class JenisKlaim(models.TextChoices):
     SETOR   = 'SETOR',   'Setor bahan ke pool'
     AMBIL   = 'AMBIL',   'Klaim barang jadi'
+    RUGI    = 'RUGI',    'Pembebanan kerugian pool'
     KOREKSI = 'KOREKSI', 'Koreksi'
     LUNAS   = 'LUNAS',   'Penyelesaian antar entitas'
 
@@ -290,7 +453,10 @@ class MutasiKlaim(models.Model):
     """
     Buku klaim, append-only.
 
-    SETOR menambah hak entitas atas pool. AMBIL menguranginya.
+    SETOR menambah hak entitas atas pool. AMBIL menguranginya. RUGI
+    membebankan nilai yang musnah di pool, dibagi pro-rata ke pemegang
+    hak positif dalam grup yang sama.
+
     Posisi bersih negatif berarti entitas itu mengambil lebih banyak
     daripada yang disetor -- dia berhutang ke entitas lain dalam grup.
     """
@@ -306,10 +472,13 @@ class MutasiKlaim(models.Model):
                                on_delete=models.PROTECT, related_name='klaim')
     qty = models.DecimalField(max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
                               default=Decimal('0'))
+    # Harga per satuan yang berlaku saat baris ini terbit. Untuk SETOR:
+    # harga rata bahan milik entitas. Untuk AMBIL: harga rata isi tangki
+    # pool pada saat pengambilan.
     tarif = models.DecimalField(max_digits=NILAI_DIGITS, decimal_places=NILAI_PLACES,
                                 default=Decimal('0'))
 
-    # Positif menambah hak, negatif mengurangi. qty x tarif, bertanda.
+    # Positif menambah hak, negatif mengurangi.
     nilai = models.DecimalField(max_digits=NILAI_DIGITS, decimal_places=NILAI_PLACES)
 
     referensi = models.CharField(max_length=64, blank=True)
@@ -356,6 +525,9 @@ class PosisiKlaim(TimeStampedModel):
     total_ambil = models.DecimalField(max_digits=NILAI_DIGITS,
                                       decimal_places=NILAI_PLACES,
                                       default=Decimal('0'), editable=False)
+    total_rugi = models.DecimalField(max_digits=NILAI_DIGITS,
+                                     decimal_places=NILAI_PLACES,
+                                     default=Decimal('0'), editable=False)
     nilai_bersih = models.DecimalField(max_digits=NILAI_DIGITS,
                                        decimal_places=NILAI_PLACES,
                                        default=Decimal('0'), editable=False)

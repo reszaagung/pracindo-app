@@ -14,46 +14,58 @@ services:
       timeout: 5s
       retries: 5
     restart: always
-    ports:
-      - 127.0.0.1:5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+
   backend:
     build:
       context: ./pracindo_backend_v1
     container_name: pracindo_backend
-    environment:
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_HOST: db
-      DB_PORT: 5432
+    env_file:
+      - .env
     restart: always
-    ports:
-      - 8000:8000
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      # Mengarahkan semua request pracindo.cloud/api/... ke container backend
+      - traefik.http.routers.pracindo-api.rule=Host(`pracindo.cloud`) && PathPrefix(`/api/`)
+      - traefik.http.routers.pracindo-api.entrypoints=websecure
+      - traefik.http.routers.pracindo-api.tls.certresolver=letsencrypt
+      - traefik.http.services.pracindo-api.loadbalancer.server.port=8000
+      - traefik.docker.network=pracindo-app_default
+    networks:
+      - default
+
   frontend:
     build:
       context: ./pracindo-frontend
       dockerfile: DOCKERFILE
     container_name: pracindo_frontend
+    env_file:
+      - .env
     labels:
       - traefik.enable=true
-      - traefik.http.routers.pracindo.rule=Host(`pracindo-marshitek.company`)
+      - traefik.http.routers.pracindo.rule=Host(`pracindo.cloud`)
       - traefik.http.routers.pracindo.entrypoints=websecure
       - traefik.http.routers.pracindo.tls.certresolver=letsencrypt
+      # INFO: Pastikan port 80 ini sesuai dengan yang diekspos oleh DOCKERFILE frontend Anda. 
+      # Jika Nuxt/Vue berjalan bawaan tanpa Nginx, biasanya port-nya 3000.
       - traefik.http.services.pracindo.loadbalancer.server.port=80
       - traefik.docker.network=pracindo-app_default
     restart: always
     depends_on:
       - backend
-      - db
     networks:
       - default
+
 networks:
   default:
     name: pracindo-app_default
     external: true
+
 volumes:
   postgres_data:
