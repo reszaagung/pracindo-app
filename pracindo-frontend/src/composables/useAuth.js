@@ -67,7 +67,24 @@ export function useAuth() {
             await api.post('auth/register/', payload)
             return { success: true }
         } catch (err) {
-            const pesan = err.response?.data?.detail || 'Pendaftaran gagal. Username atau email mungkin sudah terdaftar.'
+            console.error("Detail Penolakan Registrasi Django:", err.response?.data)
+            let pesan = 'Pendaftaran gagal.'
+
+            if (err.response?.data) {
+                const resData = err.response.data
+                if (typeof resData === 'object' && !resData.detail && !resData.message) {
+                    const messages = []
+                    for (const key in resData) {
+                        const val = resData[key]
+                        const teks = Array.isArray(val) ? val.join(', ') : val
+                        messages.push(`${key.toUpperCase()}: ${teks}`)
+                    }
+                    pesan = messages.join(' | ')
+                } else {
+                    pesan = resData.detail || resData.message || pesan
+                }
+            }
+
             return { success: false, message: pesan }
         } finally {
             sedangProses.value = false

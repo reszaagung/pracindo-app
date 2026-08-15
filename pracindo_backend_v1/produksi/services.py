@@ -1,795 +1,757 @@
 """
-Logika bisnis produksi — produksi/services.py
+Mesin valuasi produksi — produksi/services.py
 
-DUA HAL YANG TIDAK BOLEH DICAMPUR
+TIGA LAPIS, TERPISAH DENGAN SENGAJA
 
-  KELAYAKAN FISIK    berapa unit yang BISA diproduksi.
-                     min() atas semua bahan dalam resep. Rupiah tidak
-                     berlaku di sini -- klaim senilai Rp50.000 tidak bisa
-                     jadi teh kemasan kalau teh celupnya habis.
+    hitung_valuasi()   fungsi MURNI. Tanpa DB, tanpa Django. Diuji tanpa
+                       migrasi. Ini satu-satunya tempat rumus valuasi
+                       hidup.
+    baca_sumber()      jembatan DB -> dict. Membaca SaldoPool dan
+                       saldo_batch, mengunci barisnya kalau diminta.
+    posting_batch()    orkestrator. Kunci, validasi, valuasi, tulis,
+                       periksa invariant.
 
-  ALIRAN NILAI       berapa rupiah yang menempel di hasil.
-                     Sebanding rendemen. Harga per satuan TETAP; yang
-                     susut kehilangan nilainya, dan kehilangan itu
-                     dibebankan ke pemegang hak.
+    Lapisan tengah adalah yang paling mudah dilupakan dan paling sering
+    hilang. Tanpa dia, hitung_valuasi() benar tapi tidak pernah bisa
+    dipanggil dari HTTP.
 
-    Bahan A  10 kg  Rp10.000
-    Bahan B  20 kg  Rp30.000
-    Bahan C   5 kg  Rp10.000
-    ----------------------------
-    Masuk    35 kg  Rp50.000     Rp1.428,57/kg
-    Hasil    33 kg  Rp47.142,86  Rp1.428,57/kg   <- harga tidak berubah
-    Susut     2 kg  Rp 2.857,14  -> MutasiKlaim RUGI, pro-rata
+URUTAN KUNCI TIDAK BOLEH DIUBAH
 
-  KENAPA BUKAN ABSORPSI
-    Kalau nilai penuh dipaksa menempel di 33 kg, harganya jadi
-    Rp1.515,15/kg. Siapa pun yang kebetulan mengklaim dari batch
-    bersusut tinggi jadi membayar lebih mahal, padahal susut itu milik
-    bersama. Dengan pengakuan kerugian, harga konsisten antar batch dan
-    susutnya dibagi rata sesuai besar hak.
+    1. seluruh Batch (tujuan + sumber) dalam satu query, ORDER BY id
+    2. seluruh SaldoPool, ORDER BY raw_id
 
-  DASAR RENDEMEN
-    Rasio nilai dihitung dari HASIL versus HASIL YANG SEHARUSNYA, bukan
-    dari qty hasil versus qty bahan. Versi lama membagi unit produk jadi
-    dengan kilogram bahan -- hanya kebetulan benar saat 1 unit = 1 kg,
-    dan skenario 35 kg -> 35 unit menyembunyikannya sempurna. Lihat
-    selesaikan_sesi().
-
-Semua operasi bekerja di lapis POOL. Entitas tidak pernah muncul di sini,
-kecuali saat kerugian harus dibebankan -- dan itu didelegasikan ke
-inventory.bebankan_rugi().
+    Dua transaksi yang mengunci benda sama dengan urutan berbeda akan
+    saling menunggu selamanya. Mengunci batch tujuan lebih dulu -- di
+    luar query terurut -- sudah cukup untuk menciptakan deadlock itu.
 """
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 
-from django.core.exceptions import ValidationError
-from django.db import transaction
-from django.db.models import Sum
+from django.apps import apps
+from django.conf import settings
+from django.db import models, transaction
+from django.db.models import DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 
-from inventory.models import Lapis, Stok
-from inventory.services import (
-    alokasi_prorata, bebankan_rugi, hasil_ke_pool, pakai_dari_pool,
-)
+from .models import Batch, BatchInputRaw, StatusBatch, TransferWip
 
-from .models import (
-    HasilKomponen, JenisSesi, Resep, SesiInput, SesiProduksi, StatusSesi,
-)
+D0 = Decimal("0.000")
+D0_RP = Decimal("0.00")
+TOL_QTY = Decimal("0.001")
+TOL_RP = Decimal("0.01")
 
-Q3 = Decimal('0.001')
-Q2 = Decimal('0.01')
-NOL = Decimal('0')
+Q_QTY = Decimal("0.001")
+Q_RP = Decimal("0.01")
+Q_HARGA = Decimal("0.000001")
+
+F_QTY = DecimalField(max_digits=18, decimal_places=3)
+F_RP = DecimalField(max_digits=20, decimal_places=2)
 
 
-# =========================================================
-# KAPASITAS
-# =========================================================
+def qty(v):
+    return Decimal(v).quantize(Q_QTY, rounding=ROUND_HALF_UP)
 
-def _tersedia_per_bahan(grup_bahan_id, bahan_ids):
+
+def rp(v):
+    return Decimal(v).quantize(Q_RP, rounding=ROUND_HALF_UP)
+
+
+def harga(v):
+    return Decimal(v).quantize(Q_HARGA, rounding=ROUND_HALF_UP)
+
+
+def model_susut_aktif():
+    return getattr(settings, "HPP_MODEL_SUSUT", "ABSORPSI")
+
+
+# ==========================================================
+# GALAT — dipetakan ke HTTP oleh views
+# ==========================================================
+
+class GalatProduksi(Exception):
+    """Induk. `kode` dipakai frontend, `pesan` dipakai manusia."""
+    http = 422
+
+    def __init__(self, kode, pesan, field=None):
+        self.kode, self.pesan, self.field = kode, pesan, field
+        super().__init__(pesan)
+
+    def as_dict(self):
+        d = {"kode": self.kode, "pesan": self.pesan}
+        if self.field:
+            d["field"] = self.field
+        return d
+
+
+class GalatValidasi(GalatProduksi):
+    """Payload tidak masuk akal. 422."""
+    http = 422
+
+
+class KonflikSaldo(GalatProduksi):
+    """Payload masuk akal, tapi kenyataannya tidak mengizinkan. 409."""
+    http = 409
+
+
+class InvariantMelenceng(GalatProduksi):
+    """Rupiah tercipta atau menguap. 500 + rollback."""
+    http = 500
+
+
+# ==========================================================
+# KONTRAK KE APP INVENTORY
+# ==========================================================
+# Dibaca lewat apps.get_model, bukan impor langsung, supaya tidak ada
+# lingkaran impor antara produksi dan inventory.
+
+def _SaldoPool():
+    return apps.get_model("inventory", "SaldoPool")
+
+
+def _RawMaterial():
+    return apps.get_model("inventory", "RawMaterial")
+
+
+def _assert_invarian():
     """
-    Total qty per bahan di POOL, DIJUMLAHKAN lintas tangki.
+    Panggil pemeriksa invariant milik inventory kalau ada.
 
-    Dulu ini dict comprehension atas baris Stok, sehingga bahan yang
-    tersimpan di dua tangki hanya terhitung satu tangki -- yang terakhir
-    menimpa yang sebelumnya. Kapasitas jadi lebih kecil dari kenyataan.
+    Kalau belum ditulis, JANGAN diam-diam melewatinya tanpa jejak --
+    tulis peringatan. Invariant yang dilewati tanpa suara adalah cara
+    paling rapi untuk kehilangan uang selama berbulan-bulan.
     """
-    baris = (Stok.objects
-             .filter(grup_bahan_id=grup_bahan_id, lapis=Lapis.POOL,
-                     produk_id__in=bahan_ids)
-             .values('produk_id')
-             .annotate(total=Sum('qty'), nilai=Sum('nilai')))
-    return {b['produk_id']: (b['total'], b['nilai']) for b in baris}
-
-
-def hitung_kapasitas(grup_bahan_id, produk_jadi_id, tanggal=None):
-    """Berapa unit yang bisa diproduksi dari isi pool saat ini."""
-    resep = Resep.berlaku(produk_jadi_id, tanggal)
-    item = list(resep.item.select_related('bahan'))
-    if not item:
-        raise ValidationError(f'Resep {resep} belum punya bahan.')
-
-    tersedia = _tersedia_per_bahan(grup_bahan_id, [i.bahan_id for i in item])
-
-    rincian, kapasitas = [], []
-    for i in item:
-        ada, nilai = tersedia.get(i.bahan_id, (NOL, NOL))
-        per_unit = i.qty / resep.hasil_per_batch
-        cukup = ((ada / per_unit).quantize(Q3, rounding=ROUND_DOWN)
-                 if per_unit else NOL)
-        kapasitas.append(cukup)
-        rincian.append({
-            'bahan': i.bahan.kode, 'bahan_id': i.bahan_id,
-            'tersedia': ada, 'nilai_tersedia': nilai,
-            'harga_rata': (nilai / ada).quantize(Decimal('0.0001')) if ada else NOL,
-            'per_unit': per_unit, 'cukup_untuk': cukup,
-        })
-
-    maksimum = min(kapasitas) if kapasitas else NOL
-    pembatas = [r['bahan'] for r in rincian if r['cukup_untuk'] == maksimum]
-
-    sisa = {
-        r['bahan']: (r['tersedia'] - (maksimum * r['per_unit'])).quantize(Q3)
-        for r in rincian
-    }
-    return {
-        'resep': str(resep),
-        'resep_id': resep.id,
-        'maksimum': maksimum,
-        'pembatas': pembatas,
-        'rincian': rincian,
-        'sisa_bila_maksimum': sisa,
-    }
-
-
-# =========================================================
-# ALOKASI TANGKI
-# =========================================================
-
-def alokasi_tangki(grup_bahan_id, bahan_id, qty):
-    """
-    Memecah kebutuhan satu bahan ke beberapa tangki asal.
-
-    Ditarik dari tangki dengan isi terbanyak dulu supaya jumlah tangki
-    yang tersentuh sesedikit mungkin -- tiap tangki yang dibuka adalah
-    satu kesempatan salah tuang.
-
-    Return: [(tangki_id, qty), ...]. tangki_id None = stok rak.
-    """
-    qty = Decimal(qty).quantize(Q3)
-    baris = list(Stok.objects
-                 .filter(grup_bahan_id=grup_bahan_id, lapis=Lapis.POOL,
-                         produk_id=bahan_id, qty__gt=0)
-                 .select_related('produk', 'tangki')
-                 .order_by('-qty'))
-
-    total = sum(b.qty for b in baris)
-    if total < qty:
-        nama = baris[0].produk.kode if baris else bahan_id
-        raise ValidationError(
-            f'Pool hanya berisi {total} {nama}, dibutuhkan {qty}.'
-        )
-
-    hasil, sisa = [], qty
-    for b in baris:
-        if sisa <= 0:
-            break
-        ambil = min(b.qty, sisa)
-        hasil.append((b.tangki_id, ambil))
-        sisa -= ambil
-    return hasil
-
-
-# =========================================================
-# PEMBUATAN SESI
-# =========================================================
-
-@transaction.atomic
-def buat_sesi_produksi(*, grup_bahan_id, resep_id, qty_target, tanggal,
-                       user, tangki_hasil_id=None, catatan='', idem_key=''):
-    """
-    Membuat sesi DRAFT Produksi Rutin beserta rencana per tangki.
-
-    `idem_key` mencegah klik ganda melahirkan dua sesi. DRAFT memang belum
-    menarik bahan dari pool, jadi tidak berbahaya -- tapi mengotori daftar
-    dan membuat operator ragu sesi mana yang harus dimulai. PRD-v2 §31:
-    semua mutasi wajib punya kunci idempotensi.
-    """
-    if idem_key:
-        ada = SesiProduksi.objects.filter(idem_key=idem_key).first()
-        if ada:
-            return ada
-
-    resep = Resep.objects.select_related('produk_jadi').get(pk=resep_id)
-    qty_target = Decimal(qty_target).quantize(Q3)
-
-    kap = hitung_kapasitas(grup_bahan_id, resep.produk_jadi_id, tanggal)
-    if qty_target > kap['maksimum']:
-        raise ValidationError(
-            f"Bahan hanya cukup untuk {kap['maksimum']} unit "
-            f"(dibatasi {', '.join(kap['pembatas'])}), diminta {qty_target}."
-        )
-
-    sesi = SesiProduksi(
-        grup_bahan_id=grup_bahan_id, tanggal=tanggal, resep=resep,
-        produk_jadi_id=resep.produk_jadi_id, qty_target=qty_target,
-        tangki_hasil_id=tangki_hasil_id, jenis_sesi=JenisSesi.PRODUKSI,
-        catatan=catatan, dibuat_oleh=user,
-        # None, bukan '': kolomnya unique, dan string kosong berkali-kali
-        # akan bentrok. NULL boleh berulang di semua basis data yang dipakai.
-        idem_key=idem_key or None,
-    )
-    sesi.save()
-
-    for bahan_id, qty in resep.kebutuhan(qty_target).items():
-        for tangki_id, bagian in alokasi_tangki(grup_bahan_id, bahan_id, qty):
-            SesiInput.objects.create(
-                sesi=sesi, bahan_id=bahan_id, tangki_id=tangki_id,
-                qty_rencana=bagian, qty_aktual=bagian,
-            )
-    return sesi
-
-
-@transaction.atomic
-def buat_sesi_rnd(*, grup_bahan_id, produk_jadi_id, qty_target, tanggal,
-                  user, baris, hasil_masuk_pool=True, tangki_hasil_id=None,
-                  catatan='', idem_key=''):
-    """
-    Sesi DRAFT eksperimen, tanpa resep dan tanpa batas kapasitas.
-
-    hasil_masuk_pool=False berarti hasilnya dibuang atau disimpan di luar
-    sistem. Nilai bahannya tetap musnah dari pool, jadi selesaikan_sesi()
-    akan membebankannya sebagai kerugian -- persis seperti sesi gagal.
-    """
-    if idem_key:
-        ada = SesiProduksi.objects.filter(idem_key=idem_key).first()
-        if ada:
-            return ada
-
-    qty_target = Decimal(qty_target).quantize(Q3)
-    if not baris:
-        raise ValidationError('Sesi R&D butuh minimal satu bahan.')
-
-    sesi = SesiProduksi(
-        grup_bahan_id=grup_bahan_id, tanggal=tanggal,
-        produk_jadi_id=produk_jadi_id, qty_target=qty_target,
-        jenis_sesi=JenisSesi.RND, hasil_masuk_pool=hasil_masuk_pool,
-        tangki_hasil_id=tangki_hasil_id, catatan=catatan, dibuat_oleh=user,
-        idem_key=idem_key or None,
-    )
-    sesi.save()
-
-    for b in baris:
-        qty = Decimal(b['qty_rencana']).quantize(Q3)
-        if qty <= 0:
-            continue
-        tangki_id = b.get('tangki_id')
-        potongan = ([(tangki_id, qty)] if tangki_id
-                    else alokasi_tangki(grup_bahan_id, b['bahan_id'], qty))
-        for tid, bagian in potongan:
-            SesiInput.objects.create(
-                sesi=sesi, bahan_id=b['bahan_id'], tangki_id=tid,
-                qty_rencana=bagian, qty_aktual=bagian,
-            )
-    return sesi
-
-
-# =========================================================
-# MULAI — bahan keluar dari pool
-# =========================================================
-
-@transaction.atomic
-def mulai_sesi(*, sesi_id, qty_aktual=None):
-    """
-    Menarik bahan dari pool dan mencatat rupiah yang ikut keluar.
-
-    `qty_aktual` boleh berisi nol untuk membatalkan satu bahan. Dulu nol
-    membuat pakai_dari_pool() menolak dan seluruh sesi ikut rollback --
-    operator tidak punya cara bilang "bahan C tidak jadi dipakai".
-    Sekarang baris nol dilewati dan qty_rencana-nya tetap tercatat.
-
-    Kunci: {(bahan_id, tangki_id): qty} atau {bahan_id: qty} untuk
-    membagi rata ke seluruh tangki bahan itu secara proporsional.
-    """
-    sesi = SesiProduksi.objects.select_for_update().get(pk=sesi_id)
-    if sesi.status != StatusSesi.DRAFT:
-        raise ValidationError(f'Sesi sudah {sesi.get_status_display()}.')
-
-    override = _normalkan_override(sesi, qty_aktual or {})
-    nilai_total = NOL
-    ada_yang_dipakai = False
-
-    for inp in (sesi.input.select_for_update()
-                .select_related('bahan', 'tangki').order_by('id')):
-        kunci = (inp.bahan_id, inp.tangki_id)
-        if kunci in override:
-            inp.qty_aktual = override[kunci]
-
-        if inp.qty_aktual <= 0:
-            inp.qty_aktual = NOL
-            inp.nilai_aktual = NOL
-            inp.save(update_fields=['qty_aktual', 'nilai_aktual'])
-            continue
-
-        _, nilai = pakai_dari_pool(
-            produk_id=inp.bahan_id,
-            grup_bahan_id=sesi.grup_bahan_id,
-            qty=inp.qty_aktual,
-            tanggal=sesi.tanggal,
-            referensi=sesi.nomor,
-            idem_key=f'sesi:{sesi.id}:pakai:{inp.bahan_id}:{inp.tangki_id or 0}',
-            tangki_id=inp.tangki_id,
-        )
-        inp.nilai_aktual = nilai
-        inp.save(update_fields=['qty_aktual', 'nilai_aktual'])
-        nilai_total += nilai
-        ada_yang_dipakai = True
-
-    if not ada_yang_dipakai:
-        raise ValidationError(
-            'Semua bahan berkuantitas nol. Batalkan sesi kalau memang '
-            'tidak jadi berjalan.'
-        )
-
-    sesi.nilai_input = nilai_total
-    sesi.status = StatusSesi.BERJALAN
-    sesi.save(update_fields=['nilai_input', 'status'])
-    return sesi
-
-
-def _normalkan_override(sesi, qty_aktual):
-    """
-    Menerima {bahan_id: qty} maupun {(bahan_id, tangki_id): qty}.
-
-    Bentuk pertama dibagi proporsional ke tangki-tangki bahan itu,
-    dengan sisa pembulatan ke bagian terbesar supaya totalnya persis.
-    """
-    hasil, per_bahan = {}, {}
-    for k, v in qty_aktual.items():
-        if isinstance(k, tuple):
-            hasil[(k[0], k[1])] = Decimal(v).quantize(Q3)
-        else:
-            per_bahan[int(k)] = Decimal(v).quantize(Q3)
-
-    if not per_bahan:
-        return hasil
-
-    baris = list(sesi.input.filter(bahan_id__in=per_bahan.keys()))
-    for bahan_id, total in per_bahan.items():
-        milik = [b for b in baris if b.bahan_id == bahan_id]
-        if not milik:
-            raise ValidationError(f'Bahan {bahan_id} bukan bagian sesi ini.')
-        if len(milik) == 1:
-            hasil[(bahan_id, milik[0].tangki_id)] = total
-            continue
-        dasar = sum(b.qty_rencana for b in milik) or Decimal('1')
-        milik.sort(key=lambda b: b.qty_rencana, reverse=True)
-        terpakai = NOL
-        for b in milik[1:]:
-            bagian = (total * b.qty_rencana / dasar).quantize(
-                Q3, rounding=ROUND_HALF_UP)
-            hasil[(bahan_id, b.tangki_id)] = bagian
-            terpakai += bagian
-        hasil[(bahan_id, milik[0].tangki_id)] = total - terpakai
-    return hasil
-
-
-def _simpan_komposisi_hasil(sesi, qty_hasil, nilai_hasil):
-    """Persistenkan lineage X -> bahan input dengan pembulatan deterministik."""
-    inputs = [i for i in sesi.input.all() if i.qty_aktual > 0]
-    if not inputs:
-        raise ValidationError('Hasil tidak memiliki komponen bahan aktual.')
-
-    total_qty = sum((i.qty_aktual for i in inputs), NOL)
-    total_nilai = sum((i.nilai_aktual for i in inputs), NOL)
-    if total_qty <= 0:
-        raise ValidationError('Total bahan aktual harus lebih dari nol.')
-    if total_nilai != sesi.nilai_input:
-        raise ValidationError(
-            'Nilai komponen input tidak sama dengan nilai_input sesi.'
-        )
-
-    HasilKomponen.objects.filter(sesi=sesi).delete()
-
-    # Bagian terbesar menerima residual pembulatan terakhir agar total qty
-    # dan nilai tepat sama dengan output sesi.
-    inputs.sort(key=lambda i: (i.qty_aktual, i.id), reverse=True)
-    rows = []
-    qty_terpakai = NOL
-    nilai_terpakai = NOL
-    for i in inputs[1:]:
-        q = (qty_hasil * i.qty_aktual / total_qty).quantize(
-            Q3, rounding=ROUND_HALF_UP)
-        v = (nilai_hasil * i.nilai_aktual / total_nilai).quantize(
-            Q2, rounding=ROUND_HALF_UP) if total_nilai else NOL
-        rows.append((i, q, v))
-        qty_terpakai += q
-        nilai_terpakai += v
-
-    utama = inputs[0]
-    rows.append((
-        utama, qty_hasil - qty_terpakai, nilai_hasil - nilai_terpakai
-    ))
-
-    for i, q, v in rows:
-        if q < 0 or v < 0:
-            raise ValidationError('Pembulatan komponen menghasilkan nilai negatif.')
-        HasilKomponen.objects.create(
-            sesi=sesi, sesi_input=i, bahan_id=i.bahan_id, qty=q, nilai=v,
-        )
-
-    cek = HasilKomponen.objects.filter(sesi=sesi).aggregate(
-        qty=Sum('qty'), nilai=Sum('nilai')
-    )
-    if cek['qty'] != qty_hasil or cek['nilai'] != nilai_hasil:
-        raise ValidationError(
-            'Komposisi hasil tidak seimbang dengan qty/nilai hasil.'
-        )
-
-
-# =========================================================
-# SELESAI — nilai kembali ke pool
-# =========================================================
-
-@transaction.atomic
-def selesaikan_sesi(*, sesi_id, qty_hasil, abaikan_susut=False):
-    """
-    Hasil masuk pool membawa nilai SEBANDING RENDEMEN. Selisihnya --
-    nilai yang melekat pada bagian yang susut -- dibebankan ke pemegang
-    hak lewat MutasiKlaim RUGI.
-
-    Batas yang berarti adalah batas BAWAH: hasil di bawah
-    target x (1 - susut_wajar) berarti ada yang tidak beres. Batas atas
-    juga dijaga karena hasil melebihi target biasanya salah timbang.
-
-    `abaikan_susut=True` menembus batas bawah dengan sengaja -- dipakai
-    kalau supervisor sudah memeriksa dan memang segitu hasilnya.
-    """
-    sesi = SesiProduksi.objects.select_for_update().select_related(
-        'resep', 'grup_bahan').get(pk=sesi_id)
-    if sesi.status != StatusSesi.BERJALAN:
-        raise ValidationError(
-            f'Sesi harus berstatus Berjalan, sekarang '
-            f'{sesi.get_status_display()}.'
-        )
-
-    qty_hasil = Decimal(qty_hasil).quantize(Q3)
-    if qty_hasil <= 0:
-        raise ValidationError(
-            'Qty hasil harus lebih dari nol. Kalau tidak ada hasil sama '
-            'sekali, gagalkan sesinya.'
-        )
-
-    if sesi.jenis_sesi == JenisSesi.PRODUKSI:
-        if qty_hasil > sesi.qty_target:
-            raise ValidationError(
-                f'Hasil {qty_hasil} melebihi target {sesi.qty_target}. '
-                f'Periksa timbangan atau resepnya.'
-            )
-        if sesi.resep and not abaikan_susut:
-            batas = (sesi.qty_target * sesi.resep.hasil_minimum_wajar
-                     ).quantize(Q3)
-            if qty_hasil < batas:
-                hilang = (100 * (1 - qty_hasil / sesi.qty_target)).quantize(Q2)
-                raise ValidationError(
-                    f'Susut {hilang}% melampaui batas wajar resep '
-                    f'({sesi.resep.susut_wajar * 100}%). Hasil minimum '
-                    f'{batas}. Minta supervisor menyetujui lewat '
-                    f'abaikan_susut kalau angkanya memang benar.'
-                )
-
-    # =====================================================
-    # PEMBAGIAN NILAI: yang selamat vs yang susut
-    # =====================================================
-    # DASAR RENDEMEN, BUKAN QTY BAHAN.
-    #
-    # Yang dibandingkan harus dua besaran bersatuan sama: hasil yang
-    # KELUAR versus hasil yang SEHARUSNYA keluar dari bahan yang
-    # benar-benar ditarik. Versi lama membagi qty_hasil (unit produk
-    # jadi) dengan qty bahan (kg) -- hanya kebetulan benar saat 1 unit
-    # = 1 kg, dan skenario uji 35 kg -> 35 unit menyembunyikannya
-    # sempurna.
-    #
-    #   target 30 unit, rencana bahan 35 kg, aktual 35 kg, hasil 29 unit
-    #     benar : 29/30 -> susut  3,3%
-    #     lama  : 29/35 -> susut 17,1%   <- selisihnya dibebankan sebagai
-    #                                       RUGI ke orang yang tidak
-    #                                       melakukan kesalahan apa pun
-    #
-    # Nilai susut selalu merupakan SELISIH, bukan angka yang dibulatkan
-    # sendiri, supaya hasil + susut == nilai_input persis.
-    baris_input = list(sesi.input.all())
-    qty_input_aktual = sum((i.qty_aktual for i in baris_input), NOL)
-    qty_rencana_total = sum((i.qty_rencana for i in baris_input), NOL)
-
-    if qty_input_aktual <= 0:
-        raise ValidationError(
-            'Sesi tidak memiliki bahan aktual. Selesaikan tidak dapat '
-            'menciptakan nilai tanpa input nyata.'
-        )
-
-    if sesi.jenis_sesi == JenisSesi.PRODUKSI and qty_rencana_total > 0:
-        # Diskalakan kalau bahan aktual meleset dari rencana: menarik
-        # separuh bahan wajar menghasilkan separuh target.
-        hasil_seharusnya = (sesi.qty_target * qty_input_aktual
-                            / qty_rencana_total).quantize(Q3)
-    else:
-        # R&D tanpa resep tidak punya ekspektasi rendemen. Satu-satunya
-        # dasar yang tersedia adalah qty bahan -- sah HANYA kalau satuan
-        # hasil sama dengan satuan bahan.
-        hasil_seharusnya = qty_input_aktual
-
-    if hasil_seharusnya <= 0:
-        raise ValidationError(
-            'Dasar rendemen tidak bisa dihitung: rencana bahan nol.'
-        )
-
-    # min(...,1) mencegah hasil di atas ekspektasi MENCIPTAKAN nilai.
-    # Kelebihan hasil bukan tambahan rupiah, hanya tambahan qty.
-    rasio = min(qty_hasil / hasil_seharusnya, Decimal('1'))
-    nilai_terbawa = (sesi.nilai_input * rasio).quantize(
-        Q2, rounding=ROUND_HALF_UP)
-    nilai_susut = sesi.nilai_input - nilai_terbawa
-
-    if sesi.hasil_masuk_pool:
-        hasil_ke_pool(
-            produk_id=sesi.produk_jadi_id,
-            grup_bahan_id=sesi.grup_bahan_id,
-            qty=qty_hasil,
-            nilai_masuk=nilai_terbawa,
-            tanggal=sesi.tanggal,
-            referensi=sesi.nomor,
-            idem_key=f'sesi:{sesi.id}:hasil',
-            tangki_id=sesi.tangki_hasil_id,
-        )
-        _simpan_komposisi_hasil(sesi, qty_hasil, nilai_terbawa)
-        sesi.nilai_hasil = nilai_terbawa
-    else:
-        # Hasil tidak masuk pool: seluruh nilai input hilang dari pool.
-        nilai_susut = sesi.nilai_input
-        sesi.nilai_hasil = NOL
-
-    # Nilai yang hilang WAJIB punya penanggung. Tanpa baris ini, pool
-    # berkurang sementara total klaim tetap, dan setiap orang mengira
-    # haknya masih utuh.
-    if nilai_susut > 0:
-        bebankan_rugi(
-            grup_bahan_id=sesi.grup_bahan_id,
-            nilai=nilai_susut,
-            tanggal=sesi.tanggal,
-            referensi=f'{sesi.nomor} susut',
-            idem_key=f'sesi:{sesi.id}:rugi-susut',
-        )
-
-    # NOL, bukan None. Sesi selesai tanpa susut berarti kerugiannya nol
-    # dan itu fakta; None berarti "belum diketahui" dan membuat
-    # nilai_hasil + nilai_kerugian meledak jadi TypeError.
-    sesi.nilai_kerugian = nilai_susut
-
-    sesi.qty_hasil = qty_hasil
-    sesi.status = StatusSesi.SELESAI
-    sesi.save(update_fields=['qty_hasil', 'nilai_hasil', 'nilai_kerugian',
-                             'status'])
-    return sesi
-
-
-# =========================================================
-# GAGAL — nilai musnah, ada yang menanggung
-# =========================================================
-
-@transaction.atomic
-def gagalkan_sesi(*, sesi_id, alasan, kategori):
-    """
-    Bahan sudah telanjur hangus dan tidak ada barang jadi.
-
-    Nilai yang keluar saat mulai_sesi() dibebankan pro-rata ke pemegang
-    klaim positif dalam grup. Ini bukan formalitas: tanpa baris RUGI,
-    pool berkurang sementara total klaim tetap, dan setiap orang mengira
-    haknya masih utuh.
-    """
-    sesi = SesiProduksi.objects.select_for_update().get(pk=sesi_id)
-    if sesi.status != StatusSesi.BERJALAN:
-        raise ValidationError(
-            f'Hanya sesi Berjalan yang bisa digagalkan, sekarang '
-            f'{sesi.get_status_display()}.'
-        )
-    if not alasan.strip():
-        raise ValidationError('Alasan kegagalan wajib diisi.')
-
-    if sesi.nilai_input > 0:
-        bebankan_rugi(
-            grup_bahan_id=sesi.grup_bahan_id,
-            nilai=sesi.nilai_input,
-            tanggal=sesi.tanggal,
-            referensi=f'{sesi.nomor} GAGAL',
-            idem_key=f'sesi:{sesi.id}:rugi',
-        )
-
-    sesi.status = StatusSesi.GAGAL
-    sesi.kategori_kegagalan = kategori
-    sesi.nilai_kerugian = sesi.nilai_input
-    sesi.catatan = f'{sesi.catatan}\n[GAGAL] {alasan}'.strip()
-    sesi.save(update_fields=['status', 'kategori_kegagalan',
-                             'nilai_kerugian', 'catatan'])
-    return sesi
-
-
-@transaction.atomic
-def batalkan_sesi(*, sesi_id, alasan=''):
-    """Membatalkan sesi DRAFT sebelum bahan keluar."""
-    sesi = SesiProduksi.objects.select_for_update().get(pk=sesi_id)
-    if sesi.status != StatusSesi.DRAFT:
-        raise ValidationError(
-            'Bahan sudah keluar dari pool. Selesaikan atau gagalkan sesi, '
-            'lalu koreksi lewat penyesuaian opname.'
-        )
-    sesi.status = StatusSesi.BATAL
-    sesi.catatan = f'{sesi.catatan}\n[BATAL] {alasan}'.strip()
-    sesi.save(update_fields=['status', 'catatan'])
-    return sesi
-
-
-# =========================================================
-# PEMBACAAN
-# =========================================================
-
-def ringkasan_sesi(sesi_id):
-    """Rincian input, output, nilai, dan susut untuk satu sesi."""
-    sesi = (SesiProduksi.objects
-            .select_related('produk_jadi', 'grup_bahan', 'resep',
-                            'tangki_hasil')
-            .prefetch_related('input__bahan', 'input__tangki')
-            .get(pk=sesi_id))
-
-    return {
-        'id': sesi.id,
-        'nomor': sesi.nomor,
-        'tanggal': sesi.tanggal,
-        'grup': sesi.grup_bahan.kode,
-        'jenis_sesi': sesi.jenis_sesi,
-        'produk': sesi.produk_jadi.kode,
-        'target': sesi.qty_target,
-        'hasil': sesi.qty_hasil,
-        'susut': sesi.susut,
-        'rendemen': sesi.rendemen,
-        'status': sesi.get_status_display(),
-        'tangki_hasil': sesi.tangki_hasil.kode if sesi.tangki_hasil_id else None,
-        'nilai_input': sesi.nilai_input,
-        'nilai_hasil': sesi.nilai_hasil,
-        'nilai_kerugian': sesi.nilai_kerugian,
-        'harga_hasil_per_satuan': sesi.harga_hasil_per_satuan,
-        'input': [
-            {
-                'bahan': i.bahan.kode,
-                'bahan_nama': i.bahan.nama,
-                'tangki': i.tangki.kode if i.tangki_id else None,
-                'rencana': i.qty_rencana,
-                'aktual': i.qty_aktual,
-                'selisih': i.selisih,
-                'nilai': i.nilai_aktual,
-                'harga_per_satuan': i.harga_per_satuan,
-            }
-            for i in sesi.input.all()
-        ],
-    }
-
-
-def pratinjau_kerugian(sesi_id):
-    """
-    Rupiah yang hangus kalau sesi ini digagalkan, beserta beban per
-    entitas.
-
-    Angka di sini WAJIB identik dengan yang nanti benar-benar terbit.
-    Versi lama membulatkan tiap beban sendiri-sendiri, sehingga jumlah
-    kolom `menanggung` bisa meleset satu-dua sen dari `nilai_kerugian`
-    di baris atasnya -- dan operator kehilangan kepercayaan pada
-    layarnya sendiri. Sekarang memakai alokasi_prorata() yang sama
-    persis dengan bebankan_rugi(), termasuk cara residual dialokasikan.
-
-    Untuk sesi BERJALAN dipakai nilai yang benar-benar sudah keluar;
-    untuk DRAFT diperkirakan dari harga rata tangki asal.
-    """
-    from inventory.models import PosisiKlaim
-
-    sesi = (SesiProduksi.objects.select_related('grup_bahan')
-            .prefetch_related('input__bahan', 'input__tangki').get(pk=sesi_id))
-
-    rincian, total = [], NOL
-    for i in sesi.input.all():
-        if sesi.status == StatusSesi.BERJALAN:
-            nilai = i.nilai_aktual
-        else:
-            stok = Stok.objects.filter(
-                grup_bahan_id=sesi.grup_bahan_id, lapis=Lapis.POOL,
-                produk_id=i.bahan_id, tangki_id=i.tangki_id,
-            ).first()
-            harga = stok.harga_rata if stok else NOL
-            nilai = (i.qty_aktual * harga).quantize(Q2, rounding=ROUND_HALF_UP)
-        total += nilai
-        rincian.append({
-            'bahan_kode': i.bahan.kode,
-            'bahan_nama': i.bahan.nama,
-            'tangki': i.tangki.kode if i.tangki_id else None,
-            'qty': i.qty_aktual,
-            'harga_per_satuan': i.harga_per_satuan if i.nilai_aktual else NOL,
-            'nilai': nilai,
-        })
-
-    # Siapa menanggung berapa, memakai aturan pembagian yang sama persis.
-    posisi = list(PosisiKlaim.objects
-                  .filter(grup_bahan_id=sesi.grup_bahan_id, nilai_bersih__gt=0)
-                  .select_related('entitas'))
-    bagian = (alokasi_prorata({p.entitas_id: p.nilai_bersih for p in posisi},
-                              total)
-              if posisi else {})
-    beban = [
-        {
-            'entitas': p.entitas.kode,
-            'posisi_sekarang': p.nilai_bersih,
-            'menanggung': bagian.get(p.entitas_id, NOL),
-        }
-        for p in posisi
-    ]
-
-    return {
-        'nilai_kerugian': total,
-        'rincian': rincian,
-        'beban_entitas': beban,
-        'peringatan': ('Tidak ada pemegang hak positif — kerugian tidak '
-                       'bisa dibebankan.') if not posisi and total else None,
-    }
-
-
-def banding_batch(ids):
-    """
-    Matriks perbandingan beberapa sesi.
-
-    Pengukuran berkode sama yang tercatat berkali-kali (mis. suhu tiap
-    15 menit) sekarang diringkas jadi awal/akhir/min/maks/rata, bukan
-    hanya yang terakhir seperti sebelumnya.
-
-    CATATAN: keluaran fungsi ini mengandung rupiah. Penyaringan untuk
-    yang tidak punya akses akunting dilakukan di view, bukan di sini.
-    """
-    sesi_qs = (SesiProduksi.objects.filter(id__in=ids)
-               .select_related('produk_jadi')
-               .prefetch_related('input__bahan', 'pengukuran__nama'))
-
-    sesi_data, bahan_terpakai, ukur_terpakai = [], {}, {}
-
-    for s in sesi_qs:
-        dasar = s.qty_hasil if s.qty_hasil > 0 else s.qty_target
-        sesi_data.append({
-            'id': s.id, 'nomor': s.nomor, 'tanggal': s.tanggal,
-            'jenis_sesi': s.jenis_sesi, 'status': s.status,
-            'produk_jadi_kode': s.produk_jadi.kode,
-            'qty_target': s.qty_target, 'qty_hasil': s.qty_hasil,
-            'rendemen': s.rendemen,
-            'nilai_input': s.nilai_input, 'nilai_hasil': s.nilai_hasil,
-            'harga_per_satuan': s.harga_hasil_per_satuan,
-            'satuan_kode': getattr(s.produk_jadi, 'satuan_kode', 'unit'),
-        })
-
-        for i in s.input.all():
-            k = i.bahan.kode
-            slot = bahan_terpakai.setdefault(k, {
-                'kode': k, 'label': i.bahan.nama,
-                'satuan': getattr(i.bahan, 'satuan_kode', 'unit'), 'nilai': {},
-            })
-            # Satu bahan bisa berasal dari beberapa tangki: dijumlahkan.
-            sebelum = slot['nilai'].get(s.id, NOL)
-            slot['nilai'][s.id] = sebelum + (
-                (i.qty_aktual / dasar).quantize(Decimal('0.0001'))
-                if dasar else NOL
-            )
-
-        for p in s.pengukuran.all():
-            k = p.nama.kode
-            slot = ukur_terpakai.setdefault(k, {
-                'kode': k, 'label': p.nama.nama, 'satuan': p.nama.satuan,
-                'tahap': p.tahap, 'nilai': {},
-            })
-            slot['nilai'].setdefault(s.id, []).append(
-                p.nilai if p.nilai is not None else p.nilai_teks)
-
-    def _ringkas(nilai_list):
-        angka = [v for v in nilai_list if isinstance(v, Decimal)]
-        if not angka:
-            return {'terakhir': nilai_list[-1], 'jumlah_catatan': len(nilai_list)}
+    try:
+        from inventory.services import assert_invarian
+    except ImportError:
+        import warnings
+        warnings.warn(
+            "inventory.services.assert_invarian() belum ada. Posting batch "
+            "berjalan TANPA pemeriksaan konservasi rupiah.",
+            RuntimeWarning, stacklevel=2)
+        return
+    assert_invarian()
+
+
+# ==========================================================
+# SALDO
+# ==========================================================
+
+@dataclass(frozen=True)
+class SaldoBatch:
+    sisa_qty: Decimal
+    sisa_nilai: Decimal
+    harga_per_kg: Decimal
+    kelebihan: bool
+
+    def as_dict(self):
         return {
-            'awal': angka[0], 'akhir': angka[-1],
-            'min': min(angka), 'maks': max(angka),
-            'rata': (sum(angka) / len(angka)).quantize(Decimal('0.0001')),
-            'jumlah_catatan': len(angka),
+            "sisa_qty": str(self.sisa_qty),
+            "sisa_nilai": str(self.sisa_nilai),
+            "harga_per_kg": str(self.harga_per_kg),
+            "kelebihan": self.kelebihan,
         }
 
-    urutan = [s['id'] for s in sesi_data]
-    bahan_list = [
-        {**v, 'nilai': [v['nilai'].get(i) for i in urutan]}
-        for v in bahan_terpakai.values()
-    ]
-    ukur_list = [
-        {**v, 'nilai': [_ringkas(v['nilai'][i]) if i in v['nilai'] else None
-                        for i in urutan]}
-        for v in ukur_terpakai.values()
-    ]
 
-    return {'sesi': sesi_data, 'pengukuran': ukur_list,
-            'bahan_per_unit': bahan_list}
+def saldo_batch(batch) -> SaldoBatch:
+    """
+    Sisa isi batch. Keluar lewat DUA pintu:
+
+        inventory.Packing    klaim eksternal, nilai keluar sistem
+        produksi.TransferWip internal, nilai pindah ke batch lain
+
+    Keduanya sama-sama mengosongkan batch secara fisik; bedanya cuma ke
+    mana nilainya pergi. Melewatkan salah satunya adalah bug yang tidak
+    akan terlihat sampai seseorang mengambil dari batch yang sudah
+    kosong.
+    """
+    if batch.status != StatusBatch.POSTED:
+        return SaldoBatch(D0, D0_RP, batch.harga_hasil_per_kg, False)
+
+    pack = _keluar_packing(batch)
+    wip = batch.keluar_wip.filter(
+        batch_tujuan__status=StatusBatch.POSTED
+    ).aggregate(
+        q=Coalesce(Sum("qty_kg"), Value(D0), output_field=F_QTY),
+        n=Coalesce(Sum("nilai"), Value(D0_RP), output_field=F_RP),
+    )
+
+    keluar_q = pack["q"] + wip["q"]
+    sisa_qty = batch.qty_hasil - keluar_q
+    sisa_nilai = batch.nilai_hasil - pack["n"] - wip["n"]
+
+    if abs(sisa_qty) < TOL_QTY:
+        sisa_qty = D0
+    if abs(sisa_nilai) < TOL_RP:
+        sisa_nilai = D0_RP
+    if sisa_qty == D0:
+        sisa_nilai = D0_RP          # R2: habis berarti habis
+
+    return SaldoBatch(
+        sisa_qty=qty(sisa_qty),
+        sisa_nilai=rp(sisa_nilai),
+        harga_per_kg=batch.harga_hasil_per_kg,
+        kelebihan=keluar_q > batch.qty_hasil + TOL_QTY,
+    )
+
+
+def _keluar_packing(batch):
+    """
+    Agregat packing. Ditulis defensif karena app inventory bisa belum
+    punya model Packing saat produksi dikembangkan lebih dulu -- dan
+    AttributeError di sini akan tampak seperti bug valuasi, bukan seperti
+    dependensi yang belum ada.
+    """
+    rel = getattr(batch, "packing_set", None)
+    if rel is None:
+        return {"q": D0, "n": D0_RP}
+    return rel.filter(status="POSTED").aggregate(
+        q=Coalesce(Sum("qty_kg"), Value(D0), output_field=F_QTY),
+        n=Coalesce(Sum("nilai_hpp"), Value(D0_RP), output_field=F_RP),
+    )
+
+
+def saldo_tangki(tangki):
+    """
+    Saldo tangki = JUMLAH SISA TIAP BATCH DI DALAMNYA.
+
+    Tiap batch membawa harganya sendiri. Harga tangki hanyalah rata-rata
+    tertimbangnya, dan itu angka TURUNAN yang tidak pernah dipakai untuk
+    menilai pengambilan.
+
+    Mengembalikan dict yang SUDAH bisa di-JSON. Versi sebelumnya
+    mengembalikan list tuple (Batch, SaldoBatch) dan meledak di
+    renderer, bukan di sini -- jauh dari penyebabnya.
+    """
+    isi = []
+    total_qty, total_nilai = D0, D0_RP
+    for b in tangki.batch_set.filter(status=StatusBatch.POSTED).order_by("waktu", "id"):
+        s = saldo_batch(b)
+        if s.sisa_qty <= 0:
+            continue
+        total_qty += s.sisa_qty
+        total_nilai += s.sisa_nilai
+        isi.append({
+            "id": b.id, "nomor": b.nomor, "nama_hasil": b.nama_hasil,
+            "jenis": b.jenis, "waktu": b.waktu.isoformat(),
+            **s.as_dict(),
+        })
+
+    return {
+        "tangki": tangki.kode,
+        "qty": str(qty(total_qty)),
+        "nilai": str(rp(total_nilai)),
+        "harga_rata": str(harga(total_nilai / total_qty) if total_qty > 0 else D0),
+        "batches": isi,
+        "harga_beragam": len({b["harga_per_kg"] for b in isi}) > 1,
+    }
+
+
+# ==========================================================
+# VALUASI — FUNGSI MURNI, TANPA I/O
+# ==========================================================
+
+@dataclass(frozen=True)
+class BarisValuasi:
+    sumber: str          # "RAW" | "WIP"
+    id_sumber: int
+    label: str
+    qty_kg: Decimal
+    harga_per_kg: Decimal
+    nilai: Decimal
+    menghabiskan: bool
+
+    def as_dict(self):
+        return {
+            "sumber": self.sumber, "id_sumber": self.id_sumber,
+            "label": self.label, "qty_kg": str(self.qty_kg),
+            "harga_per_kg": str(self.harga_per_kg), "nilai": str(self.nilai),
+            "menghabiskan": self.menghabiskan,
+        }
+
+
+@dataclass(frozen=True)
+class ValuasiHasil:
+    baris: list
+    total_qty_input: Decimal
+    total_nilai_input: Decimal
+    tekor_kg: Decimal
+    nilai_susut: Decimal
+    qty_hasil: Decimal
+    nilai_hasil: Decimal
+    harga_masuk_per_kg: Decimal
+    harga_hasil_per_kg: Decimal
+    peringatan: list
+
+
+def ambil(q, sisa_qty, sisa_nilai, harga_per_kg):
+    """
+    ATURAN R2 — penghabisan.
+
+    Kalau pengambilan menghabiskan seluruh sisa (dalam toleransi), yang
+    keluar adalah SELURUH sisa nilai. Tanpa ini, pembulatan meninggalkan
+    rupiah recehan di wadah yang qty-nya sudah nol -- persis kondisi
+    "kosong tapi bernilai" yang akan tertagih ke orang yang salah.
+
+    Identik untuk sumber pool maupun sumber batch. Kalau suatu saat
+    keduanya diperlakukan berbeda di sini, salah satunya pasti salah.
+    """
+    if abs(q - sisa_qty) <= TOL_QTY:
+        return rp(sisa_nilai), True
+    return rp(q * harga_per_kg), False
+
+
+def hitung_valuasi(data_raw, data_wip, tekor_kg, model_susut=None):
+    """
+    Fungsi murni. Tanpa DB, tanpa Django.
+
+    data_raw : [{'id','label','qty','pool_qty','pool_nilai'}]
+    data_wip : [{'id','label','qty','sisa_qty','sisa_nilai','harga_per_kg'}]
+    """
+    model_susut = model_susut or model_susut_aktif()
+    total_qty, total_nilai = D0, D0_RP
+    baris, peringatan = [], []
+
+    for r in data_raw:                                   # sumber POOL
+        q = Decimal(r["qty"])
+        p_qty = Decimal(r["pool_qty"])
+        p_nilai = Decimal(r["pool_nilai"])
+        h = harga(p_nilai / p_qty) if p_qty > 0 else D0   # R1: WAC berjalan
+        nilai, habis = ambil(q, p_qty, p_nilai, h)
+        baris.append(BarisValuasi("RAW", r["id"], r.get("label", ""),
+                                  qty(q), h, nilai, habis))
+        if habis:
+            peringatan.append(
+                f"Pool {r.get('label', r['id'])} akan HABIS. Seluruh sisa "
+                f"nilainya ikut keluar.")
+        total_qty += q
+        total_nilai += nilai
+
+    for w in data_wip:                                   # sumber BATCH
+        q = Decimal(w["qty"])
+        h = Decimal(w["harga_per_kg"])                   # R3: tidak bergeser
+        nilai, habis = ambil(q, Decimal(w["sisa_qty"]),
+                             Decimal(w["sisa_nilai"]), h)
+        baris.append(BarisValuasi("WIP", w["id"], w.get("label", ""),
+                                  qty(q), h, nilai, habis))
+        if habis:
+            peringatan.append(
+                f"Batch {w.get('label', w['id'])} akan HABIS. Seluruh sisa "
+                f"nilainya ikut keluar.")
+        total_qty += q
+        total_nilai += nilai
+
+    tekor_kg = Decimal(tekor_kg or 0)
+    if total_qty <= 0:
+        raise GalatValidasi("INPUT_KOSONG",
+                            "Pilih minimal satu sumber dengan qty > 0.")
+    if tekor_kg < 0:
+        raise GalatValidasi("TEKOR_NEGATIF",
+                            "Tekor tidak boleh negatif.", "tekor_kg")
+
+    qty_hasil = total_qty - tekor_kg
+    if qty_hasil <= TOL_QTY:
+        # Penjaga pembagian nol. Wajib SEBELUM pembagian di bawah.
+        raise GalatValidasi(
+            "TEKOR_MELEBIHI_INPUT",
+            f"Tekor {tekor_kg:,.3f} Kg menghabiskan seluruh input "
+            f"{total_qty:,.3f} Kg. Tidak ada hasil yang bisa dinilai.",
+            "tekor_kg")
+
+    harga_masuk = harga(total_nilai / total_qty)
+
+    if model_susut == "ABSORPSI":
+        nilai_susut = D0_RP
+        nilai_hasil = total_nilai
+    else:                                                # LOSS_RECOGNITION
+        nilai_susut = rp(tekor_kg * harga_masuk)
+        nilai_hasil = rp(total_nilai - nilai_susut)
+
+    return ValuasiHasil(
+        baris=baris,
+        total_qty_input=qty(total_qty),
+        total_nilai_input=rp(total_nilai),
+        tekor_kg=qty(tekor_kg),
+        nilai_susut=nilai_susut,
+        qty_hasil=qty(qty_hasil),
+        nilai_hasil=rp(nilai_hasil),
+        harga_masuk_per_kg=harga_masuk,
+        harga_hasil_per_kg=harga(nilai_hasil / qty_hasil),
+        peringatan=peringatan,
+    )
+
+
+# ==========================================================
+# JEMBATAN DB -> VALUASI
+# ==========================================================
+
+def _agregasi(baris, kunci_id, kunci_qty):
+    """
+    Gabungkan baris dengan id sama SEBELUM divalidasi.
+
+    Memeriksa tiap baris terhadap saldo penuh secara terpisah meloloskan
+    dua baris yang masing-masing 60% dari sisa. Constraint unik di DB
+    adalah backstop-nya; ini pertahanan pertamanya.
+    """
+    hasil = {}
+    for b in baris:
+        i = b[kunci_id] if isinstance(b, dict) else getattr(b, kunci_id)
+        q = b[kunci_qty] if isinstance(b, dict) else getattr(b, kunci_qty)
+        hasil[i] = hasil.get(i, D0) + Decimal(q)
+    return hasil
+
+
+def baca_sumber(pakai_raw, pakai_wip, kunci=False, batch_tujuan_id=None):
+    """
+    Baca saldo nyata dari DB dan bentuk payload untuk hitung_valuasi.
+
+    pakai_raw : {raw_id: qty}
+    pakai_wip : {batch_sumber_id: qty}
+
+    kunci=True saat posting: select_for_update dengan urutan tetap.
+    kunci=False saat pratinjau: baca biasa, tanpa mengunci apa pun.
+    """
+    # --- BATCH (tujuan + sumber) dalam satu query terurut ---
+    ids_batch = set(pakai_wip)
+    if batch_tujuan_id:
+        ids_batch.add(batch_tujuan_id)
+    qs_batch = Batch.objects.filter(id__in=ids_batch).order_by("id")
+    if kunci:
+        qs_batch = qs_batch.select_for_update()
+    peta_batch = {b.id: b for b in qs_batch}
+
+    # --- POOL terurut raw_id ---
+    qs_pool = _SaldoPool().objects.select_related("raw").filter(
+        raw_id__in=pakai_raw).order_by("raw_id")
+    if kunci:
+        qs_pool = qs_pool.select_for_update()
+    peta_pool = {p.raw_id: p for p in qs_pool}
+
+    data_raw = []
+    for raw_id, q in sorted(pakai_raw.items()):
+        pool = peta_pool.get(raw_id)
+        if pool is None:
+            raise KonflikSaldo(
+                "RAW_TIDAK_ADA_DI_POOL",
+                f"Raw material id {raw_id} belum pernah masuk pool.",
+                f"input_raw[{raw_id}]")
+        if q > pool.qty_kg + TOL_QTY:
+            raise KonflikSaldo(
+                "SALDO_POOL_KURANG",
+                f"Pool {pool.raw} sisa {pool.qty_kg:,.3f} Kg. "
+                f"Anda memakai {q:,.3f} Kg.",
+                f"input_raw[{raw_id}]")
+        data_raw.append({
+            "id": raw_id, "label": str(pool.raw), "qty": q,
+            "pool_qty": pool.qty_kg, "pool_nilai": pool.nilai,
+        })
+
+    data_wip = []
+    for b_id, q in sorted(pakai_wip.items()):
+        sumber = peta_batch.get(b_id)
+        if sumber is None:
+            raise KonflikSaldo("BATCH_TIDAK_DITEMUKAN",
+                               f"Batch sumber id {b_id} tidak ditemukan.",
+                               f"input_wip[{b_id}]")
+        if sumber.status != StatusBatch.POSTED:
+            raise KonflikSaldo(
+                "BATCH_BELUM_POSTED",
+                f"Batch {sumber.nomor} berstatus {sumber.status}, "
+                f"belum bisa ditarik.",
+                f"input_wip[{b_id}]")
+        if batch_tujuan_id and b_id == batch_tujuan_id:
+            raise GalatValidasi("TRANSFER_KE_DIRI_SENDIRI",
+                                "Batch tidak bisa menjadi sumbernya sendiri.",
+                                f"input_wip[{b_id}]")
+        s = saldo_batch(sumber)
+        if q > s.sisa_qty + TOL_QTY:
+            raise KonflikSaldo(
+                "SISA_BATCH_KURANG",
+                f"Batch {sumber.nomor} tinggal {s.sisa_qty:,.3f} Kg. "
+                f"Anda memakai {q:,.3f} Kg.",
+                f"input_wip[{b_id}]")
+        data_wip.append({
+            "id": b_id,
+            "label": f"{sumber.nomor} ({sumber.nama_hasil})",
+            "qty": q, "sisa_qty": s.sisa_qty, "sisa_nilai": s.sisa_nilai,
+            "harga_per_kg": s.harga_per_kg,
+        })
+
+    return data_raw, data_wip, peta_batch, peta_pool
+
+
+def pratinjau(pakai_raw, pakai_wip, tekor_kg, batch_tujuan_id=None):
+    """
+    Kalkulator. Tidak menyimpan, tidak mengunci, tidak melempar ke HTTP.
+
+    Mengembalikan (valuasi, None) atau (None, galat). Pratinjau adalah
+    kalkulator, bukan gerbang -- galat dikembalikan sebagai data supaya
+    frontend bisa menampilkannya sambil operator masih mengetik.
+    """
+    try:
+        data_raw, data_wip, _, _ = baca_sumber(
+            pakai_raw, pakai_wip, kunci=False,
+            batch_tujuan_id=batch_tujuan_id)
+        return hitung_valuasi(data_raw, data_wip, tekor_kg), None
+    except GalatProduksi as e:
+        return None, e
+
+
+# ==========================================================
+# LELUHUR / KETURUNAN — anti lingkaran
+# ==========================================================
+
+def leluhur(batch_id, terlihat=None):
+    """Semua batch yang nilainya mengalir MASUK ke batch_id."""
+    terlihat = terlihat if terlihat is not None else set()
+    for sid in TransferWip.objects.filter(
+            batch_tujuan_id=batch_id).values_list("batch_sumber_id", flat=True):
+        if sid in terlihat:
+            continue
+        terlihat.add(sid)
+        leluhur(sid, terlihat)
+    return terlihat
+
+
+# ==========================================================
+# POSTING
+# ==========================================================
+
+@transaction.atomic
+def posting_batch(batch, user=None):
+    """
+    Fase B PRD: kunci -> validasi -> valuasi -> tulis -> periksa.
+
+    SELURUHNYA dalam satu atomic, termasuk pemeriksaan invariant.
+    Memanggil pemeriksa di luar blok berarti kesalahan terdeteksi setelah
+    ia sudah tersimpan permanen.
+    """
+    batch = Batch.objects.select_for_update().get(pk=batch.pk)
+    if batch.status != StatusBatch.DRAFT:
+        raise KonflikSaldo("BATCH_TERKUNCI",
+                           f"Batch {batch.nomor} sudah {batch.status}.")
+
+    raws = list(batch.input_raw.all())
+    wips = list(batch.input_wip.all())
+    if not raws and not wips:
+        raise GalatValidasi("INPUT_KOSONG",
+                            "Batch tidak punya baris input sama sekali.")
+
+    pakai_raw = _agregasi(raws, "raw_id", "qty_kg")
+    pakai_wip = _agregasi(wips, "batch_sumber_id", "qty_kg")
+
+    for sid in pakai_wip:
+        if batch.pk in leluhur(sid):
+            raise GalatValidasi(
+                "LINGKARAN_BLENDING",
+                f"Batch sumber id {sid} sudah menerima nilai dari batch ini.",
+                f"input_wip[{sid}]")
+
+    data_raw, data_wip, peta_batch, peta_pool = baca_sumber(
+        pakai_raw, pakai_wip, kunci=True, batch_tujuan_id=batch.pk)
+
+    v = hitung_valuasi(data_raw, data_wip, batch.tekor_kg)
+
+    # --- TULIS: pool berkurang ---
+    for b in v.baris:
+        if b.sumber != "RAW":
+            continue
+        pool = peta_pool[b.id_sumber]
+        pool.qty_kg = qty(pool.qty_kg - b.qty_kg)
+        pool.nilai = rp(pool.nilai - b.nilai)
+        if pool.qty_kg < 0 or pool.nilai < 0:
+            raise InvariantMelenceng(
+                "POOL_NEGATIF",
+                f"Pool {pool.raw} menjadi negatif setelah posting.")
+        if pool.qty_kg == 0:
+            pool.nilai = D0_RP      
+        pool.save(update_fields=["qty_kg", "nilai"])
+
+
+    nilai_per = {(b.sumber, b.id_sumber): b for b in v.baris}
+    for r in raws:
+        b = nilai_per[("RAW", r.raw_id)]
+        r.harga_per_kg, r.nilai, r.menghabiskan = (b.harga_per_kg, b.nilai,
+                                                    b.menghabiskan)
+        r.save(update_fields=["harga_per_kg", "nilai", "menghabiskan"])
+    for w in wips:
+        if w.batch_sumber.grup_bahan_id != batch.grup_bahan_id:
+            raise GalatValidasi(
+                "GRUP_BERBEDA",
+                f"Batch {w.batch_sumber.nomor} milik grup "
+                f"{w.batch_sumber.grup_bahan.kode}, tidak bisa masuk ke "
+                f"batch grup {batch.grup_bahan.kode}.")
+
+
+    batch.jenis = "BLENDING" if wips else "MIXING"
+    batch.total_qty_input = v.total_qty_input
+    batch.total_nilai_input = v.total_nilai_input
+    batch.nilai_susut = v.nilai_susut
+    batch.qty_hasil = v.qty_hasil
+    batch.nilai_hasil = v.nilai_hasil
+    batch.harga_masuk_per_kg = v.harga_masuk_per_kg
+    batch.harga_hasil_per_kg = v.harga_hasil_per_kg
+    batch.status = StatusBatch.POSTED
+    batch.posted_by = user if getattr(user, "is_authenticated", False) else None
+    batch.posted_at = timezone.now()
+    batch.save()
+
+    if abs((batch.nilai_hasil + batch.nilai_susut)
+           - batch.total_nilai_input) > TOL_RP:
+        raise InvariantMelenceng(
+            "P1_KONSERVASI_NILAI",
+            f"nilai_hasil + nilai_susut != total_nilai_input pada "
+            f"{batch.nomor}.")
+    if abs((batch.qty_hasil + batch.tekor_kg)
+           - batch.total_qty_input) > TOL_QTY:
+        raise InvariantMelenceng(
+            "P2_KONSERVASI_MASSA",
+            f"qty_hasil + tekor != total_qty_input pada {batch.nomor}.")
+
+    if v.nilai_susut > 0:
+        _bebankan_susut(batch)
+
+    _assert_invarian()
+    return batch
+
+
+def _bebankan_susut(batch):
+    """
+    Mode LOSS_RECOGNITION: susut dibebankan ke pemegang klaim, pro-rata
+    saldo positif. Dilakukan lewat inventory, bukan dengan menyentuh
+    MutasiKlaim dari sini -- app produksi tidak boleh punya jalan masuk
+    ke buku klaim.
+    """
+    try:
+        from inventory.services import bebankan_susut
+    except ImportError:
+        raise InvariantMelenceng(
+            "SUSUT_TIDAK_TERBEBANKAN",
+            f"Mode LOSS_RECOGNITION aktif tapi "
+            f"inventory.services.bebankan_susut() belum ada. Susut "
+            f"Rp{batch.nilai_susut:,.2f} pada {batch.nomor} akan menguap.")
+    bebankan_susut(batch)
+
+
+@transaction.atomic
+def void_batch(batch, alasan, user=None):
+    """
+    Membatalkan batch POSTED dan mengembalikan nilainya.
+
+    HANYA boleh kalau belum ada apa pun yang keluar. Membatalkan batch
+    yang isinya sudah ditagihkan berarti menghapus dasar tagihan yang
+    sudah terbit.
+
+    Batch sumber pulih dengan sendirinya: saldo_batch() menyaring
+    keluar_wip pada batch_tujuan__status=POSTED, jadi begitu status
+    berubah jadi VOID, transfernya berhenti dihitung.
+    """
+    batch = Batch.objects.select_for_update().get(pk=batch.pk)
+    if batch.status != StatusBatch.POSTED:
+        raise KonflikSaldo("BATCH_BUKAN_POSTED",
+                           f"Batch {batch.nomor} berstatus {batch.status}.")
+    if not alasan or not alasan.strip():
+        raise GalatValidasi("ALASAN_KOSONG", "Alasan VOID wajib diisi.")
+
+    s = saldo_batch(batch)
+    if abs(s.sisa_qty - batch.qty_hasil) > TOL_QTY:
+        raise KonflikSaldo(
+            "BATCH_SUDAH_TERPAKAI",
+            f"Batch {batch.nomor} sudah dikeluarkan sebagian "
+            f"({batch.qty_hasil - s.sisa_qty:,.3f} Kg). Koreksi lewat batch "
+            f"penyesuaian, bukan pembatalan.")
+    if batch.nilai_susut > 0:
+        raise KonflikSaldo(
+            "SUSUT_SUDAH_DIBEBANKAN",
+            f"Susut Rp{batch.nilai_susut:,.2f} sudah dibebankan ke pemegang "
+            f"klaim. Pembalikannya harus lewat penyesuaian di inventory.")
+
+    ids = sorted({r.raw_id for r in batch.input_raw.all()})
+    pools = {p.raw_id: p for p in _SaldoPool().objects
+             .select_for_update().filter(raw_id__in=ids).order_by("raw_id")}
+    for r in batch.input_raw.all():
+        pool = pools[r.raw_id]
+        pool.qty_kg = qty(pool.qty_kg + r.qty_kg)
+        pool.nilai = rp(pool.nilai + r.nilai)
+        pool.save(update_fields=["qty_kg", "nilai"])
+
+    batch.status = StatusBatch.VOID
+    batch.catatan = f"{batch.catatan}\n[VOID] {alasan}".strip()
+    batch.save(update_fields=["status", "catatan"])
+
+    _assert_invarian()
+    return batch
+
+
+# ==========================================================
+# BOM EXPLOSION
+# ==========================================================
+
+def komposisi_raw(batch, _memo=None, _jejak=frozenset()):
+    """
+    Kg raw ASAL yang terkandung dalam SELURUH hasil batch, menembus
+    berapa pun lapis blending.
+
+    Konsekuensi yang benar dan sering disalahpahami: hasil 157 Kg bisa
+    membawa 165 Kg raw asal. Selisihnya adalah tekor batch-batch
+    induknya, yang memang sudah menguap sebelum sampai ke sini.
+    """
+    _memo = _memo if _memo is not None else {}
+    if batch.id in _memo:
+        return _memo[batch.id]
+    if batch.id in _jejak:
+        return {}                                        # lingkaran
+    _jejak = _jejak | {batch.id}
+
+    hasil = {}
+    for i in batch.input_raw.select_related("raw"):
+        k = (i.raw_id, str(i.raw))
+        hasil[k] = hasil.get(k, D0) + i.qty_kg
+    for t in batch.input_wip.select_related("batch_sumber"):
+        for k, q in porsi_raw(t.batch_sumber, t.qty_kg, _memo, _jejak).items():
+            hasil[k] = hasil.get(k, D0) + q
+
+    _memo[batch.id] = hasil
+    return hasil
+
+
+def porsi_raw(batch, q, _memo=None, _jejak=frozenset()):
+    """Kg raw asal yang terbawa oleh `q` Kg hasil batch ini."""
+    if batch.qty_hasil <= 0:
+        return {}
+    f = Decimal(q) / batch.qty_hasil
+    return {k: v * f
+            for k, v in komposisi_raw(batch, _memo, _jejak).items()}
+
+
+def komposisi_json(batch):
+    komp = komposisi_raw(batch)
+    return {
+        "batch": batch.nomor,
+        "qty_hasil": str(batch.qty_hasil),
+        "total_raw_kg": str(qty(sum(komp.values(), D0))),
+        "raw": [{"id": rid, "nama": nama, "qty_kg": str(qty(v))}
+                for (rid, nama), v in sorted(komp.items(), key=lambda x: x[0][1])],
+    }
+
+
+# ==========================================================
+# DAFTAR BATCH TERSEDIA
+# ==========================================================
+
+def get_batch_tersedia(tangki_id=None):
+    """Batch POSTED dengan sisa > 0. Dipakai selector sumber di form."""
+    qs = Batch.objects.filter(status=StatusBatch.POSTED).select_related("tangki")
+    if tangki_id:
+        qs = qs.filter(tangki_id=tangki_id)
+    hasil = []
+    for b in qs.order_by("tangki__kode", "waktu", "id"):
+        s = saldo_batch(b)
+        if s.sisa_qty <= 0:
+            continue
+        hasil.append({
+            "id": b.id, "nomor": b.nomor, "nama_hasil": b.nama_hasil,
+            "tangki_id": b.tangki_id, "tangki": b.tangki.kode,
+            "jenis": b.jenis, **s.as_dict(),
+        })
+    return hasil

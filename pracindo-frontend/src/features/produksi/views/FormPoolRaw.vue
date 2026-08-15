@@ -6,17 +6,14 @@ import { useFormPoolRaw } from '../composables/useFormPoolRaw'
 const emit = defineEmits(['tampil-notifikasi'])
 const router = useRouter()
 
-// daftarGrupBahan telah dihapus karena grup dideteksi otomatis oleh otak composable
-
 const {
     form, bahan, opsi, memuat, galatServer, galat, bisaKirim, totalBahan,
-    opsiEntitasAsal, grupBahanId, // <-- grupBahanId dipanggil di sini
-    muatDataAwal, stokById, opsiUntukBaris, tambahBaris, hapusBaris, kirim, reset,
-    tampilkan, galatBaris
+    opsiEntitasAsal, muatDataAwal, stokById, opsiUntukBaris, tambahBaris,
+    hapusBaris, kirim, reset, tampilkan, galatBaris
 } = useFormPoolRaw((hasil) => {
     emit('tampil-notifikasi', 'Bahan berhasil ditransfer dan dilebur ke Pool!', 'sukses')
     router.push('/produksi/mixing')
-}) // Parameter daftar grup dihapus
+})
 
 const formatAngka = (n) => Number(n || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
@@ -28,7 +25,7 @@ onMounted(() => {
 <template>
     <section class="fp">
         <header class="fp__head">
-            <h1>Transfer ke Pool (Peleburan Entitas)</h1>
+            <h1>Transfer ke Pool (Peleburan)</h1>
             <p>Pindahkan bahan mentah dari Gudang ke Pool. Pilih entitas pemilik terlebih dahulu untuk memotong stok
                 dengan presisi.</p>
         </header>
@@ -39,8 +36,8 @@ onMounted(() => {
         </div>
 
         <fieldset class="blok">
-            <legend>Alur Transfer (Sumber & Tujuan)</legend>
-            <div class="grid grid--3">
+            <legend>Informasi Transfer</legend>
+            <div class="grid grid--2">
                 <!-- Pilihan Entitas Asal (Murni Entitas) -->
                 <label class="bidang">
                     <span>Entitas Asal (Pemilik)</span>
@@ -53,22 +50,7 @@ onMounted(() => {
                     <em v-if="tampilkan('entitas_asal_id')">{{ galat.entitas_asal_id }}</em>
                 </label>
 
-                <!-- Pool Tujuan (Teks Otomatis, Bukan Dropdown) -->
-                <label class="bidang">
-                    <span>Pool Tujuan (Peleburan)</span>
-                    <div class="val-teks"
-                        style="padding: 0.4375rem 0.5rem; border: 1px solid var(--line); border-radius: 2px; background: #eef1f6; color: var(--ink-2); height: 100%; display: flex; align-items: center;">
-                        <template v-if="grupBahanId">
-                            <i class="pi pi-check-circle mr-2" style="color: #16a34a;"></i>
-                            <b>{{opsi.stokGudang.find(s => (s.grup_bahan_id || (s.grup_bahan && s.grup_bahan.id) ||
-                                s.grup_bahan) === grupBahanId)?.grup_bahan_kode || 'Pool Sesuai Grup' }}</b>
-                        </template>
-                        <template v-else>
-                            <span style="opacity: 0.6;">Pilih bahan di bawah...</span>
-                        </template>
-                    </div>
-                </label>
-
+                <!-- Tanggal Transfer -->
                 <label class="bidang">
                     <span>Tanggal Transfer</span>
                     <input v-model="form.tanggal" type="date" />
@@ -159,7 +141,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Gunakan CSS ISA-101 yang sama persis dengan FormMixing.vue */
 .fp {
     --ink: #1e2126;
     --ink-2: #5a6270;
@@ -217,11 +198,6 @@ onMounted(() => {
 
 .grid--2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-/* PENAMBAHAN GRID 3 KOLOM */
-.grid--3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .mt-4 {
@@ -437,11 +413,8 @@ input:disabled {
     margin-right: 0.5rem;
 }
 
-/* RESPONSIVE AGAR GRID MENJADI 1 KOLOM DI HP */
 @media (max-width: 40rem) {
-
-    .grid--2,
-    .grid--3 {
+    .grid--2 {
         grid-template-columns: 1fr;
     }
 }

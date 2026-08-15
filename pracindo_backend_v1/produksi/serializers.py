@@ -1,204 +1,210 @@
 """
-Serializer produksi — produksi/serializers.py
+Serializers Produksi — produksi/serializers.py
 
-Nilai rupiah hanya muncul di serializer yang dipakai supervisor dan
-akunting. Operator lantai melihat qty, tangki, dan rendemen — tidak
-melihat rupiah. Alasannya sama seperti di gudang penerimaan: orang yang
-tahu nilai rupiah punya insentif menyesuaikan hasil timbangan.
+KLIEN TIDAK PERNAH MENGIRIM HARGA
 
-IDEMPOTENSI
-    BuatSesiProduksiSerializer dan BuatSesiRndSerializer menerima
-    `idem_key`. Sebelumnya tidak, sehingga frontend yang mengirimkannya
-    tidak dicegah apa-apa: DRF Serializer membuang key asing TANPA SUARA,
-    jadi klik ganda tetap melahirkan dua sesi DRAFT sementara UI
-    menampilkan "kirim ulang aman". Lebih berbahaya daripada tidak ada
-    penjaga sama sekali, karena operator justru didorong mengulang.
+    Payload hanya memuat pengenal dan qty. Harga dan nilai dihitung
+    server dari saldo saat posting. Menerima harga dari klien berarti
+    menerima harga yang sudah basi, atau yang dikarang -- dan dua tempat
+    yang menghitung hal sama akan berbeda; pertanyaannya hanya kapan.
+
+DUPLIKAT DITOLAK SEBELUM VALIDASI SALDO
+
+    Dua baris dengan sumber sama masing-masing lolos pemeriksaan
+    terhadap saldo PENUH, dan bersama-sama menarik dua kali lipat dari
+    yang ada. Constraint unik di DB adalah backstop-nya; ini pertahanan
+    pertamanya, dan yang memberi pesan yang bisa dibaca operator.
 """
 from decimal import Decimal
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
-    HasilKomponen, JenisPengukuran, Resep, SesiCatatan, SesiInput,
-    SesiPengukuran, SesiProduksi,
+    Batch, BatchInputRaw, StatusBatch, Tangki, TransferWip, nomor_baru,
 )
 
+QTY_MIN = Decimal("0.001")
 
-# =========================================================
+
+class TangkiSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tangki
+        fields = ["id", "kode", "nama", "aktif"]
+
+    def validate_kode(self, v):
+        # Normalisasi di SETIAP jalur tulis, bukan hanya di Model.save().
+        # 'tk-0001' dan 'TK-0001' menunjuk tangki yang sama; memperlakukan
+        # keduanya sebagai dua benda memecah saldo tanpa suara.
+        return v.strip().upper()
+
+
+# ==========================================
+# BARIS INPUT
+# ==========================================
+
+class InputRawSerializer(serializers.Serializer):
+    raw = serializers.IntegerField()
+    qty_kg = serializers.DecimalField(max_digits=18, decimal_places=3,
+                                      min_value=QTY_MIN)
+
+
+class InputWipSerializer(serializers.Serializer):
+    batch_sumber = serializers.IntegerField()
+    qty_kg = serializers.DecimalField(max_digits=18, decimal_places=3,
+                                      min_value=QTY_MIN)
+
+
+def _cek_duplikat(baris, kunci, kode, label):
+    terlihat = set()
+    for b in baris:
+        i = b[kunci]
+        if i in terlihat:
+            raise serializers.ValidationError({
+                "kode": kode,
+                "pesan": f"{label} id {i} muncul lebih dari sekali. "
+                         f"Gabungkan qty-nya di satu baris.",
+            })
+        terlihat.add(i)
+
+
+def _validasi_input(data):
+    raws = data.get("input_raw") or []
+    wips = data.get("input_wip") or []
+    if not raws and not wips:
+        raise serializers.ValidationError({
+            "kode": "INPUT_KOSONG",
+            "pesan": "Pilih minimal satu sumber dengan qty > 0.",
+        })
+    _cek_duplikat(raws, "raw", "RAW_DUPLIKAT", "Bahan")
+    _cek_duplikat(wips, "batch_sumber", "WIP_DUPLIKAT", "Batch")
+    return data
+
+
+class PratinjauRequestSerializer(serializers.Serializer):
+    """
+    Kontrak kalkulator.
+
+    `tangki` dan `nama_hasil` OPSIONAL di sini -- ini kalkulator, dan
+    memblokir hitungan sampai operator mengisi nama hasil membuat umpan
+    baliknya datang terlambat.
+    """
+    tangki = serializers.IntegerField(required=False, allow_null=True)
+    nama_hasil = serializers.CharField(max_length=120, required=False,
+                                       allow_blank=True)
+    tekor_kg = serializers.DecimalField(max_digits=18, decimal_places=3,
+                                        required=False,
+                                        default=Decimal("0.000"),
+                                        min_value=Decimal("0"))
+    input_raw = InputRawSerializer(many=True, required=False, default=list)
+    input_wip = InputWipSerializer(many=True, required=False, default=list)
+
+    def validate(self, data):
+        return _validasi_input(data)
+
+
+class BatchCreateSerializer(serializers.Serializer):
+    """Membuat DRAFT lengkap dengan baris inputnya dalam satu request."""
+    tangki = serializers.PrimaryKeyRelatedField(
+        queryset=Tangki.objects.filter(aktif=True))
+    nama_hasil = serializers.CharField(max_length=120)
+    tekor_kg = serializers.DecimalField(max_digits=18, decimal_places=3,
+                                        required=False,
+                                        default=Decimal("0.000"),
+                                        min_value=Decimal("0"))
+    catatan = serializers.CharField(required=False, allow_blank=True,
+                                    default="")
+    input_raw = InputRawSerializer(many=True, required=False, default=list)
+    input_wip = InputWipSerializer(many=True, required=False, default=list)
+
+    def validate(self, data):
+        return _validasi_input(data)
+
+    def create(self, validated):
+        raws = validated.pop("input_raw", [])
+        wips = validated.pop("input_wip", [])
+
+        # `jenis` adalah label TURUNAN, bukan percabangan logika.
+        # Mixing dan blending memakai satu jalur valuasi yang sama.
+        jenis = "BLENDING" if wips else "MIXING"
+        awalan = "BD" if wips else "MX"
+
+        req = self.context.get("request")
+        user = getattr(req, "user", None)
+
+        batch = Batch.objects.create(
+            nomor=nomor_baru(awalan, timezone.now().strftime("%Y%m")),
+            jenis=jenis,
+            nama_hasil=validated["nama_hasil"],
+            tangki=validated["tangki"],
+            tekor_kg=validated.get("tekor_kg") or Decimal("0.000"),
+            catatan=validated.get("catatan", ""),
+            status=StatusBatch.DRAFT,
+            created_by=user if getattr(user, "is_authenticated", False) else None,
+        )
+        BatchInputRaw.objects.bulk_create([
+            BatchInputRaw(batch=batch, raw_id=r["raw"], qty_kg=r["qty_kg"])
+            for r in raws
+        ])
+        TransferWip.objects.bulk_create([
+            TransferWip(batch_tujuan=batch, batch_sumber_id=w["batch_sumber"],
+                        qty_kg=w["qty_kg"])
+            for w in wips
+        ])
+        return batch
+
+
+# ==========================================
 # BACA
-# =========================================================
+# ==========================================
 
-class SesiListSerializer(serializers.ModelSerializer):
-    """Daftar sesi. TANPA rupiah."""
-    produk_jadi_kode = serializers.CharField(source='produk_jadi.kode', read_only=True)
-    produk_jadi_nama = serializers.CharField(source='produk_jadi.nama', read_only=True)
-    grup_bahan_kode = serializers.CharField(source='grup_bahan.kode', read_only=True)
-    satuan_kode = serializers.CharField(source='produk_jadi.satuan_kode',
-                                        read_only=True, default='unit')
-    tangki_hasil_kode = serializers.CharField(source='tangki_hasil.kode',
-                                              read_only=True, default=None)
-    dibuat_oleh_nama = serializers.CharField(source='dibuat_oleh.get_full_name',
-                                             read_only=True, default='Sistem')
+class BatchInputRawSerializer(serializers.ModelSerializer):
+    raw_kode = serializers.CharField(source="raw.kode", read_only=True)
+    raw_nama = serializers.CharField(source="raw.nama", read_only=True)
 
     class Meta:
-        model = SesiProduksi
-        fields = [
-            'id', 'nomor', 'tanggal', 'status', 'grup_bahan_kode',
-            'produk_jadi_kode', 'produk_jadi_nama', 'qty_target', 'qty_hasil',
-            'rendemen', 'satuan_kode', 'jenis_sesi', 'hasil_masuk_pool',
-            'tangki_hasil_kode', 'dibuat_oleh_nama',
+        model = BatchInputRaw
+        fields = ["id", "raw", "raw_kode", "raw_nama", "qty_kg",
+                  "harga_per_kg", "nilai", "menghabiskan"]
+        read_only_fields = ["harga_per_kg", "nilai", "menghabiskan"]
+
+
+class TransferWipSerializer(serializers.ModelSerializer):
+    sumber_nomor = serializers.CharField(source="batch_sumber.nomor",
+                                         read_only=True)
+    sumber_nama = serializers.CharField(source="batch_sumber.nama_hasil",
+                                        read_only=True)
+    sumber_tangki = serializers.CharField(source="batch_sumber.tangki.kode",
+                                          read_only=True)
+
+    class Meta:
+        model = TransferWip
+        fields = ["id", "batch_sumber", "sumber_nomor", "sumber_nama",
+                  "sumber_tangki", "qty_kg", "harga_per_kg", "nilai",
+                  "menghabiskan", "waktu"]
+        read_only_fields = ["harga_per_kg", "nilai", "menghabiskan"]
+
+
+class BatchSerializer(serializers.ModelSerializer):
+    input_raw = BatchInputRawSerializer(many=True, read_only=True)
+    input_wip = TransferWipSerializer(many=True, read_only=True)
+    tangki_kode = serializers.CharField(source="tangki.kode", read_only=True)
+
+    class Meta:
+        model = Batch
+        fields = "__all__"
+        read_only_fields = [
+            "nomor", "jenis", "total_qty_input", "total_nilai_input",
+            "nilai_susut", "qty_hasil", "nilai_hasil", "harga_masuk_per_kg",
+            "harga_hasil_per_kg", "status", "created_by", "created_at",
+            "updated_at", "posted_by", "posted_at", "posting_key",
         ]
 
-
-class SesiListAkuntingSerializer(SesiListSerializer):
-    """Idem, dengan rupiah. Hanya untuk yang punya akses modul akunting."""
-    harga_hasil_per_satuan = serializers.DecimalField(
-        max_digits=18, decimal_places=4, read_only=True)
-
-    class Meta(SesiListSerializer.Meta):
-        fields = SesiListSerializer.Meta.fields + [
-            'nilai_input', 'nilai_hasil', 'nilai_kerugian',
-            'harga_hasil_per_satuan',
-        ]
-
-
-class ResepSerializer(serializers.ModelSerializer):
-    produk_jadi_kode = serializers.CharField(source='produk_jadi.kode', read_only=True)
-    produk_jadi_nama = serializers.CharField(source='produk_jadi.nama', read_only=True)
-    susut_wajar_persen = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Resep
-        fields = ['id', 'produk_jadi', 'produk_jadi_kode', 'produk_jadi_nama',
-                  'versi', 'nama', 'hasil_per_batch', 'susut_wajar',
-                  'susut_wajar_persen', 'berlaku_sejak']
-
-    def get_susut_wajar_persen(self, obj):
-        return obj.susut_wajar * 100
-
-
-class HasilKomponenSerializer(serializers.ModelSerializer):
-    bahan_kode = serializers.CharField(source='bahan.kode', read_only=True)
-    bahan_nama = serializers.CharField(source='bahan.nama', read_only=True)
-
-    class Meta:
-        model = HasilKomponen
-        fields = ['id', 'bahan', 'bahan_kode', 'bahan_nama',
-                  'sesi_input', 'qty', 'nilai']
-        read_only_fields = fields
-
-
-class SesiInputSerializer(serializers.ModelSerializer):
-    bahan_kode = serializers.CharField(source='bahan.kode', read_only=True)
-    bahan_nama = serializers.CharField(source='bahan.nama', read_only=True)
-    tangki_kode = serializers.CharField(source='tangki.kode', read_only=True,
-                                        default=None)
-
-    class Meta:
-        model = SesiInput
-        fields = ['id', 'bahan', 'bahan_kode', 'bahan_nama', 'tangki',
-                  'tangki_kode', 'qty_rencana', 'qty_aktual', 'selisih']
-
-
-# =========================================================
-# TULIS
-# =========================================================
-
-class BuatSesiProduksiSerializer(serializers.Serializer):
-    grup_bahan_id = serializers.IntegerField()
-    resep_id = serializers.IntegerField()
-    qty_target = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                          min_value=Decimal('0.001'))
-    tanggal = serializers.DateField()
-    tangki_hasil_id = serializers.IntegerField(required=False, allow_null=True)
-    catatan = serializers.CharField(required=False, allow_blank=True, default='')
-    # Kunci idempotensi. Dibuat SEKALI saat form dibuka dan dipakai ulang di
-    # setiap percobaan kirim -- kalau diganti tiap retry, tidak mencegah apa
-    # pun. Dikosongkan berarti tanpa penjaga: klik ganda melahirkan dua sesi.
-    idem_key = serializers.CharField(required=False, allow_blank=True,
-                                     default='', max_length=96)
-
-
-class RndBarisInputSerializer(serializers.Serializer):
-    bahan_id = serializers.IntegerField()
-    qty_rencana = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                           min_value=Decimal('0.001'))
-    tangki_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-class BuatSesiRndSerializer(serializers.Serializer):
-    grup_bahan_id = serializers.IntegerField()
-    produk_jadi_id = serializers.IntegerField()
-    qty_target = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                          min_value=Decimal('0.001'))
-    tanggal = serializers.DateField()
-    hasil_masuk_pool = serializers.BooleanField(default=True)
-    tangki_hasil_id = serializers.IntegerField(required=False, allow_null=True)
-    catatan = serializers.CharField(required=False, allow_blank=True, default='')
-    idem_key = serializers.CharField(required=False, allow_blank=True,
-                                     default='', max_length=96)
-    baris = RndBarisInputSerializer(many=True, allow_empty=False)
-
-
-class MulaiSesiBarisSerializer(serializers.Serializer):
-    bahan_id = serializers.IntegerField()
-    # Nol DIIZINKAN: cara operator bilang bahan ini tidak jadi dipakai.
-    qty_aktual = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                          min_value=Decimal('0'))
-    tangki_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-class MulaiSesiSerializer(serializers.Serializer):
-    baris = MulaiSesiBarisSerializer(many=True, required=False, default=list)
-
-
-class SelesaikanSesiSerializer(serializers.Serializer):
-    qty_hasil = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                         min_value=Decimal('0.001'))
-    # Menembus batas susut wajar. Ditolak view kalau bukan supervisor.
-    abaikan_susut = serializers.BooleanField(default=False)
-
-
-class GagalkanSesiSerializer(serializers.Serializer):
-    alasan = serializers.CharField(allow_blank=False)
-    kategori_kegagalan = serializers.CharField(allow_blank=False)
-
-
-class BatalSesiSerializer(serializers.Serializer):
-    alasan = serializers.CharField(allow_blank=False)
-
-
-# =========================================================
-# PENGUKURAN & CATATAN
-# =========================================================
-
-class JenisPengukuranSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JenisPengukuran
-        fields = ['id', 'kode', 'nama', 'satuan', 'tipe_nilai',
-                  'nilai_min', 'nilai_max', 'aktif']
-
-
-class SesiPengukuranSerializer(serializers.ModelSerializer):
-    nama_kode = serializers.CharField(source='nama.kode', read_only=True)
-    nama_label = serializers.CharField(source='nama.nama', read_only=True)
-    satuan = serializers.CharField(source='nama.satuan', read_only=True)
-    dicatat_oleh_nama = serializers.CharField(source='dicatat_oleh.get_full_name',
-                                              read_only=True, default='Sistem')
-
-    class Meta:
-        model = SesiPengukuran
-        fields = ['id', 'sesi', 'tahap', 'nama', 'nama_kode', 'nama_label',
-                  'satuan', 'nilai', 'nilai_teks', 'waktu', 'catatan',
-                  'mengoreksi', 'dicatat_oleh_nama']
-        read_only_fields = ['id', 'sesi', 'waktu', 'dicatat_oleh']
-
-
-class SesiCatatanSerializer(serializers.ModelSerializer):
-    penulis_nama = serializers.CharField(source='penulis.get_full_name',
-                                         read_only=True, default='Sistem')
-
-    class Meta:
-        model = SesiCatatan
-        fields = ['id', 'sesi', 'waktu', 'teks', 'penulis_nama']
-        read_only_fields = ['id', 'sesi', 'waktu', 'penulis']
+    def validate(self, data):
+        if self.instance and self.instance.status != StatusBatch.DRAFT:
+            raise serializers.ValidationError({
+                "kode": "BATCH_TERKUNCI",
+                "pesan": f"Batch {self.instance.nomor} sudah "
+                         f"{self.instance.status} dan tidak bisa diubah.",
+            })
+        return data

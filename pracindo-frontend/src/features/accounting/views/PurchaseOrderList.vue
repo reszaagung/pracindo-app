@@ -11,14 +11,12 @@
                 </p>
                 <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Purchase Order</h2>
             </div>
-
-            <router-link to="/accounting/input/po/buat"
+            <button @click="tampilModalPO = true"
                 class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-2 shadow-sm transform hover:-translate-y-0.5">
                 <i class="pi pi-plus"></i> Buat PO Baru
-            </router-link>
+            </button>
         </div>
 
-        <!-- Kartu Statistik -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <!-- Stat 1 -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
@@ -27,21 +25,17 @@
                 </h3>
                 <p class="text-xs text-slate-500 mt-2">{{ daftarPO.length }} dokumen dibuat</p>
             </div>
-            <!-- Stat 2 -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">BELUM DITERIMA PENUH</p>
                 <h3 class="text-2xl font-black text-slate-800">{{ belumDiterima.length }}</h3>
                 <p class="text-xs text-slate-500 mt-2">Menunggu barang datang</p>
             </div>
-            <!-- Stat 3 -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">DRAFT</p>
                 <h3 class="text-2xl font-black text-slate-800">{{ draftCount }}</h3>
                 <p class="text-xs text-slate-500 mt-2">Belum dikirim ke suplier</p>
             </div>
         </div>
-
-        <!-- Area Filter & Tabel -->
         <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full min-h-[400px]">
             <div
                 class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
@@ -51,7 +45,6 @@
                 </div>
 
                 <div class="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
-                    <!-- Pencarian -->
                     <div class="relative w-full md:w-64">
                         <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                         <input type="text" v-model="cari" placeholder="Cari nomor/supplier"
@@ -70,13 +63,11 @@
                 </div>
             </div>
 
-            <!-- Loading State -->
             <div v-if="isLoadingDaftar" class="flex flex-col items-center justify-center py-12 text-center">
                 <i class="pi pi-spin pi-spinner text-slate-300 text-2xl mb-3"></i>
                 <p class="text-xs text-slate-500">Memuat data...</p>
             </div>
 
-            <!-- Empty State -->
             <div v-else-if="tampil.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
                 <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
                     <i class="pi pi-inbox text-slate-400 text-xl"></i>
@@ -85,7 +76,6 @@
                 <p class="text-xs text-slate-500">Ubah kata kunci pencarian atau tab status.</p>
             </div>
 
-            <!-- Tabel Data -->
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-left text-sm table-fixed">
                     <thead class="text-slate-500 bg-slate-50/50">
@@ -115,12 +105,25 @@
                 </table>
             </div>
         </div>
+
+        <Dialog v-model:visible="tampilModalPO" modal header="Buat Purchase Order Baru"
+            :style="{ width: '90vw', maxWidth: '1000px' }" class="p-fluid">
+            <LazyFormPO v-if="tampilModalPO" @close="tampilModalPO = false" @saved="poBerhasilDisimpan" />
+        </Dialog>
     </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref, defineAsyncComponent } from 'vue'
+import Dialog from 'primevue/dialog'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
+
+const LazyFormPO = defineAsyncComponent(() =>
+    import('@/features/accounting/views/ProcurementCreate.vue')
+)
+
+
+const tampilModalPO = ref(false)
 
 const {
     daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
@@ -130,6 +133,11 @@ const {
 onMounted(() => {
     muatDaftarPO()
 })
+
+const poBerhasilDisimpan = () => {
+    tampilModalPO.value = false 
+    muatDaftarPO() 
+}
 
 const badgeColor = (status) => {
     const st = String(status).toUpperCase()
@@ -145,6 +153,7 @@ const badgeColor = (status) => {
 </script>
 
 <style scoped>
+/* ... (Style tetap sama) ... */
 .animate-fade-in {
     animation: fadeIn 0.3s ease-out forwards;
 }
@@ -174,5 +183,3 @@ const badgeColor = (status) => {
     border-radius: 4px;
 }
 </style>
-
-PurchaseOrderList.vue

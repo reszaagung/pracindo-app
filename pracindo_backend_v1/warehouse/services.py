@@ -1,31 +1,9 @@
-"""
-Logika bisnis penerimaan barang — warehouse/services.py
 
-terima_barang() adalah kejadian ekonomi pertama dalam pipeline pembelian.
-Empat hal terjadi dalam SATU transaksi atomik:
-
-    1. Baris penerimaan dan itemnya tercatat
-    2. Stok RAW naik, pemilik = entitas PO
-    3. Jurnal Dr Persediaan / Cr GRNI terposting
-    4. Laporan selisih terbit otomatis kalau ada ketidaksesuaian
-
-Kalau salah satu gagal, semuanya batal. Tidak pernah ada kondisi
-"stok sudah naik tapi hutang belum tercatat".
-
-TIGA ANGKA
-    qty PO         yang dipesan
-    qty deklarasi  jumlah koli x isi per koli
-    qty timbang    hasil timbangan -- INI yang dipakai untuk stok dan nilai
-
-GUDANG TIDAK MELIHAT HARGA. Payload dari frontend gudang tidak pernah
-membawa angka rupiah. nilai_terima dihitung di server dari harga yang
-tersimpan di PO, sehingga tidak ada yang bisa dimanipulasi dari klien.
-"""
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.utils import timezone
 
 from core.services import pastikan_periode_terbuka
@@ -37,88 +15,70 @@ from .models import (
 
 Q3 = Decimal('0.001')
 Q2 = Decimal('0.01')
-
-# Selisih berat di bawah ambang ini dianggap toleransi timbangan dan
-# tidak menerbitkan laporan. 0.5% adalah angka awal yang wajar untuk
-# komoditas kg-based; sesuaikan dengan kesepakatan suplier.
 TOLERANSI_BERAT = Decimal('0.005')
 
 
-# =========================================================
-# PENERIMAAN
-# =========================================================
+def ambang_toleransi():
+    """Dipakai serializer/endpoint config supaya frontend tidak menebak."""
+    return {"toleransi_berat_persen": str(TOLERANSI_BERAT * 100)}
+
 
 @transaction.atomic
 def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
-                  dokumen_id=None, catatan='', idem_key=None):
+                  dokumen_id=None, catatan=''):
     """
-    Mencatat penerimaan barang dari suplier.
+    Menerima kiriman suplier.
 
-    baris: [
-      {
-        'po_item_id': 12,
-        'jenis_kemasan': 'KARUNG',
-        'jumlah_koli': 20,
-        'isi_per_koli': '25.000',
-        'qty_diterima': '498.500',      # hasil timbangan
-        'qty_ditolak': '0',
-        'alasan_tolak': '',
-      }, ...
-    ]
+    Mengembalikan (penerimaan, laporan_selisih, setoran).
 
-    Grup bahan TIDAK dikirim klien -- diturunkan dari po.entitas.grup_bahan.
-    Sudah tersimpan di master, jadi tidak ada peluang gudang salah pilih pool.
-
-    Tangki juga tidak dikirim. Semua penerimaan saat ini masuk rak. Kalau
-    nanti ada bahan cair yang datang lewat tangki, parameter ini harus
-    dihidupkan lagi dan Produk.disimpan_di_tanki jadi penentunya.
-
-    Unggah dokumen surat jalan HARUS dilakukan sebelum memanggil fungsi
-    ini, lalu dokumen_id dikirim sebagai parameter. Kalau upload file
-    dilakukan di dalam blok atomic, kegagalan transaksi meninggalkan file
-    yatim di storage sementara barisnya di-rollback.
-
-    Return: (penerimaan, [laporan_selisih, ...])
+    Titik otorisasinya di sini: barang belum jadi milik siapa pun sampai
+    staf gudang menimbang dan menyimpan. Purchasing menerbitkan PO,
+    suplier mengirim, tapi hak baru lahir saat ada orang yang
+    menandatangani.
     """
     from akunting.models import PurchaseOrder, StatusPO
+    from inventory.services import terbitkan_pembelian_dari_penerimaan
 
     if not baris:
         raise ValidationError('Tidak ada baris barang yang diterima.')
 
     po = (PurchaseOrder.objects.select_for_update()
-          .select_related('entitas', 'entitas__grup_bahan').get(pk=po_id))
+          .select_related('entitas').get(pk=po_id))
+
     if po.status == StatusPO.SELESAI:
         raise ValidationError('PO sudah diterima penuh.')
     if po.status in (StatusPO.DRAFT, StatusPO.BATAL):
-        raise ValidationError(f'PO berstatus {po.get_status_display()}, belum bisa diterima.')
+        raise ValidationError(
+            f'PO berstatus {po.get_status_display()}, belum bisa diterima.')
+    if not po.entitas.aktif:
+        raise ValidationError(
+            f'Entitas {po.entitas.kode} nonaktif. Barangnya tidak bisa '
+            f'dicatat sebagai hak siapa pun.')
 
     pastikan_periode_terbuka(po.entitas_id, tanggal)
 
     if PenerimaanBarang.objects.filter(
-        purchase_order=po, no_surat_jalan=no_surat_jalan,
-    ).exists():
+            purchase_order=po, no_surat_jalan=no_surat_jalan).exists():
         raise ValidationError(
-            f'Surat jalan {no_surat_jalan} sudah pernah diterima untuk PO ini.'
-        )
+            f'Surat jalan {no_surat_jalan} sudah pernah diterima untuk PO ini.')
 
     penerimaan = PenerimaanBarang.objects.create(
         purchase_order=po, tanggal=tanggal, no_surat_jalan=no_surat_jalan,
         dokumen_id=dokumen_id, catatan=catatan, dibuat_oleh=user,
     )
 
-    nilai_terima = Decimal('0')
     laporan = []
-
+    ada_terima = False
     for b in baris:
         item = _simpan_item(penerimaan, b, po)
-        nilai_terima += _naikkan_stok(penerimaan, item, po)
+        if item.qty_diterima > 0:
+            ada_terima = True
         laporan.extend(_periksa_selisih(penerimaan, item, user))
 
-    if nilai_terima <= 0:
+    if not ada_terima and not laporan:
         raise ValidationError(
-            'Seluruh barang ditolak. Terbitkan laporan selisih saja, '
-            'jangan catat sebagai penerimaan.'
-        )
+            'Seluruh barang ditolak. Terbitkan laporan selisih saja, jangan '
+            'catat sebagai penerimaan.')
 
     po.refresh_from_db()
     po.status = StatusPO.SELESAI if po.semua_item_lengkap() else StatusPO.SEBAGIAN
@@ -127,35 +87,37 @@ def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
     if laporan:
         penerimaan.ada_selisih = True
         penerimaan.save(update_fields=['ada_selisih'])
+    setoran = terbitkan_pembelian_dari_penerimaan(penerimaan, user=user)
 
-    _posting_penerimaan(penerimaan, nilai_terima, tanggal, user)
-    return penerimaan, laporan
+    return penerimaan, laporan, setoran
 
 
 def _simpan_item(penerimaan, b, po):
-    """Menyimpan satu baris item dengan validasi kemasan dan batas PO."""
     from akunting.models import PurchaseOrderItem
 
     po_item = PurchaseOrderItem.objects.select_for_update().get(
-        pk=b['po_item_id'], purchase_order=po,
-    )
+        pk=b['po_item_id'], purchase_order=po)
+
+    if po_item.harga_per_kg is None:
+        raise ValidationError(
+            f'{po_item.nama_item}: harga PO kosong. Lengkapi PO sebelum '
+            f'barangnya diterima.')
+
     qty_terima = Decimal(str(b.get('qty_diterima', 0))).quantize(Q3)
     qty_tolak = Decimal(str(b.get('qty_ditolak', 0))).quantize(Q3)
 
     if qty_terima < 0 or qty_tolak < 0:
         raise ValidationError(f'{po_item.nama_item}: qty tidak boleh negatif.')
     if qty_terima == 0 and qty_tolak == 0:
-        raise ValidationError(f'{po_item.nama_item}: isi qty diterima atau ditolak.')
+        raise ValidationError(
+            f'{po_item.nama_item}: isi qty diterima atau ditolak.')
     if qty_tolak and not b.get('alasan_tolak'):
-        raise ValidationError(f'{po_item.nama_item}: alasan tolak wajib diisi.')
-
-    # Yang dibandingkan dengan sisa PO adalah qty yang MASUK, bukan
-    # termasuk yang ditolak -- barang ditolak tidak pernah jadi milik kita.
+        raise ValidationError(
+            f'{po_item.nama_item}: alasan tolak wajib diisi.')
     if qty_terima > po_item.sisa_qty:
         raise ValidationError(
-            f'{po_item.nama_item}: diterima {qty_terima} melebihi '
-            f'sisa PO {po_item.sisa_qty}.'
-        )
+            f'{po_item.nama_item}: diterima {qty_terima} melebihi sisa PO '
+            f'{po_item.sisa_qty}.')
 
     item = PenerimaanItem(
         penerimaan=penerimaan,
@@ -170,128 +132,78 @@ def _simpan_item(penerimaan, b, po):
     )
     item.full_clean(exclude=['qty_deklarasi'])
     item.save()
-
     po_item.qty_diterima = F('qty_diterima') + qty_terima
     po_item.save(update_fields=['qty_diterima'])
+    po_item.refresh_from_db(fields=['qty_diterima'])
     return item
 
 
-def _naikkan_stok(penerimaan, item, po):
-    """
-    Menaikkan stok RAW dan mengembalikan nilai rupiahnya.
-
-    Dua hal diturunkan di server, tidak pernah dari payload gudang:
-      nilai        dari harga yang tersimpan di PO
-      grup_bahan   dari entitas PO -- PT masuk pool PT, CV/Agus/Marsini
-                   masuk pool BERSAMA
-    """
-    from inventory.services import terima_raw
-
-    nilai = (item.qty_diterima * item.po_item.harga_per_kg).quantize(Q2)
-
-    terima_raw(
-        produk_id=item.po_item.produk_id,
-        grup_bahan_id=po.entitas.grup_bahan_id,
-        entitas_id=po.entitas_id,
-        qty=item.qty_diterima,
-        nilai=nilai,
-        tanggal=penerimaan.tanggal,
-        referensi=penerimaan.nomor,
-        idem_key=f'grn:{penerimaan.id}:item:{item.id}',
-        tangki_id=None,
-    )
-    return nilai
-
-
-def _posting_penerimaan(penerimaan, nilai_terima, tanggal, user):
-    """
-    Dr Persediaan / Cr GRNI.
-
-    Liabilitas lahir DI SINI, bukan saat faktur. Faktur nanti hanya
-    mereklasifikasi GRNI jadi hutang usaha dan menetapkan jatuh tempo.
-    """
-    from akunting.services import posting
-
-    posting(
-        kejadian='AUDIT_GUDANG',
-        entitas_id=penerimaan.purchase_order.entitas_id,
-        tanggal=tanggal,
-        referensi=penerimaan.nomor,
-        nilai={'nilai_terima': nilai_terima},
-        idem_key=f'grn:{penerimaan.id}',
-        user=user,
-        keterangan=f'Penerimaan SJ {penerimaan.no_surat_jalan}',
-    )
-
-
-# =========================================================
-# DETEKSI SELISIH
-# =========================================================
-
 def _periksa_selisih(penerimaan, item, user):
     """
-    Menerbitkan laporan otomatis untuk setiap ketidaksesuaian.
+    Dua jenis selisih dengan makna berbeda:
 
-    Tiga pemeriksaan terpisah karena maknanya berbeda:
-      berat kurang  isi koli tidak sesuai label  -> klaim ke suplier
-      kurang kirim  koli-nya memang kurang       -> kiriman susulan
-      ditolak       mutu tidak diterima          -> retur atau ganti
+        BERAT_KURANG  timbang != deklarasi   koli lengkap, isinya beda
+        RUSAK         ada qty ditolak        barang tidak bisa dipakai
+
+    Keduanya klaim ke SUPLIER. Tidak satu pun menyentuh pool atau hak
+    entitas -- barang yang tidak pernah masuk tidak perlu dikeluarkan.
     """
     hasil = []
 
-    # 1. Selisih berat, hanya untuk kiriman berkemasan
     if item.qty_deklarasi:
         beda = item.selisih_berat
         ambang = (item.qty_deklarasi * TOLERANSI_BERAT).quantize(Q3)
         if abs(beda) > ambang:
+            arah = 'kurang' if beda < 0 else 'lebih'
             hasil.append(buat_laporan(
                 penerimaan=penerimaan, item=item, user=user,
-                jenis=JenisSelisih.BERAT_KURANG,
+                jenis=(JenisSelisih.BERAT_KURANG if beda < 0
+                       else JenisSelisih.LEBIH_KIRIM),
                 qty_selisih=beda,
-                uraian=(
-                    f'Deklarasi {item.jumlah_koli} {item.get_jenis_kemasan_display()} '
-                    f'x {item.isi_per_koli} = {item.qty_deklarasi}. '
-                    f'Timbangan {item.qty_diterima + item.qty_ditolak}. '
-                    f'Selisih {beda} ({item.persen_selisih_berat}%), '
-                    f'melebihi toleransi {ambang}.'
-                ),
+                uraian=f'Deklarasi {item.jumlah_koli} koli '
+                       f'= {item.qty_deklarasi} Kg, timbang '
+                       f'{item.qty_diterima + item.qty_ditolak} Kg. '
+                       f'Selisih {beda} ({arah}), melebihi toleransi '
+                       f'{ambang} Kg.',
             ))
 
-    # 2. Barang ditolak karena mutu
     if item.qty_ditolak > 0:
         hasil.append(buat_laporan(
             penerimaan=penerimaan, item=item, user=user,
             jenis=JenisSelisih.RUSAK,
             qty_selisih=-item.qty_ditolak,
-            uraian=f'Ditolak {item.qty_ditolak}. Alasan: {item.alasan_tolak}',
+            uraian=f'Ditolak {item.qty_ditolak} Kg. '
+                   f'Alasan: {item.alasan_tolak}',
         ))
 
     return hasil
 
-
 @transaction.atomic
-def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih,
-                 uraian, foto_id=None):
+def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih, uraian,
+                 foto_id=None):
     """
-    Menerbitkan berita acara selisih.
+    Berita acara ketidaksesuaian.
 
-    nilai_selisih dihitung dari harga PO -- gudang tidak mengisinya dan
-    tidak melihatnya di serializer.
+    nilai_selisih dihitung dari harga PO, bukan diisi manusia. Gudang
+    tidak melihat rupiah -- dia menimbang dan memotret.
     """
-    harga = item.po_item.harga_per_kg if item else Decimal('0')
+    if item is None:
+        harga = Decimal('0')          # laporan manual tanpa item
+    else:
+        harga = item.po_item.harga_per_kg
+        if harga is None:
+            raise ValidationError(
+                f'{item.po_item.nama_item}: harga PO kosong. Laporan selisih '
+                f'tanpa nilai tidak bisa diklaim ke suplier.')
+
     nilai = (abs(Decimal(qty_selisih)) * harga).quantize(Q2)
 
-    lap = LaporanSelisih(
-        penerimaan=penerimaan,
-        penerimaan_item=item,
-        tanggal=penerimaan.tanggal,
-        jenis=jenis,
+    lap = LaporanSelisih.objects.create(
+        penerimaan=penerimaan, penerimaan_item=item,
+        tanggal=penerimaan.tanggal, jenis=jenis,
         qty_selisih=Decimal(qty_selisih).quantize(Q3),
-        uraian=uraian,
-        foto_id=foto_id,
-        dibuat_oleh=user,
+        uraian=uraian, foto_id=foto_id, dibuat_oleh=user,
     )
-    lap.save()
     LaporanSelisih.objects.filter(pk=lap.pk).update(nilai_selisih=nilai)
     lap.nilai_selisih = nilai
     return lap
@@ -300,78 +212,71 @@ def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih,
 @transaction.atomic
 def laporan_manual(*, penerimaan_id, jenis, qty_selisih, uraian, user,
                    penerimaan_item_id=None, foto_id=None):
-    """
-    Laporan untuk temuan yang muncul setelah barang diterima -- misalnya
-    kerusakan yang baru ketahuan saat dibongkar keesokan harinya.
-    """
+    """Temuan yang muncul belakangan, setelah barang sudah diterima."""
     penerimaan = PenerimaanBarang.objects.get(pk=penerimaan_id)
-    item = (PenerimaanItem.objects.get(pk=penerimaan_item_id)
-            if penerimaan_item_id else None)
+    item = (PenerimaanItem.objects.select_related('po_item')
+            .get(pk=penerimaan_item_id) if penerimaan_item_id else None)
 
-    lap = buat_laporan(
-        penerimaan=penerimaan, item=item, user=user, jenis=jenis,
-        qty_selisih=qty_selisih, uraian=uraian, foto_id=foto_id,
-    )
+    if item is not None and item.penerimaan_id != penerimaan.id:
+        raise ValidationError(
+            'Item yang dipilih bukan bagian dari penerimaan ini.')
+
+    lap = buat_laporan(penerimaan=penerimaan, item=item, user=user,
+                       jenis=jenis, qty_selisih=qty_selisih, uraian=uraian,
+                       foto_id=foto_id)
     if not penerimaan.ada_selisih:
         penerimaan.ada_selisih = True
         penerimaan.save(update_fields=['ada_selisih'])
     return lap
 
 
-# =========================================================
-# PENYELESAIAN SELISIH
-# =========================================================
-
 @transaction.atomic
 def ajukan_ke_suplier(*, laporan_id, user):
     lap = LaporanSelisih.objects.select_for_update().get(pk=laporan_id)
     if lap.status != StatusSelisih.DIBUKA:
         raise ValidationError(f'Laporan sudah {lap.get_status_display()}.')
+    if lap.nilai_selisih <= 0:
+        raise ValidationError(
+            f'{lap.nomor} bernilai nol. Klaim tanpa nilai tidak bisa '
+            f'diajukan -- periksa harga di PO.')
     lap.status = StatusSelisih.DIAJUKAN
     lap.save(update_fields=['status'])
     return lap
 
 
 @transaction.atomic
-def selesaikan_laporan(*, laporan_id, resolusi, user,
-                       nilai_klaim=None, catatan=''):
+def selesaikan_laporan(*, laporan_id, resolusi, user, nilai_klaim=None,
+                       catatan=''):
     """
-    Menetapkan konsekuensi selisih.
+    RESOLUSI menentukan konsekuensi finansialnya:
 
-    TERIMA   nilai tidak berubah, selisih diserap sebagai beban
-    POTONG   nilai_klaim mengurangi tagihan suplier; faktur nanti
-             diterbitkan lebih rendah dari nilai penerimaan, dan
-             sisanya masuk SELISIH_HARGA
-    SUSULAN  PO tetap terbuka, tidak ada koreksi nilai
-    RETUR    barang dikembalikan; stok dan GRNI dikoreksi lewat
-             modul retur (belum dibangun)
-    GANTI    suplier mengirim pengganti; tidak ada koreksi nilai
-
-    Fungsi ini TIDAK memposting jurnal. Koreksi nilai terjadi saat faktur
-    dicocokkan -- itulah gunanya akun SELISIH_HARGA.
+        TERIMA   nilai tetap, selisih diserap sebagai beban
+        POTONG   nilai_klaim mengurangi tagihan suplier
+        SUSULAN  PO dibuka kembali, menunggu kiriman berikutnya
+        RETUR    barang dikembalikan
     """
-    lap = LaporanSelisih.objects.select_for_update().get(pk=laporan_id)
-    if lap.status == StatusSelisih.DISELESAIKAN:
-        raise ValidationError('Laporan sudah diselesaikan.')
+    from akunting.models import StatusPO
+
+    lap = (LaporanSelisih.objects.select_for_update()
+           .select_related('penerimaan__purchase_order').get(pk=laporan_id))
+
+    if lap.status in (StatusSelisih.DISELESAIKAN, StatusSelisih.DITUTUP):
+        raise ValidationError(
+            f'Laporan sudah {lap.get_status_display()}.')
 
     if resolusi == Resolusi.POTONG_TAGIHAN:
-        if nilai_klaim is None:
-            nilai_klaim = lap.nilai_selisih
-        nilai_klaim = Decimal(nilai_klaim).quantize(Q2)
+        nilai_klaim = Decimal(
+            nilai_klaim if nilai_klaim is not None else lap.nilai_selisih
+        ).quantize(Q2)
         if nilai_klaim <= 0:
-            raise ValidationError('Potong tagihan harus punya nilai klaim.')
+            raise ValidationError('Nilai klaim harus lebih dari 0.')
         if nilai_klaim > lap.nilai_selisih:
             raise ValidationError(
-                f'Klaim {nilai_klaim} melebihi nilai selisih {lap.nilai_selisih}.'
-            )
+                f'Klaim Rp{nilai_klaim:,.2f} melebihi nilai selisih '
+                f'Rp{lap.nilai_selisih:,.2f}. Memotong lebih banyak daripada '
+                f'yang hilang berarti menagih barang yang diterima.')
     else:
         nilai_klaim = Decimal('0')
-
-    if resolusi == Resolusi.RETUR:
-        raise ValidationError(
-            'Retur belum didukung. Selesaikan sebagai potong tagihan '
-            'atau kiriman susulan.'
-        )
 
     lap.resolusi = resolusi
     lap.nilai_klaim = nilai_klaim
@@ -379,57 +284,43 @@ def selesaikan_laporan(*, laporan_id, resolusi, user,
     lap.status = StatusSelisih.DISELESAIKAN
     lap.diselesaikan_pada = timezone.now()
     lap.diselesaikan_oleh = user
-    lap.save(update_fields=[
-        'resolusi', 'nilai_klaim', 'catatan_resolusi',
-        'status', 'diselesaikan_pada', 'diselesaikan_oleh',
-    ])
+    lap.save(update_fields=['resolusi', 'nilai_klaim', 'catatan_resolusi',
+                            'status', 'diselesaikan_pada', 'diselesaikan_oleh'])
 
     if resolusi == Resolusi.KIRIM_SUSULAN:
-        _buka_kembali_po(lap)
+        po = lap.penerimaan.purchase_order
+        if po.status == StatusPO.SELESAI and not po.semua_item_lengkap():
+            po.status = StatusPO.SEBAGIAN
+            po.save(update_fields=['status'])
 
     return lap
-
-
-def _buka_kembali_po(lap):
-    """Kiriman susulan berarti PO belum boleh ditutup."""
-    from akunting.models import StatusPO
-
-    po = lap.penerimaan.purchase_order
-    if po.status == StatusPO.SELESAI and not po.semua_item_lengkap():
-        po.status = StatusPO.SEBAGIAN
-        po.save(update_fields=['status'])
 
 
 @transaction.atomic
 def tutup_laporan(*, laporan_id, user, alasan):
-    """Menutup tanpa klaim -- selisih dianggap wajar setelah ditinjau."""
+    """Ditutup tanpa klaim. Selisihnya diserap sebagai beban."""
     lap = LaporanSelisih.objects.select_for_update().get(pk=laporan_id)
-    if lap.status == StatusSelisih.DISELESAIKAN:
-        raise ValidationError('Laporan sudah diselesaikan.')
+    if lap.status in (StatusSelisih.DISELESAIKAN, StatusSelisih.DITUTUP):
+        raise ValidationError(f'Laporan sudah {lap.get_status_display()}.')
+    if not alasan or not alasan.strip():
+        raise ValidationError('Alasan penutupan wajib diisi.')
 
     lap.status = StatusSelisih.DITUTUP
     lap.resolusi = Resolusi.TERIMA_APA_ADANYA
+    lap.nilai_klaim = Decimal('0')
     lap.catatan_resolusi = alasan
     lap.diselesaikan_pada = timezone.now()
     lap.diselesaikan_oleh = user
-    lap.save(update_fields=[
-        'status', 'resolusi', 'catatan_resolusi',
-        'diselesaikan_pada', 'diselesaikan_oleh',
-    ])
+    lap.save(update_fields=['status', 'resolusi', 'nilai_klaim',
+                            'catatan_resolusi', 'diselesaikan_pada',
+                            'diselesaikan_oleh'])
     return lap
 
 
-# =========================================================
-# PEMBACAAN
-# =========================================================
-
 def klaim_belum_diselesaikan(suplier_id=None, entitas_id=None):
-    """
-    Selisih yang masih terbuka. Dipakai akunting sebelum menyetujui
-    faktur -- jangan bayar penuh kalau masih ada klaim menggantung.
-    """
     qs = (LaporanSelisih.objects
-          .exclude(status__in=[StatusSelisih.DISELESAIKAN, StatusSelisih.DITUTUP])
+          .exclude(status__in=[StatusSelisih.DISELESAIKAN,
+                               StatusSelisih.DITUTUP])
           .select_related('penerimaan__purchase_order__suplier',
                           'penerimaan__purchase_order__entitas'))
     if suplier_id:
@@ -440,26 +331,18 @@ def klaim_belum_diselesaikan(suplier_id=None, entitas_id=None):
 
 
 def total_potongan(penerimaan_id):
-    """
-    Jumlah klaim POTONG_TAGIHAN untuk satu penerimaan.
-
-    Dipakai saat menerbitkan faktur: nilai faktur yang wajar adalah
-    nilai penerimaan dikurangi angka ini.
-    """
-    from django.db.models import Sum
-
-    return (LaporanSelisih.objects
-            .filter(penerimaan_id=penerimaan_id,
-                    resolusi=Resolusi.POTONG_TAGIHAN,
-                    status=StatusSelisih.DISELESAIKAN)
-            .aggregate(t=Sum('nilai_klaim'))['t'] or Decimal('0'))
+    return LaporanSelisih.objects.filter(
+        penerimaan_id=penerimaan_id,
+        resolusi=Resolusi.POTONG_TAGIHAN,
+        status=StatusSelisih.DISELESAIKAN,
+    ).aggregate(t=Sum('nilai_klaim'))['t'] or Decimal('0')
 
 
 def ringkasan_penerimaan(penerimaan_id):
-    """Rincian lengkap satu penerimaan termasuk selisihnya."""
     p = (PenerimaanBarang.objects
          .select_related('purchase_order__suplier', 'purchase_order__entitas')
-         .prefetch_related('item__po_item', 'laporan_selisih')
+         .prefetch_related('item__po_item', 'item__pembelian',
+                           'laporan_selisih')
          .get(pk=penerimaan_id))
 
     return {
@@ -471,29 +354,28 @@ def ringkasan_penerimaan(penerimaan_id):
         'entitas': p.purchase_order.entitas.kode,
         'total_koli': p.total_koli,
         'ada_selisih': p.ada_selisih,
-        'item': [
-            {
-                'nama': i.po_item.nama_item,
-                'kemasan': i.get_jenis_kemasan_display(),
-                'koli': i.jumlah_koli,
-                'isi_per_koli': i.isi_per_koli,
-                'deklarasi': i.qty_deklarasi,
-                'timbang': i.qty_diterima,
-                'ditolak': i.qty_ditolak,
-                'selisih_berat': i.selisih_berat,
-                'persen': i.persen_selisih_berat,
-            }
-            for i in p.item.all()
-        ],
-        'selisih': [
-            {
-                'nomor': l.nomor,
-                'jenis': l.get_jenis_display(),
-                'qty': l.qty_selisih,
-                'status': l.get_status_display(),
-                'resolusi': l.get_resolusi_display() if l.resolusi else None,
-                'klaim': l.nilai_klaim,
-            }
-            for l in p.laporan_selisih.all()
-        ],
+        'toleransi_persen': str(TOLERANSI_BERAT * 100),
+        'item': [{
+            'nama': i.po_item.nama_item,
+            'kemasan': i.get_jenis_kemasan_display(),
+            'koli': i.jumlah_koli,
+            'isi_per_koli': i.isi_per_koli,
+            'deklarasi': i.qty_deklarasi,
+            'timbang': i.qty_diterima,
+            'ditolak': i.qty_ditolak,
+            'selisih_berat': i.selisih_berat,
+            'persen': i.persen_selisih_berat,
+
+            'setoran': getattr(i, 'pembelian', None)
+                       and i.pembelian.nomor,
+        } for i in p.item.all()],
+        'selisih': [{
+            'nomor': l.nomor,
+            'jenis': l.get_jenis_display(),
+            'qty': l.qty_selisih,
+            'nilai': l.nilai_selisih,
+            'status': l.get_status_display(),
+            'resolusi': l.get_resolusi_display() if l.resolusi else None,
+            'klaim': l.nilai_klaim,
+        } for l in p.laporan_selisih.all()],
     }

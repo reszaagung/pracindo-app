@@ -1,59 +1,112 @@
+"""
+Hak akses persediaan — inventory/permissions.py
+
+KENAPA ADA BERKAS INI
+
+`staff_user.permissions` dipakai bersama seluruh modul. Dua kelemahannya
+tidak bisa diperbaiki dari sana tanpa mengubah perilaku modul lain yang
+mungkin sudah bergantung padanya, jadi pengerasannya dilakukan di sini,
+lokal untuk inventory saja.
+
+    HanyaSupervisor membaca `getattr(user, 'supervisor', False)`.
+    Kalau `supervisor` ternyata METHOD dan bukan property, getattr
+    mengembalikan bound method -- dan bound method selalu truthy. Setiap
+    user terautentikasi jadi supervisor: opname, pelunasan, dan
+    verifikasi terbuka untuk semua orang, tanpa satu baris pun di log.
+
+    AksesModul membaca `getattr(view, 'modul')` dan menolak kalau kosong.
+    Aman selama view berupa kelas. `@api_view` tidak bisa diberi atribut
+    kelas, jadi endpoint fungsi akan 403 diam-diam.
+
+Keduanya ditangani di bawah. Kalau nanti staff_user diperbaiki di
+sumbernya, berkas ini bisa dihapus dan views.py kembali mengimpor
+langsung dari sana.
+"""
 from rest_framework.permissions import BasePermission
 
-class AksesModul(BasePermission):
+from staff_user.permissions import AksesModul
+
+MODUL = 'inventory'
+
+
+def _nilai_atribut(obj, nama, default=False):
     """
-    Memastikan user memiliki hak akses ke modul yang di-request.
-    View DRF harus menetapkan atribut `modul` (contoh: modul = 'inventory').
+    Ambil atribut, panggil kalau dia callable.
+
+    Ini yang membedakan property `supervisor` dari method `supervisor()`.
+    Tanpa pemanggilan, yang kedua selalu bernilai benar.
     """
+    nilai = getattr(obj, nama, default)
+    if callable(nilai):
+        try:
+            return nilai()
+        except TypeError:
+            # Butuh argumen -- bukan penanda boolean. Anggap tidak punya.
+            return default
+    return nilai
+
+
+class AksesInventory(AksesModul):
+    """
+    Sama seperti AksesModul, tapi nama modulnya tidak diambil dari view.
+
+    Dengan begini endpoint fungsi (`@api_view`) ikut lolos, dan view yang
+    lupa memasang atribut `modul` tidak diam-diam jadi 403.
+    """
+
     def has_permission(self, request, view):
-        if not bool(request.user and request.user.is_authenticated):
+        if not (request.user and request.user.is_authenticated):
             return False
-        
-        # Mengambil nama modul yang dideklarasikan di ViewSet / APIView
-        modul = getattr(view, 'modul', None)
-        
-        # Tolak akses secara default jika view lupa mendefinisikan atribut modul
-        if not modul:
-            return False 
-            
-        # Memanggil metode bantuan pada model User untuk mengecek akses
-        return getattr(request.user, 'bisa_akses_modul', lambda m: False)(modul)
+        cek = getattr(request.user, 'bisa_akses_modul', None)
+        if not callable(cek):
+            # Model user tidak punya metode ini sama sekali. Menolak
+            # adalah pilihan yang benar, tapi diam-diam menolak seluruh
+            # modul adalah cara termahal untuk mengetahuinya.
+            raise RuntimeError(
+                'Model user tidak punya metode bisa_akses_modul(). '
+                'AksesInventory tidak bisa memutuskan apa pun.'
+            )
+        return bool(cek(MODUL))
 
 
-class HanyaSupervisor(BasePermission):
+class SupervisorInventory(BasePermission):
     """
-    Hanya mengizinkan akses jika pengguna memiliki atribut/hak akses Supervisor[cite: 25].
-    Digunakan untuk menjaga endpoint sensitif seperti Verifikasi dan Opname yang tidak punya dokumen pembanding.
-    """
-    def has_permission(self, request, view):
-        return bool(
-            request.user and
-            request.user.is_authenticated and
-            getattr(request.user, 'supervisor', False)
-        )
+    Supervisor DAN punya akses modul inventory.
 
-
-class PunyaRole(BasePermission):
+    Versi lama hanya memeriksa flag supervisor, jadi supervisor modul
+    lain -- keuangan, HR -- tetap bisa menekan /opname/ dan /lunas/.
     """
-    Memeriksa apakah user memiliki role spesifik[cite: 25].
-    Penggunaan: permission_classes = [PunyaRole.dengan(Role.GUDANG, Role.PRODUKSI)][cite: 25].
-    """
-    allowed_roles = []
 
     def has_permission(self, request, view):
-        if not bool(request.user and request.user.is_authenticated):
+        if not AksesInventory().has_permission(request, view):
             return False
-            
-        user_role = getattr(request.user, 'role', None)
-        return user_role in self.allowed_roles
+        return bool(_nilai_atribut(request.user, 'supervisor', False))
 
-    @classmethod
-    def dengan(cls, *roles):
-        """
-        Factory method untuk membuat subclass permission dinamis secara on-the-fly[cite: 25].
-        """
-        return type(
-            'PunyaRoleDinamis',
-            (cls,),
-            {'allowed_roles': roles}
-        )
+
+class Akunting(BasePermission):
+    """Boleh melihat kolom rupiah."""
+
+    def has_permission(self, request, view):
+        cek = getattr(request.user, 'bisa_akses_modul', None)
+        return bool(callable(cek) and cek('akunting'))
+
+
+def boleh_akunting(request):
+    """Versi fungsi, dipakai view untuk memilih serializer."""
+    return Akunting().has_permission(request, None)
+
+
+def grup_yang_boleh(user):
+    """
+    Daftar id grup bahan yang boleh dilihat user ini, atau None kalau
+    tidak ada pembatasan.
+
+    None berarti "semua" -- perilaku lama. Begitu model user Anda punya
+    `grup_bahan_ids` (property, method, atau queryset), pembatasannya
+    langsung berlaku di SELURUH queryset inventory tanpa menyentuh satu
+    view pun.
+    """
+    nilai = _nilai_atribut(user, 'grup_bahan_ids', None)
+    if nilai is None:
+        return None
+    return {int(x) for x in nilai}

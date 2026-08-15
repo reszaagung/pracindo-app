@@ -3,18 +3,25 @@ import api from '@/utils/api'
 
 export function useExpense() {
   const daftarBelanja = ref([]);
-  const daftarAkunKas = ref([]);   // Untuk Sumber Dana (Aset)
-  const daftarAkunBeban = ref([]); // Untuk Kategori (Beban)
+  const daftarAkunKas = ref([]);
+  const daftarAkunBeban = ref([]);
+  const daftarEntitas = ref([]); 
   const isLoading = ref(false);
   const error = ref(null);
 
-  // Tarik data COA dari Backend
+  const fetchEntitas = async () => {
+    try {
+      const response = await api.get('auth/portal/');
+      daftarEntitas.value = response.data?.entitas || response.data?.results || response.data || [];
+    } catch (err) {
+      console.error("Gagal memuat data entitas:", err);
+    }
+  };
+
   const fetchDaftarAkun = async () => {
     try {
       const response = await api.get('akunting/akun/');
       let semuaAkun = response.data?.results || response.data?.data || response.data || [];
-
-      // Filter otomatis: Hanya ambil akun yang Boleh Diposting
       daftarAkunKas.value = semuaAkun.filter(a => a.tipe.toLowerCase() === 'aset' && a.boleh_diposting);
       daftarAkunBeban.value = semuaAkun.filter(a => a.tipe.toLowerCase() === 'beban' && a.boleh_diposting);
     } catch (err) {
@@ -22,7 +29,9 @@ export function useExpense() {
     }
   };
 
-  const fetchSemuaBelanja = async (entitasId = 1) => {
+  const fetchSemuaBelanja = async (entitasId) => {
+    if (!entitasId) return; 
+
     isLoading.value = true;
     error.value = null;
     try {
@@ -34,7 +43,7 @@ export function useExpense() {
 
       daftarBelanja.value = data.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
     } catch (err) {
-      console.error("Gagal mengambil data pengeluaran:", err);
+      console.error("Gagal mengambil data pengeluaran:", err.response?.data || err.message);
       error.value = "Gagal memuat data pengeluaran dari server.";
     } finally {
       isLoading.value = false;
@@ -43,8 +52,6 @@ export function useExpense() {
 
   const tambahPengeluaran = async (payload) => {
     const formData = new FormData();
-
-    // Mapping disesuaikan 100% dengan field di model PengeluaranKas
     formData.append('entitas', payload.entitas);
     formData.append('sumber_dana', payload.sumber_dana);
     formData.append('kategori_beban', payload.kategori_beban);
@@ -63,7 +70,6 @@ export function useExpense() {
 
       await fetchSemuaBelanja(payload.entitas);
 
-      // Otomatis trigger endpoint posting agar jurnal tercetak
       const idBaru = response.data.id;
       if (idBaru) {
         await api.post(`akunting/pengeluaran-kas/${idBaru}/posting/`);
@@ -72,21 +78,20 @@ export function useExpense() {
       return { success: true, data: response.data };
     } catch (err) {
       console.error("Error dari server:", err.response?.data);
-      return {
-        success: false,
-        message: err.response?.data?.detail || err.response?.data?.message || "Terjadi kesalahan saat menyimpan data."
-      };
+      let pesanError = "Terjadi kesalahan saat menyimpan data.";
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') pesanError = err.response.data;
+        else if (err.response.data.detail) pesanError = err.response.data.detail;
+        else if (err.response.data.message) pesanError = err.response.data.message;
+        else pesanError = JSON.stringify(err.response.data); 
+      }
+
+      return { success: false, message: pesanError };
     }
   };
 
   return {
-    daftarBelanja,
-    daftarAkunKas,
-    daftarAkunBeban,
-    isLoading,
-    error,
-    fetchDaftarAkun,
-    fetchSemuaBelanja,
-    tambahPengeluaran
+    daftarBelanja, daftarAkunKas, daftarAkunBeban, daftarEntitas,
+    isLoading, error, fetchEntitas, fetchDaftarAkun, fetchSemuaBelanja, tambahPengeluaran
   };
 }

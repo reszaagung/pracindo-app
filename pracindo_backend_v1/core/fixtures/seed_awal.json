@@ -1,0 +1,78 @@
+[
+{
+  "model": "core.grupbahan",
+  "pk": 1,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.195Z",
+    "diubah_pada": "2026-08-15T02:46:31.195Z",
+    "kode": "PT",
+    "nama": "PT sendiri"
+  }
+},
+{
+  "model": "core.grupbahan",
+  "pk": 2,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.204Z",
+    "diubah_pada": "2026-08-15T02:46:31.205Z",
+    "kode": "BERSAMA",
+    "nama": "CV, Agus, Marsini"
+  }
+},
+{
+  "model": "core.entitas",
+  "pk": 1,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.216Z",
+    "diubah_pada": "2026-08-15T02:46:31.216Z",
+    "kode": "PT",
+    "nama": "PT Pracindo",
+    "jenis": "BADAN_HUKUM",
+    "npwp": "",
+    "grup_bahan": 1,
+    "aktif": true
+  }
+},
+{
+  "model": "core.entitas",
+  "pk": 2,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.236Z",
+    "diubah_pada": "2026-08-15T02:46:31.236Z",
+    "kode": "CV",
+    "nama": "CV",
+    "jenis": "BADAN_HUKUM",
+    "npwp": "",
+    "grup_bahan": 2,
+    "aktif": true
+  }
+},
+{
+  "model": "core.entitas",
+  "pk": 3,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.243Z",
+    "diubah_pada": "2026-08-15T02:46:31.243Z",
+    "kode": "AGUS",
+    "nama": "Agus",
+    "jenis": "PERORANGAN",
+    "npwp": "",
+    "grup_bahan": 2,
+    "aktif": true
+  }
+},
+{
+  "model": "core.entitas",
+  "pk": 4,
+  "fields": {
+    "dibuat_pada": "2026-08-15T02:46:31.250Z",
+    "diubah_pada": "2026-08-15T02:46:31.250Z",
+    "kode": "MARSINI",
+    "nama": "Marsini",
+    "jenis": "PERORANGAN",
+    "npwp": "",
+    "grup_bahan": 2,
+    "aktif": true
+  }
+}
+]

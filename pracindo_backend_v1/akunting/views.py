@@ -38,6 +38,42 @@ from .serializers import (
     BuatPOSerializer,
 )
 
+def batasi_entitas(qs, request, field="entitas"):
+    """
+    Saring queryset menurut entitas yang boleh diakses pengguna.
+
+    GAGAL TERTUTUP, BUKAN MELEDAK
+
+        Versi sebelumnya langsung membaca u.entitas_diizinkan.exists().
+        AnonymousUser tidak punya atribut itu, jadi hasilnya AttributeError
+        -> 500 -- dan 500 tidak menyaring apa pun. Filter yang gagal
+        terbuka lebih berbahaya daripada filter yang menolak, karena
+        kegagalannya terlihat seperti kerusakan biasa, bukan kebocoran.
+
+    SATU QUERY, BUKAN DUA
+
+        `.exists()` lalu `.all()` menembak database dua kali untuk satu
+        keputusan, dan di antara keduanya daftarnya bisa berubah.
+        values_list() sekali sudah cukup untuk keduanya.
+
+    Daftar izin KOSONG berarti boleh semua -- perilaku yang sudah
+    berlaku, dan berbeda dari pengguna anonim yang tidak boleh apa pun.
+    """
+    u = getattr(request, "user", None)
+    if not (u and u.is_authenticated):
+        return qs.none()
+    if u.is_superuser:
+        return qs
+
+    rel = getattr(u, "entitas_diizinkan", None)
+    if rel is None:
+        return qs.none()
+
+    ids = list(rel.values_list("id", flat=True))
+    if not ids:
+        return qs
+    return qs.filter(**{f"{field}_id__in": ids})
+
 
 def _galat(e):
     isi = e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}
@@ -56,15 +92,23 @@ def _idem(request, prefix):
 
 
 class BasisAkunting(viewsets.ModelViewSet):
-    modul = 'akunting'
-    permission_classes = [AksesModul]
+    """
+    Induk viewset akunting. Menyaring queryset menurut entitas yang boleh
+    diakses pengguna.
+    """
 
     def filter_entitas(self, qs):
-        """Batasi ke entitas yang boleh dilihat pengguna."""
-        u = self.request.user
-        if u.is_superuser or not u.entitas_diizinkan.exists():
-            return qs
-        return qs.filter(entitas__in=u.entitas_diizinkan.all())
+        """
+        Dipanggil turunan yang membangun querysetnya sendiri.
+
+        Isinya didelegasikan ke batasi_entitas() supaya aturannya hanya
+        ada di satu tempat -- dua salinan aturan akses akan berbeda cepat
+        atau lambat, dan yang tertinggal biasanya yang lebih longgar.
+        """
+        return batasi_entitas(qs, self.request)
+
+    def get_queryset(self):
+        return self.filter_entitas(super().get_queryset())
 
 class AkunViewSet(viewsets.ReadOnlyModelViewSet):
     modul = 'akunting'
@@ -81,6 +125,7 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
     Read-only. Jurnal hanya lahir dari posting(), tidak pernah diketik.
     Koreksi lewat aksi balik.
     """
+    queryset = JurnalUmum.objects.none()
 
     modul = 'akunting'
     permission_classes = [AksesModul]
@@ -93,10 +138,7 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
               .select_related('entitas')
               .prefetch_related('baris__akun')
               .order_by('-tanggal', '-id'))
-        u = self.request.user
-        if u.is_superuser or not u.entitas_diizinkan.exists():
-            return qs
-        return qs.filter(entitas__in=u.entitas_diizinkan.all())
+        return batasi_entitas(qs, self.request)
 
     @action(detail=True, methods=['post'],
             permission_classes=[PunyaRole.dengan(Role.SUPERVISOR)])
@@ -121,16 +163,11 @@ class PurchaseOrderViewSet(BasisAkunting):
     search_fields = ['no_po', 'suplier__nama']
 
     def get_queryset(self):
-        qs = (PurchaseOrder.objects
-              .select_related('entitas', 'suplier', 'dibuat_oleh')
-              .prefetch_related(
-                  Prefetch('item',
-                           queryset=PurchaseOrderItem.objects.select_related('produk')),
-                  'penerimaan',
-              )
-              .dengan_total()
+        qs = (JurnalUmum.objects
+              .select_related('entitas')
+              .prefetch_related('baris__akun')
               .order_by('-tanggal', '-id'))
-        return self.filter_entitas(qs)
+        return batasi_entitas(qs, self.request)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -251,6 +288,7 @@ class PurchaseOrderViewSet(BasisAkunting):
 
 
 class FakturPembelianViewSet(BasisAkunting):
+    queryset = FakturPembelian.objects.none()
     serializer_class = FakturPembelianSerializer
     filterset_fields = ['entitas', 'suplier', 'status', 'jenis',
                         'tanggal_jatuh_tempo']

@@ -10,8 +10,6 @@
                 <h2 class="title">Registrasi Staff</h2>
                 <p class="subtitle">Lengkapi data diri Anda untuk meminta akses Pracindo ERP.</p>
             </div>
-
-            <!-- Panel Sukses -->
             <div v-if="sukses" class="alert alert-success animate-fade-in">
                 <i class="pi pi-check-circle icon-large"></i>
                 <h3>Pendaftaran Berhasil</h3>
@@ -20,11 +18,7 @@
                     <i class="pi pi-arrow-left"></i> Lanjut ke halaman Login
                 </router-link>
             </div>
-
-            <!-- Form Pendaftaran -->
             <form v-else class="register-form" @submit.prevent="handleDaftar">
-
-                <!-- Pesan Error -->
                 <div v-if="pesan" class="alert alert-error animate-fade-in">
                     <i class="pi pi-exclamation-triangle"></i>
                     <span>{{ pesan }}</span>
@@ -60,7 +54,7 @@
                         <label>Kata Sandi</label>
                         <div class="input-with-icon">
                             <input v-model="daftarForm.password" :type="showPassword ? 'text' : 'password'" required
-                                minlength="8" placeholder="Minimal 8 karakter" class="form-input"
+                                minlength="10" placeholder="Minimal 10 karakter" class="form-input"
                                 :disabled="sedangProses" />
                             <button type="button" class="btn-toggle" @click="showPassword = !showPassword"
                                 tabindex="-1">
@@ -72,7 +66,7 @@
                         <label>Konfirmasi Sandi</label>
                         <div class="input-with-icon">
                             <input v-model="daftarForm.password2" :type="showPassword2 ? 'text' : 'password'" required
-                                minlength="8" placeholder="Ketik ulang sandi" class="form-input"
+                                minlength="10" placeholder="Ketik ulang sandi" class="form-input"
                                 :disabled="sedangProses" />
                             <button type="button" class="btn-toggle" @click="showPassword2 = !showPassword2"
                                 tabindex="-1">
@@ -119,6 +113,11 @@ const pesan = ref('')
 const handleDaftar = async () => {
     pesan.value = ''
     sukses.value = ''
+
+    if (daftarForm.password.length < 10) {
+        pesan.value = 'Kata Sandi terlalu pendek. Masukkan minimal 10 karakter.'
+        return
+    }
 
     if (daftarForm.password !== daftarForm.password2) {
         pesan.value = 'Kata Sandi dan Konfirmasi Kata Sandi tidak cocok.'

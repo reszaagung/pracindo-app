@@ -1,50 +1,34 @@
 <template>
-    <div class="flex flex-col w-full animate-fade-in relative">
-        <!-- Header -->
-        <div class="mb-4 md:mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-0">
-            <div>
-                <p class="text-xs text-slate-400 mb-1">
-                    <router-link to="/" class="hover:text-slate-700 transition-colors">Dashboard</router-link> ›
-                    <router-link to="/accounting/input/po" class="hover:text-slate-700 transition-colors">Input
-                        Entry</router-link> › Buat PO
-                </p>
-                <div class="flex items-center gap-3">
-                    <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Create Procurement (PO)</h2>
-                    <span
-                        class="bg-slate-200 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wide">DRAFT</span>
-                </div>
-            </div>
+    <div class="flex flex-col w-full relative">
+        <div class="mb-4 md:mb-6 flex justify-between items-center gap-4 border-b border-slate-100 pb-4">
+            <span class="bg-slate-200 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wide">
+                DRAFT
+            </span>
 
-            <!-- Tombol Aksi di Kanan Atas -->
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-2">
                 <button type="button" @click="showModalProduct = true"
-                    class="px-3 py-2 md:px-4 md:py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] md:text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                    class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
                     <i class="pi pi-box"></i> Produk Baru
                 </button>
 
                 <button type="button" @click="showModalSupplier = true"
-                    class="px-3 py-2 md:px-4 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] md:text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                    class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
                     <i class="pi pi-users"></i> Suplier Baru
                 </button>
             </div>
         </div>
 
-        <!-- Notifikasi Error -->
         <div v-if="pesanError"
             class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium flex items-start gap-3">
             <i class="pi pi-exclamation-triangle mt-0.5"></i>
             <span>{{ pesanError }}</span>
         </div>
 
-        <form @submit.prevent="kirim"
-            class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.02)] w-full">
-
-            <!-- Entitas Pills -->
+        <form @submit.prevent="kirim" class="w-full">
             <div
                 class="flex flex-col md:flex-row md:items-center justify-between mb-6 border-b border-slate-100 pb-4 gap-4">
-                <h3 class="text-sm md:text-base font-bold text-slate-800">Entitas Pembeli</h3>
-                <div
-                    class="flex flex-wrap items-center bg-slate-50 p-1 rounded-xl border border-slate-200/60 shadow-inner">
+                <h3 class="text-sm font-bold text-slate-800">Entitas Pembeli</h3>
+                <div class="flex flex-wrap items-center bg-slate-50 p-1 rounded-xl border border-slate-200/60">
                     <button v-for="ent in listEntitas" :key="ent.id" type="button" @click="draf.entitas_id = ent.id"
                         :class="['px-4 md:px-6 py-2 text-[10px] md:text-xs font-bold rounded-lg transition-all duration-300 flex-1 md:flex-none text-center',
                             draf.entitas_id === ent.id
@@ -55,7 +39,6 @@
                 </div>
             </div>
 
-            <!-- Informasi Utama -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-4">
                 <div class="flex flex-col gap-2">
                     <label class="text-xs md:text-sm font-bold text-slate-700">No. PO (Preview)</label>
@@ -79,13 +62,11 @@
                 </div>
             </div>
 
-            <!-- Detail Item Pesanan -->
             <div class="w-full mb-8">
-                <!-- Header & Tombol dipindah ke luar table -->
                 <div class="flex justify-between items-center mb-4 pb-2 mt-2">
-                    <h3 class="text-sm md:text-base font-bold text-slate-800">Detail Item Pesanan</h3>
+                    <h3 class="text-sm font-bold text-slate-800">Detail Item Pesanan</h3>
                     <button type="button" @click="tambahItem"
-                        class="px-3 py-2 md:px-4 md:py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-[10px] md:text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                        class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
                         <i class="pi pi-plus"></i> Tambah Item
                     </button>
                 </div>
@@ -102,22 +83,15 @@
                     </thead>
                     <tbody class="block md:table-row-group">
                         <tr v-for="(item, index) in draf.items" :key="index"
-                            class="block md:table-row bg-white border border-slate-200 md:border-b md:border-x-0 md:border-t-0 md:border-slate-100 rounded-2xl md:rounded-none mb-6 md:mb-0 p-4 md:p-0 shadow-sm md:shadow-none relative transition-colors">
+                            class="block md:table-row bg-white border border-slate-200 md:border-b md:border-x-0 md:border-t-0 md:border-slate-100 rounded-2xl md:rounded-none mb-6 md:mb-0 p-4 md:p-0">
                             <td class="block md:table-cell md:py-3 md:px-2 mb-3 md:mb-0">
                                 <label class="md:hidden text-xs font-bold text-slate-500 mb-1 block">Produk</label>
                                 <Dropdown v-model="item.produk" :options="produkBerdasarkanSuplier" optionLabel="label"
+                                    appendTo="body"
                                     :placeholder="draf.suplier_id ? 'Pilih atau cari produk...' : 'Pilih supplier dulu'"
                                     class="w-full" :disabled="!draf.suplier_id" filter :pt="{
                                         root: { class: 'w-full h-[42px] md:h-[38px] bg-slate-50 border border-slate-200 rounded-lg flex items-center' }
                                     }">
-                                    <template #value="slotProps">
-                                        <span v-if="slotProps.value" class="text-sm text-slate-800">{{
-                                            slotProps.value.label }}</span>
-                                        <span v-else class="text-sm text-slate-400">{{ slotProps.placeholder }}</span>
-                                    </template>
-                                    <template #option="slotProps">
-                                        <span class="text-sm text-slate-700">{{ slotProps.option.label }}</span>
-                                    </template>
                                 </Dropdown>
                             </td>
                             <td class="block md:table-cell md:py-3 md:px-2 mb-3 md:mb-0">
@@ -127,8 +101,7 @@
                                     placeholder="0" />
                             </td>
                             <td class="block md:table-cell md:py-3 md:px-2 mb-4 md:mb-0">
-                                <label class="md:hidden text-xs font-bold text-slate-500 mb-1 block">Harga per Kg
-                                    (Rp)</label>
+                                <label class="md:hidden text-xs font-bold text-slate-500 mb-1 block">Harga / Kg</label>
                                 <div class="relative">
                                     <span
                                         class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">Rp</span>
@@ -146,8 +119,7 @@
                                 class="block md:table-cell md:py-3 md:px-2 text-center border-t border-slate-100 md:border-none mt-2 md:mt-0 pt-4 md:pt-0">
                                 <button type="button" @click="hapusItem(index)" :disabled="draf.items.length === 1"
                                     class="w-full md:w-8 h-10 md:h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex items-center justify-center gap-2 mx-auto">
-                                    <i class="pi pi-times md:text-sm"></i>
-                                    <span class="md:hidden font-bold text-sm text-red-500">Hapus Item</span>
+                                    <i class="pi pi-times"></i>
                                 </button>
                             </td>
                         </tr>
@@ -155,7 +127,6 @@
                 </table>
             </div>
 
-            <!-- Footer / Total Kalkulasi PPN -->
             <div
                 class="flex flex-col md:flex-row justify-between items-start bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100">
                 <div class="flex flex-col gap-2 w-full md:w-auto mb-6 md:mb-0">
@@ -166,9 +137,6 @@
                             Kenakan PPN 11% (Suplier PKP)
                         </label>
                     </div>
-                    <div class="text-slate-500 text-[11px] md:text-xs flex items-center gap-1.5">
-                        <i class="pi pi-info-circle"></i> Centang jika harga belum termasuk pajak.
-                    </div>
                 </div>
 
                 <div class="flex flex-col w-full md:w-64 gap-2 border-t md:border-none border-slate-200 pt-4 md:pt-0">
@@ -177,27 +145,32 @@
                         <span class="font-bold text-slate-700">Rp {{ (subtotalSemua).toLocaleString('id-ID') }}</span>
                     </div>
 
-                    <div v-if="draf.ppn_persen > 0" class="flex justify-between items-center text-sm animate-fade-in">
+                    <div v-if="draf.ppn_persen > 0" class="flex justify-between items-center text-sm">
                         <span class="font-semibold text-emerald-600">PPN (11%)</span>
                         <span class="font-bold text-emerald-700">Rp {{ (ppnNominal).toLocaleString('id-ID') }}</span>
                     </div>
 
                     <div class="flex justify-between items-end mt-2 pt-2 border-t border-slate-200">
-                        <span
-                            class="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Grand
-                            Total</span>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Grand Total</span>
                         <span class="text-2xl font-black text-slate-800">Rp {{ (grandTotal).toLocaleString('id-ID')
-                        }}</span>
+                            }}</span>
                     </div>
 
-                    <button type="submit" :disabled="sedangProses || periodeDitutup"
-                        class="mt-4 w-full justify-center px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed">
-                        <i class="pi" :class="sedangProses ? 'pi-spin pi-spinner' : 'pi-check-circle'"></i>
-                        {{ sedangProses ? 'Memproses...' : 'Terbitkan PO' }}
-                    </button>
+                    <div class="flex gap-2 mt-4 w-full">
+                        <button type="button" @click="$emit('close')"
+                            class="flex-1 py-3.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold rounded-xl transition-all">
+                            Batal
+                        </button>
+                        <button type="submit" :disabled="sedangProses || periodeDitutup"
+                            class="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex justify-center items-center gap-2 cursor-pointer disabled:cursor-not-allowed">
+                            <i class="pi" :class="sedangProses ? 'pi-spin pi-spinner' : 'pi-check-circle'"></i>
+                            Simpan
+                        </button>
+                    </div>
                 </div>
             </div>
         </form>
+
 
         <SupplierForm v-if="showModalSupplier" @close="showModalSupplier = false" @saved="handleSupplierSaved" />
         <ProductEntry v-if="showModalProduct" @close="showModalProduct = false" @saved="handleProductSaved" />
@@ -206,15 +179,13 @@
 
 <script setup>
 import { reactive, computed, ref, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import Dropdown from 'primevue/dropdown'
-
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
-
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
 
-const router = useRouter()
+const emit = defineEmits(['close', 'saved'])
+
 const {
     listEntitas, listSupplier, listProduk, sedangProses, pesanError, previewNomor,
     periodeDitutup, muatDataMaster, muatPreviewNomor, simpanPO, cekStatusPeriode
@@ -317,6 +288,7 @@ const kirim = async () => {
     pesanError.value = ''
     const kosong = draf.items.some(i => !i.produk?.id || !(Number(i.qty) > 0))
     if (kosong) {
+        alert('❌ Gagal: Setiap item butuh produk dan Qty minimal 1.')
         pesanError.value = 'Setiap item butuh produk (yang valid) dan Qty minimal 1.'
         return
     }
@@ -327,39 +299,27 @@ const kirim = async () => {
         tanggal: draf.tanggal,
         tanggal_kirim_diminta: draf.tanggal_kirim_diminta || null,
         catatan: draf.catatan,
+        pakai_ppn: draf.ppn_persen > 0, 
         ppn_persen: draf.ppn_persen || 0,
-        items: draf.items.map(i => ({
-            produk_id: i.produk.id,
-            qty_pesan: Number(i.qty) || 0,
-            harga_per_kg: Number(i.harga_per_kg) || 0,
-            satuan: i.produk.satuan_kode || 'kg',
-        })),
+        items: draf.items.map(i => {
+            const idSatuan = i.produk.satuan?.id || i.produk.satuan_id || i.produk.satuan;
+            return {
+                produk_id: i.produk.id,
+                qty_pesan: Number(i.qty) || 0,
+                harga_per_kg: Number(i.harga_per_kg) || 0,
+                satuan: idSatuan
+            }
+        }),
     }
 
     const hasil = await simpanPO(payload, true)
 
     if (hasil.success) {
-        router.push('/accounting/input/po')
+        alert("✅ Berhasil! Purchase Order baru telah tersimpan.")
+        emit('saved', hasil.data)
+    } else {
+        alert("❌ Gagal menyimpan PO:\n" + hasil.message)
+        pesanError.value = hasil.message
     }
 }
 </script>
-
-<style scoped>
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>
-
-ProcurementCreate.vue

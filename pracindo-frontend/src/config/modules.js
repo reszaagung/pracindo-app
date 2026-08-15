@@ -6,6 +6,9 @@
  * peran, hanya bagaimana modul itu tampil (ikon, label, menu, status siap).
  */
 
+// 1. IMPORT KONFIGURASI MENU DARI MODUL PRODUKSI
+import { produksiModul } from '@/features/produksi/uiConfig'
+
 export const MODUL = [
   {
     id: 'akunting',
@@ -67,22 +70,12 @@ export const MODUL = [
       { label: 'Suplier', rute: '/master/suplier' },
     ],
   },
-  {
-    id: 'produksi',
-    nama: 'Produksi',
-    ringkas: 'Sesi produksi rutin dan percobaan R&D',
-    ikon: 'produksi',
-    rute: '/produksi/mixing',
-    siap: true,
-    menu: [
-      { label: 'Pengadonan (Mixing)', rute: '/produksi/mixing' },
-      { label: 'Monitor Tangki', rute: '/produksi/tangki' },
-      { label: 'Daftar Sesi', rute: '/produksi/sesi' },
-      { label: 'Eksperimen R&D', rute: '/produksi/sesi/rnd' },
-      { label: 'Banding Batch', rute: '/produksi/sesi/banding' },
-      { label: 'Transfer Pool', rute: '/produksi/sesi/transfer-pool' }
-    ]
-  },
+
+  // ==========================================
+  // BLOK MODUL PRODUKSI (Modular)
+  // ==========================================
+  produksiModul,
+
   {
     id: 'logistik',
     nama: 'Logistik',

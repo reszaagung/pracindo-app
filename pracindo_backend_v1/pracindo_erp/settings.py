@@ -1,16 +1,14 @@
-"""
-Django settings — pracindo_erp
-Django 5.2 · PostgreSQL · DRF Token (ExpiringTokenAuthentication)
+﻿"""
+Django settings â€” pracindo_erp
+Django 5.2 Â· PostgreSQL Â· DRF Token (ExpiringTokenAuthentication)
 
 Semua rahasia dibaca dari .env. Jangan pernah menaruh nilai asli di file ini.
 """
 
 import os
-BUKA_API = os.environ.get('BUKA_API') == '1'
 from pathlib import Path
 
 from dotenv import load_dotenv
-
 # =========================================================
 # PATH & ENV
 # =========================================================
@@ -68,21 +66,22 @@ THIRD_PARTY_APPS = [
     'corsheaders',
     'django_filters',
     'drf_spectacular',
+    "django_extensions",
 ]
 
 LOCAL_APPS = [
-    # Lapis 1 — fondasi, tidak mengimpor app lokal lain
+    # Lapis 1 â€” fondasi, tidak mengimpor app lokal lain
     'core',
     'staff_user',
 
-    # Lapis 2 — master data & infrastruktur generik
+    # Lapis 2 â€” master data & infrastruktur generik
     'master',
     'dokumen',
 
     # Lapis 3
     'inventory',
 
-    # Lapis 4 — domain (kelompok sejajar, boleh saling panggil di dalam fungsi)
+    # Lapis 4 â€” domain (kelompok sejajar, boleh saling panggil di dalam fungsi)
     'akunting',
     'keuangan',
     'pajak',
@@ -104,7 +103,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    #'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -253,7 +252,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'ringkas': {
-            'format': '{asctime} {levelname} {name} · {message}',
+            'format': '{asctime} {levelname} {name} Â· {message}',
             'style': '{',
         },
     },

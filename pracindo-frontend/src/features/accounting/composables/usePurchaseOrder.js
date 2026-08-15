@@ -69,12 +69,15 @@ export function usePurchaseOrder() {
                 api.get('master/produk/', { params: { ringkas: 1, aktif: true, jenis: 'BAHAN_BAKU' } })
             ])
 
-            listEntitas.value = resPortal.data.entitas || []
-            listSupplier.value = resSupplier.data.results || resSupplier.data || []
-            listProduk.value = resProduk.data.results || resProduk.data || []
-            console.log("Cek Data Produk dari Backend:", listProduk.value)
+            console.log("📦 ISI MENTAH DATA PORTAL DARI DJANGO:", resPortal.data)
+            const pd = resPortal.data;
+            listEntitas.value = pd?.entitas || pd?.data?.entitas || pd?.results || pd?.data || (Array.isArray(pd) ? pd : []);
+
+            listSupplier.value = resSupplier.data?.results || resSupplier.data || [];
+            listProduk.value = resProduk.data?.results || resProduk.data || [];
 
         } catch (err) {
+            console.error("Gagal memuat master:", err)
             pesanError.value = bacaError(err, 'Gagal memuat data master (Entitas/Suplier/Produk).')
         } finally {
             sedangProses.value = false

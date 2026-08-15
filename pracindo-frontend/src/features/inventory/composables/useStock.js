@@ -1,11 +1,4 @@
 // src/features/inventory/composables/useStock.js
-// Kontrak diverifikasi langsung dari inventory/views.py & serializers.py
-// (pracindo_backend_v1) — lihat SPEK-BACKEND.md §3.x Inventory.
-//
-// nilai/harga_rata TIDAK ADA di serializer default (bukan null — memang
-// tidak dideklarasikan) kecuali diminta dengan ?sisi=akunting DAN
-// penggunanya benar boleh masuk modul akunting. Untuk lapis POOL, field
-// itu tetap muncul tapi selalu null (POOL tidak pernah punya pemilik).
 
 import { ref } from 'vue'
 import api from '@/utils/api'
@@ -22,10 +15,18 @@ export function useStock() {
         sedangProses.value = true
         galat.value = ''
         try {
-            const { data } = await api.get('inventory/stok/', { params })
-            daftarStok.value = data.results || data || []
+            // Arahkan ke endpoint spesifik berdasarkan Lapis yang dipilih
+            if (params.lapis === 'ENTITAS') {
+                const { data } = await api.get('inventory/mutasi/rekap/', { params })
+                daftarStok.value = data.entitas || []
+            } else if (params.lapis === 'POOL') {
+                const { data } = await api.get('inventory/pool/', { params })
+                daftarStok.value = data.rincian || []
+            } else {
+                daftarStok.value = []
+            }
         } catch (err) {
-            galat.value = bacaError(err, 'Gagal memuat data stok.')
+            galat.value = bacaError(err, 'Gagal memuat data persediaan stok.')
         } finally {
             sedangProses.value = false
         }

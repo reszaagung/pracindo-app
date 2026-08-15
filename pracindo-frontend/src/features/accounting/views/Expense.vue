@@ -1,17 +1,18 @@
 <script setup>
-import { onMounted, ref, reactive } from 'vue';
+import { onMounted, ref, reactive, watch } from 'vue';
 import { useExpense } from '@/features/accounting/composables/useExpense';
 
 const {
-  daftarBelanja, daftarAkunKas, daftarAkunBeban,
-  isLoading, error, fetchDaftarAkun, fetchSemuaBelanja, tambahPengeluaran
+  daftarBelanja, daftarAkunKas, daftarAkunBeban, daftarEntitas,
+  isLoading, error, fetchEntitas, fetchDaftarAkun, fetchSemuaBelanja, tambahPengeluaran
 } = useExpense();
 
 const showModalTambah = ref(false);
 const isSubmitting = ref(false);
+const filterEntitasId = ref(''); 
 
 const form = reactive({
-  entitas: 1, // Default ID PT (Sesuaikan dengan ID di database Anda jika berbeda)
+  entitas: '',
   sumber_dana: '',
   kategori_beban: '',
   keterangan: '',
@@ -21,19 +22,33 @@ const form = reactive({
 });
 
 onMounted(async () => {
-  await fetchDaftarAkun();
-  await fetchSemuaBelanja(form.entitas);
+  await Promise.all([
+    fetchEntitas(),
+    fetchDaftarAkun()
+  ]);
+
+  if (daftarEntitas.value.length > 0) {
+    const defaultEntitasId = daftarEntitas.value[0].id;
+    filterEntitasId.value = defaultEntitasId;
+    form.entitas = defaultEntitasId;
+
+    await fetchSemuaBelanja(defaultEntitasId);
+  }
+});
+
+watch(() => form.entitas, async (newVal) => {
+  if (newVal && newVal !== filterEntitasId.value) {
+    filterEntitasId.value = newVal;
+    await fetchSemuaBelanja(newVal);
+  }
 });
 
 const formatRupiah = (angka) => {
   return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
+    style: 'currency', currency: 'IDR', minimumFractionDigits: 0
   }).format(angka);
 };
 
-// Memberikan warna badge acak/tetap berdasarkan nama kategori beban
 const getCategoryBadge = (kategoriNama) => {
   const name = String(kategoriNama || '').toUpperCase();
   if (name.includes('OPERASIONAL') || name.includes('TRANSPORTASI')) return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -48,20 +63,18 @@ const handleFileChange = (e) => {
 };
 
 const handleSimpan = async () => {
-  if (!form.sumber_dana || !form.kategori_beban || !form.keterangan || !form.nominal || !form.pemohon) {
+  if (!form.entitas || !form.sumber_dana || !form.kategori_beban || !form.keterangan || !form.nominal || !form.pemohon) {
     alert('Harap lengkapi field wajib dan pilih akun sumber dana/beban!');
     return;
   }
 
   isSubmitting.value = true;
-
   const result = await tambahPengeluaran(form);
 
   if (result.success) {
     alert("Data pengeluaran berhasil dicatat dan dijurnal secara otomatis!");
     showModalTambah.value = false;
 
-    // Reset form state
     form.sumber_dana = '';
     form.kategori_beban = '';
     form.keterangan = '';
@@ -78,7 +91,6 @@ const handleSimpan = async () => {
 
 <template>
   <div class="space-y-6 animate-fade-in text-slate-700 p-2 sm:p-4 w-full overflow-hidden max-w-full">
-    <!-- Header -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <h2 class="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
@@ -94,14 +106,12 @@ const handleSimpan = async () => {
       </button>
     </div>
 
-    <!-- Error Alert -->
     <div v-if="error"
       class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl flex items-center gap-3 shadow-sm">
       <i class="pi pi-exclamation-circle text-lg"></i>
       <span class="text-sm font-medium">{{ error }}</span>
     </div>
 
-    <!-- Table Section -->
     <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm w-full">
       <div class="overflow-x-auto custom-scrollbar pb-2">
         <table class="w-full text-left text-sm border-collapse whitespace-nowrap">
@@ -146,15 +156,14 @@ const handleSimpan = async () => {
                   <span class="text-[11px] font-medium text-slate-500 flex items-center gap-1 mt-0.5">
                     <i class="pi pi-calendar text-[10px]"></i>
                     {{ new Date(item.tanggal || Date.now()).toLocaleDateString('id-ID', {
-                      day: '2-digit', month: 'short', year: 'numeric'
-                    }) }}
+                      day: '2-digit', month:
+                        'short', year: 'numeric' }) }}
                   </span>
                 </td>
 
                 <td class="py-4 px-3 sm:px-4 text-center">
                   <span
-                    :class="item.entitas_kode === 'PT' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-purple-100 text-purple-700 border-purple-200'"
-                    class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide border inline-block">
+                    class="bg-slate-100 text-slate-700 border-slate-200 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide border inline-block">
                     {{ item.entitas_kode || 'UMUM' }}
                   </span>
                 </td>
@@ -189,7 +198,6 @@ const handleSimpan = async () => {
                 </td>
 
                 <td class="py-4 px-3 sm:px-4 text-center">
-                  <!-- Jika backend merender nested dokumen_url, sesuaikan propertinya (misal: item.dokumen_url) -->
                   <a v-if="item.dokumen" :href="item.dokumen" target="_blank"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors border border-blue-100"
                     title="Lihat Nota">
@@ -208,7 +216,6 @@ const handleSimpan = async () => {
       </div>
     </div>
 
-    <!-- Modal Tambah Pengeluaran -->
     <div v-if="showModalTambah"
       class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in"
       @click.self="showModalTambah = false">
@@ -223,28 +230,21 @@ const handleSimpan = async () => {
 
         <div class="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar">
 
-          <!-- Entitas -->
           <div class="flex flex-col gap-1.5 mb-1">
             <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Gunakan Dompet Entitas</label>
-            <div class="flex gap-2 sm:gap-4">
-              <label class="flex-1 cursor-pointer">
-                <input type="radio" v-model="form.entitas" :value="1" @change="fetchSemuaBelanja(1)"
-                  class="peer sr-only" />
+            <div class="flex gap-2 sm:gap-4 flex-wrap">
+              <label v-for="ent in daftarEntitas" :key="ent.id" class="flex-1 cursor-pointer min-w-[100px]">
+                <input type="radio" v-model="form.entitas" :value="ent.id" class="peer sr-only" />
                 <div
-                  class="p-2.5 sm:p-3 text-center rounded-xl border-2 border-slate-100 font-bold text-xs sm:text-sm text-slate-500 peer-checked:border-blue-500 peer-checked:bg-blue-50 peer-checked:text-blue-700 transition-all">
-                  🏢 PT</div>
-              </label>
-              <label class="flex-1 cursor-pointer">
-                <input type="radio" v-model="form.entitas" :value="2" @change="fetchSemuaBelanja(2)"
-                  class="peer sr-only" />
-                <div
-                  class="p-2.5 sm:p-3 text-center rounded-xl border-2 border-slate-100 font-bold text-xs sm:text-sm text-slate-500 peer-checked:border-purple-500 peer-checked:bg-purple-50 peer-checked:text-purple-700 transition-all">
-                  🏭 CV</div>
+                  class="p-2.5 sm:p-3 text-center rounded-xl border-2 border-slate-100 font-bold text-xs sm:text-sm text-slate-500 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition-all uppercase">
+                  🏢 {{ ent.kode }}
+                </div>
               </label>
             </div>
+            <p v-if="daftarEntitas.length === 0" class="text-[10px] text-red-500 italic mt-1">Mengambil data entitas...
+            </p>
           </div>
 
-          <!-- SUMBER DANA (ASET) -->
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Sumber Dana (Rekening/Kas)</label>
             <select v-model="form.sumber_dana"
@@ -256,7 +256,6 @@ const handleSimpan = async () => {
             </select>
           </div>
 
-          <!-- KATEGORI (BEBAN) -->
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Kategori Beban</label>
             <select v-model="form.kategori_beban"
@@ -268,7 +267,6 @@ const handleSimpan = async () => {
             </select>
           </div>
 
-          <!-- KETERANGAN -->
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Keterangan</label>
             <input type="text" v-model="form.keterangan" placeholder="Contoh: Beli bensin mobil box..."
@@ -289,7 +287,6 @@ const handleSimpan = async () => {
             </div>
           </div>
 
-          <!-- FILE UPLOAD -->
           <div class="flex flex-col gap-1.5 pt-3 border-t border-slate-100">
             <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Upload Nota / Struk
               (Opsional)</label>

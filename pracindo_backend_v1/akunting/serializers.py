@@ -218,11 +218,14 @@ class BayarSerializer(serializers.Serializer):
 
 class UangMukaSerializer(serializers.ModelSerializer):
     suplier_nama = serializers.CharField(source='suplier.nama', read_only=True)
+    entitas_kode = serializers.CharField(source='entitas.kode', read_only=True)
 
     class Meta:
         model = UangMukaSuplier
-        fields = ['id', 'entitas', 'suplier', 'suplier_nama', 'tanggal',
-                  'nominal', 'sisa', 'referensi']
+        fields = ['id', 'entitas', 'entitas_kode', 'suplier', 'suplier_nama',
+                  'tanggal', 'nominal', 'sisa', 'referensi',
+                  'dibuat_pada', 'diubah_pada']
+        read_only_fields = ['sisa', 'dibuat_pada', 'diubah_pada']     
 
 
 
@@ -230,14 +233,12 @@ class UangMukaSerializer(serializers.ModelSerializer):
 class FakturPenjualanSerializer(serializers.ModelSerializer):
     pelanggan_nama = serializers.CharField(source='pelanggan.nama', read_only=True)
     entitas_kode = serializers.CharField(source='entitas.kode', read_only=True)
-    delivery_order_nomor = serializers.CharField(source='delivery_order.nomor_do', read_only=True, default=None)
 
     class Meta:
         model = FakturPenjualan
         fields = [
             'id', 'no_internal', 'nomor_faktur', 'entitas', 'entitas_kode',
-            'pelanggan', 'pelanggan_nama', 'delivery_order', 'delivery_order_nomor',
-            'tanggal_faktur', 'termin_hari', 'tanggal_jatuh_tempo',
+            'pelanggan', 'pelanggan_nama', 'tanggal_faktur', 'termin_hari', 'tanggal_jatuh_tempo',
             'total_tagihan', 'total_dibayar', 'sisa_piutang', 'status', 'catatan'
         ]
         read_only_fields = ['no_internal', 'tanggal_jatuh_tempo', 'total_dibayar', 'sisa_piutang', 'status']

@@ -3,6 +3,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useGuards } from './guards'
 import ModulLayout from '@/components/layout/ModulLayout.vue'
 
+// 1. IMPORT RUTE MODULAR DARI FITUR PRODUKSI
+import ruteProduksi from '@/features/produksi/routes.js'
+
 const routes = [
   {
     path: '/login',
@@ -263,45 +266,8 @@ const routes = [
   // ==========================================
   // BLOK PRODUKSI
   // ==========================================
-  {
-    path: '/produksi',
-    meta: { perluLogin: true, modul: 'produksi' },
-    component: () => import('@/features/produksi/layout/SessionLayout.vue'),
-    redirect: '/produksi/mixing',
-    children: [
-      {
-        path: 'mixing',
-        name: 'produksi-mixing',
-        component: () => import('@/features/produksi/views/FormMixing.vue')
-      },
-      {
-        path: 'tangki',
-        name: 'produksi-tangki',
-        component: () => import('@/features/produksi/views/TankMonitoring.vue')
-      },
-      {
-        path: 'sesi',
-        name: 'produksi-sesi',
-        component: () => import('@/features/produksi/views/DaftarSesi.vue')
-      },
-      {
-        path: 'sesi/transfer-pool',
-        name: 'produksi-sesi-transfer',
-        component: () => import('@/features/produksi/views/FormPoolRaw.vue')
-      },
-      // --- PENAMBAHAN RUTE BARU AGAR MENU TIDAK 404 ---
-      {
-        path: 'sesi/rnd',
-        name: 'produksi-sesi-rnd',
-        component: () => import('@/features/produksi/views/FormMixing.vue')
-      },
-      {
-        path: 'sesi/banding',
-        name: 'produksi-sesi-banding',
-        component: () => import('@/features/produksi/views/DaftarSesi.vue')
-      }
-    ]
-  },
+  // 2. BONGKAR ARRAY DARI ruteProduksi KE DALAM SINI
+  ...ruteProduksi,
 
   // ==========================================
   // BLOK LAIN-LAIN

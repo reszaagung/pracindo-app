@@ -49,9 +49,7 @@
                 <div class="flex flex-col gap-2">
                     <label class="text-xs font-bold text-slate-700">Satuan <span class="text-red-500">*</span></label>
                     <Dropdown v-model="form.satuan_id" :options="daftarSatuan" optionLabel="nama" optionValue="id"
-                        placeholder="Pilih Satuan" :loading="loadingMaster" class="w-full" :pt="{
-                            root: { class: 'bg-slate-50 border border-slate-200 rounded-xl h-[38px] flex items-center' }
-                        }" />
+                        appendTo="body" placeholder="Pilih Satuan" :loading="loadingMaster" class="w-full" />
                 </div>
             </div>
             <div class="flex flex-col gap-2">
@@ -71,7 +69,7 @@
                         class="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50">
                         Batal
                     </button>
-                    <button type="submit" :disabled="isSubmitting"
+                    <button type="submit" :disabled="isSubmitting || daftarSatuan.length === 0"
                         class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-sm font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2">
                         <i class="pi" :class="isSubmitting ? 'pi-spin pi-spinner' : 'pi-save'"></i>
                         Simpan
@@ -88,7 +86,6 @@ import Dialog from 'primevue/dialog'
 import Dropdown from 'primevue/dropdown'
 import MultiSelect from 'primevue/multiselect'
 import api from '@/utils/api'
-import { bacaError } from '@/utils/error'
 
 import { useProduct } from '@/features/master/composables/useProduct'
 const { addProduk } = useProduct()
@@ -98,16 +95,8 @@ const isSubmitting = ref(false)
 const loadingMaster = ref(false)
 const errorMsg = ref('')
 
-const daftarSatuan = ref([
-    { nama: 'Pcs (Pieces)', kode: 'PCS' },
-    { nama: 'Kg (Kilogram)', kode: 'KG' },
-    { nama: 'Gr (Gram)', kode: 'GR' },
-    { nama: 'Ltr (Liter)', kode: 'LTR' },
-    { nama: 'Mtr (Meter)', kode: 'MTR' },
-    { nama: 'Box / Dus', kode: 'BOX' },
-    { nama: 'Roll', kode: 'ROLL' },
-    { nama: 'Zak', kode: 'ZAK' }
-])
+const daftarSatuan = ref([])
+const listSuplier = ref([])
 
 const opsiJenis = [
     { label: 'Bahan Baku', value: 'BAHAN_BAKU' },
@@ -115,8 +104,6 @@ const opsiJenis = [
     { label: 'Kemasan', value: 'KEMASAN' },
     { label: 'Lain-lain', value: 'LAIN' }
 ]
-
-const listSuplier = ref([])
 
 const form = reactive({
     kode: '',
@@ -130,33 +117,51 @@ const form = reactive({
 const loadDataMaster = async () => {
     loadingMaster.value = true
     try {
-        const [resSat, resSup] = await Promise.all([
+        const [resSat, resSup] = await Promise.allSettled([
             api.get('master/satuan/'),
             api.get('master/suplier/', { params: { ringkas: 1, aktif: true } })
         ])
-        const satuanDariServer = resSat.data.results || resSat.data || []
-        if (satuanDariServer.length > 0) {
-            daftarSatuan.value = satuanDariServer
+
+        if (resSat.status === 'fulfilled') {
+            const satuanDariServer = resSat.value.data.results || resSat.value.data || []
+            if (satuanDariServer.length > 0) {
+                daftarSatuan.value = satuanDariServer.map(s => ({
+                    id: s.id, 
+                    nama: s.nama || s.kode,
+                    kode: s.kode
+                }))
+            } else {
+                errorMsg.value = 'Data Master Satuan di database masih kosong. Silakan tambahkan data satuan melalui Django Admin.'
+            }
         }
-        listSuplier.value = resSup.data.results || resSup.data || []
+
+        if (resSup.status === 'fulfilled') {
+            listSuplier.value = resSup.value.data.results || resSup.value.data || []
+        }
         if (daftarSatuan.value.length > 0) {
-            const satuanKg = daftarSatuan.value.find(s => s.kode && s.kode.toLowerCase() === 'kg')
-            form.satuan_id = satuanKg ? (satuanKg.id || satuanKg.kode) : (daftarSatuan.value[0].id || daftarSatuan.value[0].kode)
+            const satuanKg = daftarSatuan.value.find(s =>
+                String(s.kode).toLowerCase() === 'kg' || String(s.nama).toLowerCase().includes('kg')
+            )
+            form.satuan_id = satuanKg ? satuanKg.id : daftarSatuan.value[0].id
         }
     } catch (err) {
-        errorMsg.value = bacaError(err, 'Gagal memuat data master (Satuan/Suplier) dari server.')
+        console.error('Gagal memuat master:', err)
+        errorMsg.value = 'Gagal terhubung ke database. Coba muat ulang halaman.'
     } finally {
         loadingMaster.value = false
     }
 }
+
 const simpanProduk = async () => {
     if (!form.satuan_id) {
+        alert('❌ Gagal: Satuan wajib dipilih.')
         errorMsg.value = 'Satuan wajib dipilih.'
         return
     }
 
     isSubmitting.value = true
     errorMsg.value = ''
+
     const payload = {
         kode: form.kode.toUpperCase(),
         nama: form.nama,
@@ -165,11 +170,14 @@ const simpanProduk = async () => {
         suplier: form.suplier_ids,
         aktif: form.aktif
     }
+
     const result = await addProduk(payload)
 
     if (result.success) {
+        alert("✅ Produk baru berhasil ditambahkan!")
         emit('saved', result.data)
     } else {
+        alert("❌ Gagal menyimpan produk:\n" + result.message)
         errorMsg.value = result.message || 'Terjadi kesalahan saat menyimpan produk.'
     }
 

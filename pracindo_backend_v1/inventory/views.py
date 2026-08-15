@@ -1,458 +1,406 @@
 """
-Endpoint persediaan — inventory/views.py
+Endpoint Inventory (Buku Uang & Klaim) — inventory/views.py
 
-Semua logika bisnis ada di services.py. View memvalidasi payload,
-memeriksa hak, dan meneruskan. Tidak ada perhitungan qty/nilai di sini.
+PEMETAAN GALAT KE HTTP
 
-Stok punya DUA tampilan dari objek yang sama, dipilih lewat ?sisi=:
-    default          -> tanpa nilai rupiah
-    ?sisi=akunting   -> dengan nilai, hanya untuk yang punya akses akunting
+    GalatInventory     422  payload tidak masuk akal
+    KonflikSaldo       409  payload masuk akal, kenyataan menolak
+    InvariantMelenceng 500  rupiah tercipta/menguap, transaksi rollback
 
-FILTER
-    filterset_fields sengaja TIDAK dipakai. Kalau DjangoFilterBackend
-    belum terpasang di DEFAULT_FILTER_BACKENDS, atribut itu diabaikan
-    diam-diam dan endpoint mengembalikan SEMUA baris -- termasuk grup
-    milik entitas lain. Filter ditulis eksplisit di get_queryset().
+    Menangkap semuanya sebagai 400 membuat frontend tidak bisa
+    membedakan "perbaiki isian" dari "hubungi admin", dan menyembunyikan
+    pelanggaran invariant di antara galat isian biasa.
 
-POSISI KLAIM
-    Tidak punya versi "gudang". Setiap kolomnya rupiah -- setor, ambil,
-    rugi, bersih -- jadi tidak ada yang tersisa untuk ditampilkan setelah
-    disaring. Menolak lebih jujur daripada mengembalikan objek kosong.
-    Dulu endpoint ini terbuka untuk siapa pun yang punya akses modul
-    inventory, termasuk staff gudang.
+ENTITAS DAN PRODUK HANYA DIBACA
+
+    CRUD-nya di app core dan master. Endpoint di sini hanya memberi
+    daftar untuk selector -- dua pintu tulis untuk satu master berarti
+    dua tempat yang bisa lupa aturan yang dipegang yang lain.
 """
-import uuid
-
-from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
-from staff_user.models import Role
-from staff_user.permissions import AksesModul, HanyaSupervisor, PunyaRole
+from core.models import CounterDokumen, Entitas
+from master.models import Produk
 
+from . import serializers as ser
 from . import services
 from .models import (
-    Kemasan, MutasiStok, NilaiEkuivalen, PosisiKlaim, Stok, Tangki,
+    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoPool, StatusDokumen, rp,
 )
-from .serializers import (
-    KemasanSerializer, KlaimHasilSerializer, KlaimKemasanSerializer,
-    LunasSerializer, LuruskanSerializer, MutasiKlaimSerializer,
-    MutasiStokAkuntingSerializer, MutasiStokSerializer,
-    NilaiEkuivalenSerializer, OpnameSerializer, PosisiKlaimSerializer,
-    SetorKePoolSerializer, StokAkuntingDetailSerializer,
-    StokAkuntingSerializer, StokGudangDetailSerializer,
-    StokGudangListRinciSerializer, StokGudangSerializer,
-    TangkiSerializer,
-)
+from .permissions import AksesInventory, SupervisorInventory
 
-GudangProduksi = PunyaRole.dengan(Role.GUDANG, Role.PRODUKSI)
-
-# =========================================================
-# SAKLAR PENGEMBANGAN — JANGAN AKTIF DI PRODUKSI
-# =========================================================
-# BUKA_API=1 mengosongkan permission_classes di seluruh modul ini.
-# List kosong berarti loop pemeriksaan di check_permissions() tidak
-# pernah berjalan -- lebih bersih daripada [AllowAny], yang tetap
-# memanggil has_permission() satu per satu.
-#
-# Autentikasi TIDAK ikut dimatikan: request.user tetap AnonymousUser
-# kalau tidak login, jadi _akunting() tetap False dan layar tetap
-# menampilkan versi tanpa rupiah. Itu disengaja -- penyaringan rupiah
-# justru paling perlu diuji dalam kondisi ini.
-#
-# Yang hilang: atribusi. POST /setor-ke-pool/ menulis ke MutasiKlaim
-# yang append-only, jadi setoran anonim tidak bisa ditelusuri dan tidak
-# bisa dihapus. Untuk membaca selama pengembangan, aman. Untuk menulis,
-# sebaiknya tetap login.
-BUKA = getattr(settings, 'BUKA_API', False)
-
-IZIN_BACA = [] if BUKA else [AksesModul]
-IZIN_TULIS = [] if BUKA else [GudangProduksi]
-IZIN_SUPERVISOR = [] if BUKA else [HanyaSupervisor]
+MODUL = "inventory"
 
 
 def _galat(e):
-    if hasattr(e, 'message_dict'):
-        isi = e.message_dict
-    elif hasattr(e, 'messages'):
-        isi = {'detail': ' '.join(e.messages)}
-    else:
-        isi = {'detail': str(e)}
-    return Response(isi, status=status.HTTP_400_BAD_REQUEST)
+    """
+    Ubah galat service jadi respons HTTP yang membawa kode & pesan.
+
+    Menerima ValidationError Django biasa juga -- CounterDokumen,
+    PeriodeAkuntansi, dan model clean() melemparnya, dan kalau tidak
+    ditangkap di sini semuanya muncul sebagai 500 yang tidak bisa
+    dibedakan dari pelanggaran invariant.
+    """
+    kode = e.__class__.__name__
+    pesan = (getattr(e, "message", None)
+             or (e.messages[0] if getattr(e, "messages", None) else str(e)))
+    return Response({"detail": pesan, "kode": kode, "pesan": pesan},
+                    status=getattr(e, "http", 400))
 
 
-def _akunting(request):
-    cek = getattr(request.user, 'bisa_akses_modul', None)
-    return bool(callable(cek) and cek('akunting'))
+# Galat yang boleh dipetakan ke 4xx. Sisanya sengaja dibiarkan menjadi
+# 500 -- exception tak terduga tidak boleh disamarkan sebagai galat isian.
+GALAT_TERTANGANI = (services.GalatInventory, DjangoValidationError)
 
 
-def _tolak_non_akunting():
-    return Response(
-        {'detail': 'Seluruh kolom di sini bernilai rupiah. Butuh akses '
-                   'modul akunting.'},
-        status=status.HTTP_403_FORBIDDEN)
+# ==========================================================
+# REFERENSI — READ ONLY
+# ==========================================================
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def entitas_list(request):
+    """GET /entitas/ — selector. CRUD entitas ada di app core."""
+    qs = Entitas.objects.select_related("grup_bahan").order_by("kode")
+    if request.query_params.get("aktif") in ("true", "1", "True"):
+        qs = qs.filter(aktif=True)
+    if request.query_params.get("grup"):
+        qs = qs.filter(grup_bahan_id=request.query_params["grup"])
+    return Response(ser.EntitasRingkasSerializer(qs, many=True).data)
 
 
-class BasisInventory:
-    modul = 'inventory'
-    permission_classes = IZIN_BACA
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def produk_list(request):
+    """GET /produk/ — selector. CRUD produk ada di app master."""
+    qs = Produk.objects.order_by("kode")
+    q = request.query_params.get("q")
+    if q:
+        qs = qs.filter(nama__icontains=q)
+    return Response(ser.ProdukRingkasSerializer(qs[:200], many=True).data)
 
 
-# =========================================================
-# STOK
-# =========================================================
-
-class StokViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-    # JANGAN deklarasikan permission_classes di sini. Atribut kelas anak
-    # MENIMPA milik BasisInventory, jadi melonggarkan induk tidak ada
-    # efeknya. Itu yang membuat endpoint ini 403 padahal induknya sudah
-    # dibuka -- dan GudangProduksi justru lebih ketat dari AksesModul
-    # karena menuntut user.role tepat GUDANG atau PRODUKSI.
-
-    def get_queryset(self):
-        qs = (Stok.objects.select_related('produk', 'grup_bahan', 'tangki')
-              .order_by('lapis', 'produk__kode'))
-
-        
-        p = self.request.query_params
-        if p.get('lapis'):
-            qs = qs.filter(lapis=p['lapis'])
-        if p.get('grup'):
-            qs = qs.filter(grup_bahan_id=p['grup'])
-        if p.get('produk'):
-            qs = qs.filter(produk_id=p['produk'])
-        if p.get('tangki'):
-            qs = qs.filter(tangki_id=p['tangki'])
-        if p.get('ada_isi') == '1':
-            qs = qs.filter(qty__gt=0)
-        # `rinci=1` menyertakan kepemilikan di DAFTAR. Prefetch-nya wajib:
-        # tanpa ini satu baris stok = satu query tambahan.
-        if self.action == 'retrieve' or p.get('rinci') == '1':
-            qs = qs.prefetch_related('kepemilikan__entitas')
-        return qs
-
-    def _sisi_akunting(self):
-        return (self.request.query_params.get('sisi') == 'akunting'
-                and _akunting(self.request))
-
-    def get_serializer_class(self):
-        ak = self._sisi_akunting()
-        if self.action == 'retrieve':
-            return (StokAkuntingDetailSerializer if ak
-                    else StokGudangDetailSerializer)
-        if self.request.query_params.get('rinci') == '1':
-            # Rincian kepemilikan hanya tersedia tanpa rupiah. Yang butuh
-            # nilai per entitas memakai endpoint detail.
-            return StokGudangListRinciSerializer
-        return StokAkuntingSerializer if ak else StokGudangSerializer
-
-
-class TangkiViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-    serializer_class = TangkiSerializer
+class KemasanViewSet(viewsets.ModelViewSet):
+    modul = MODUL
+    queryset = Kemasan.objects.all().order_by("nama")
+    serializer_class = ser.KemasanSerializer
+    permission_classes = [AksesInventory]
 
     def get_queryset(self):
-        qs = (Tangki.objects.select_related('grup_bahan', 'produk_terisi')
-              .order_by('kode'))
-        p = self.request.query_params
-        if p.get('grup'):
-            qs = qs.filter(grup_bahan_id=p['grup'])
-        if p.get('aktif') in ('1', 'true', 'True'):
+        qs = super().get_queryset()
+        if self.request.query_params.get("aktif") in ("true", "1", "True"):
             qs = qs.filter(aktif=True)
         return qs
 
 
-class KemasanViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-    """Daftar kemasan yang tersedia untuk satu produk curah."""
-    serializer_class = KemasanSerializer
+# ==========================================================
+# PEMBELIAN
+# ==========================================================
+
+class PembelianViewSet(viewsets.ModelViewSet):
+    modul = MODUL
+    queryset = Pembelian.objects.select_related(
+        "entitas", "grup_bahan", "produk").order_by("-waktu", "-id")
+    serializer_class = ser.PembelianSerializer
+    permission_classes = [AksesInventory]
+
+    def get_permissions(self):
+        # VOID membalikkan uang yang sudah tercatat. Itu keputusan
+        # supervisor, bukan operator input.
+        if self.action == "void":
+            return [AksesInventory(), SupervisorInventory()]
+        return super().get_permissions()
 
     def get_queryset(self):
-        qs = (Kemasan.objects.filter(aktif=True)
-              .select_related('produk_curah', 'produk_kemasan')
-              .order_by('produk_curah__kode', 'isi'))
-        curah = self.request.query_params.get('curah')
-        if curah:
-            qs = qs.filter(produk_curah_id=curah)
-        return qs
-
-
-class MutasiStokViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-
-    def get_queryset(self):
-        qs = (MutasiStok.objects.select_related('stok__produk')
-              .order_by('-tanggal', '-id'))
+        qs = super().get_queryset()
         p = self.request.query_params
-        if p.get('stok'):
-            qs = qs.filter(stok_id=p['stok'])
-        if p.get('jenis'):
-            qs = qs.filter(jenis=p['jenis'])
-        if p.get('referensi'):
-            qs = qs.filter(referensi=p['referensi'])
+        for param, field in (("entitas", "entitas_id"),
+                             ("produk", "produk_id"),
+                             ("grup", "grup_bahan_id"),
+                             ("status", "status"),
+                             ("sumber", "sumber")):
+            if p.get(param):
+                qs = qs.filter(**{field: p[param]})
+        if p.get("no_po"):
+            qs = qs.filter(no_po__icontains=p["no_po"])
+        if p.get("dari"):
+            qs = qs.filter(tanggal__gte=p["dari"])
+        if p.get("sampai"):
+            qs = qs.filter(tanggal__lte=p["sampai"])
         return qs
 
-    def get_serializer_class(self):
-        return (MutasiStokAkuntingSerializer if _akunting(self.request)
-                else MutasiStokSerializer)
+    def perform_create(self, serializer):
+        d = serializer.validated_data
+        ent = d["entitas"]
+        try:
+            nomor = CounterDokumen.berikutnya(ent, "PB", d["tanggal"])
+        except DjangoValidationError as e:
+            raise DRFValidationError({"kode": "PENOMORAN_GAGAL",
+                                      "pesan": str(e)})
+        serializer.save(
+            nomor=nomor,
+            # Grup diturunkan dari entitas, tidak diterima dari klien.
+            # Entitas tidak bisa menyetor ke pool grup lain.
+            grup_bahan=ent.grup_bahan,
+            nilai=rp(d["qty_kg"] * d["harga_per_kg"]),
+            dibuat_oleh=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        """
+        Nilai dan grup dihitung SEBELUM save, bukan sesudah.
+
+        Versi sebelumnya menyimpan dua kali; di antara keduanya ada
+        jendela di mana `nilai` tidak konsisten dengan qty x harga --
+        dan invariant yang berjalan pada saat itu akan melaporkan
+        selisih yang tidak nyata.
+        """
+        inst = serializer.instance
+        d = serializer.validated_data
+        qty_kg = d.get("qty_kg", inst.qty_kg)
+        hrg = d.get("harga_per_kg", inst.harga_per_kg)
+        ent = d.get("entitas", inst.entitas)
+        serializer.save(nilai=rp(qty_kg * hrg), grup_bahan=ent.grup_bahan)
+
+    def perform_destroy(self, instance):
+        if instance.status != StatusDokumen.DRAFT:
+            raise DRFValidationError({
+                "kode": "DOKUMEN_TERKUNCI",
+                "pesan": "Hanya pembelian DRAFT yang bisa dihapus. Dokumen "
+                         "POSTED dibatalkan lewat /void/.",
+            })
+        # Pembelian.delete() melempar ProtectedError; DRAFT belum punya
+        # jejak di buku besar, jadi aman dihapus lewat queryset.
+        Pembelian.objects.filter(pk=instance.pk).delete()
+
+    # Nama method SENGAJA bukan `post`. APIView.dispatch mencari
+    # self.post untuk setiap request POST; memberi nama itu ke sebuah
+    # @action adalah kabel telanjang di dekat pipa air.
+    @action(detail=True, methods=["post"], url_path="post")
+    def posting(self, request, pk=None):
+        try:
+            hasil = services.posting_pembelian(self.get_object(),
+                                               user=request.user)
+        except GALAT_TERTANGANI as e:
+            return _galat(e)
+        return Response(ser.PembelianSerializer(hasil).data)
+
+    @action(detail=True, methods=["post"])
+    def void(self, request, pk=None):
+        try:
+            hasil = services.void_pembelian(
+                self.get_object(), request.data.get("alasan", ""),
+                user=request.user)
+        except GALAT_TERTANGANI as e:
+            return _galat(e)
+        return Response(ser.PembelianSerializer(hasil).data)
 
 
-class PosisiKlaimViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-    serializer_class = PosisiKlaimSerializer
+# ==========================================================
+# PACKING
+# ==========================================================
+
+class PackingViewSet(viewsets.ModelViewSet):
+    modul = MODUL
+    queryset = Packing.objects.select_related(
+        "entitas", "batch", "kemasan").order_by("-waktu", "-id")
+    serializer_class = ser.PackingSerializer
+    permission_classes = [AksesInventory]
 
     def get_queryset(self):
-        qs = (PosisiKlaim.objects.select_related('entitas', 'grup_bahan')
-              .order_by('grup_bahan', 'entitas__kode'))
+        qs = super().get_queryset()
         p = self.request.query_params
-        if p.get('grup'):
-            qs = qs.filter(grup_bahan_id=p['grup'])
-        if p.get('entitas'):
-            qs = qs.filter(entitas_id=p['entitas'])
+        for param, field in (("entitas", "entitas_id"),
+                             ("batch", "batch_id"),
+                             ("status", "status")):
+            if p.get(param):
+                qs = qs.filter(**{field: p[param]})
+        if p.get("dari"):
+            qs = qs.filter(tanggal__gte=p["dari"])
+        if p.get("sampai"):
+            qs = qs.filter(tanggal__lte=p["sampai"])
         return qs
 
-    def list(self, request, *args, **kwargs):
-        grup_id = request.query_params.get('grup')
-        if not grup_id:
-            return Response({'detail': 'Parameter grup wajib diisi.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        if not _akunting(request):
-            return _tolak_non_akunting()
-        return Response(services.posisi_grup(grup_id))
-
-    def retrieve(self, request, *args, **kwargs):
-        if not _akunting(request):
-            return _tolak_non_akunting()
-        return super().retrieve(request, *args, **kwargs)
-
-
-class NilaiEkuivalenViewSet(BasisInventory, viewsets.ReadOnlyModelViewSet):
-    serializer_class = NilaiEkuivalenSerializer
-
-    def get_queryset(self):
-        qs = (NilaiEkuivalen.objects.select_related('produk')
-              .order_by('produk__kode', '-berlaku_sejak'))
-        produk = self.request.query_params.get('produk')
-        if produk:
-            qs = qs.filter(produk_id=produk)
-        return qs
-
-
-# =========================================================
-# PEMBACAAN POOL & TANGKI
-# =========================================================
-
-class IsiPoolView(BasisInventory, APIView):
-    def get(self, request):
-        grup_id = request.query_params.get('grup')
-        if not grup_id:
-            return Response({'detail': 'Parameter grup wajib diisi.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        hasil, total = services.isi_pool(grup_id)
-        if not _akunting(request):
-            for r in hasil:
-                r.pop('nilai', None)
-                r.pop('harga_rata', None)
-            return Response({'produk': hasil})
-        return Response({'produk': hasil, 'total_nilai': total})
-
-
-class IsiTangkiView(BasisInventory, APIView):
-    """Nominal yang tersimpan di satu tangki. Dasar tarif pengepakan."""
-    def get(self, request, pk):
-        data = services.isi_tangki(pk)
-        if not _akunting(request):
-            data.pop('nilai', None)
-            data.pop('harga_rata', None)
-        return Response(data)
-
-
-class RencanaKemasanView(BasisInventory, APIView):
-    """
-    Pratinjau pengepakan sebelum tombol ditekan.
-
-    GET ?kemasan=&grup=&jumlah=&tangki=
-
-    Angka di sini dihitung server dengan aritmetika yang sama persis
-    seperti saat eksekusi, jadi tidak akan meleset dari hasil akhir.
-    Klien TIDAK boleh menghitung sendiri dari harga_rata.
-    """
-    def get(self, request):
-        p = request.query_params
-        if not (p.get('kemasan') and p.get('grup') and p.get('jumlah')):
-            return Response(
-                {'detail': 'Parameter kemasan, grup, dan jumlah wajib.'},
-                status=status.HTTP_400_BAD_REQUEST)
+    def perform_create(self, serializer):
+        from django.utils import timezone
+        d = serializer.validated_data
+        ent = d["entitas"]
+        tgl = d.get("tanggal") or timezone.localdate()
         try:
-            data = services.rencana_kemasan(
-                kemasan_id=int(p['kemasan']),
-                grup_bahan_id=int(p['grup']),
-                jumlah=p['jumlah'],
-                tangki_pool_id=int(p['tangki']) if p.get('tangki') else None,
-            )
-        except (DjangoValidationError, ObjectDoesNotExist) as e:
-            return _galat(e)
-        if not _akunting(request):
-            data.pop('nilai', None)
-            data.pop('tarif_tampilan', None)
-        return Response(data)
-
-
-# =========================================================
-# PENULISAN
-# =========================================================
-
-class BasisTulis(APIView):
-    permission_classes = IZIN_TULIS
-    serializer = None
-    fungsi = None
-    prefix = 'op'
-
-    def post(self, request):
-        s = self.serializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = dict(s.validated_data)
-        idem_key = d.pop('idem_key') or f'{self.prefix}:{uuid.uuid4()}'
-        try:
-            hasil = self.fungsi(idem_key=idem_key, **d)
-        except (DjangoValidationError, ObjectDoesNotExist) as e:
-            return _galat(e)
-        return Response(self.bentuk(hasil, request),
-                        status=status.HTTP_201_CREATED)
-
-    def bentuk(self, hasil, request):
-        m_out, m_in, klaim, posisi = hasil
-        ser = (MutasiStokAkuntingSerializer if _akunting(request)
-               else MutasiStokSerializer)
-        isi = {
-            'mutasi_keluar': ser(m_out).data if m_out else None,
-            'mutasi_masuk': ser(m_in).data if m_in else None,
-        }
-        if _akunting(request):
-            isi['klaim'] = MutasiKlaimSerializer(klaim).data if klaim else None
-            isi['posisi'] = PosisiKlaimSerializer(posisi).data if posisi else None
-        return isi
-
-
-class SetorKePoolView(BasisTulis):
-    serializer = SetorKePoolSerializer
-    fungsi = staticmethod(services.setor_ke_pool)
-    prefix = 'setor'
-
-
-class KlaimHasilView(BasisTulis):
-    serializer = KlaimHasilSerializer
-    fungsi = staticmethod(services.klaim_hasil)
-    prefix = 'klaim'
-
-
-class KlaimKemasanView(BasisTulis):
-    """
-    Pengepakan: curah keluar dalam kg, kemasan masuk dalam pcs.
-
-    Hak berkurang sebesar PORSI nilai tangki, bukan jumlah x tarif bulat.
-    Kalau klien menampilkan tarif yang sudah dibulatkan, angkanya akan
-    sedikit berbeda dari hasil ini -- yang benar adalah hasil ini.
-    """
-    serializer = KlaimKemasanSerializer
-    fungsi = staticmethod(services.klaim_kemasan)
-    prefix = 'kemas'
-
-
-# =========================================================
-# SUPERVISOR
-# =========================================================
-
-class OpnameView(APIView):
-    """
-    Menyesuaikan catatan ke fisik. Supervisor saja -- penyalahgunaannya
-    sulit dideteksi karena tidak ada dokumen pembanding independen
-    seperti PO atau resep produksi.
-    """
-    permission_classes = IZIN_SUPERVISOR
-
-    def post(self, request):
-        s = OpnameSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = dict(s.validated_data)
-        idem_key = d.pop('idem_key') or f'opname:{uuid.uuid4()}'
-        try:
-            mutasi = services.sesuaikan_stok(idem_key=idem_key, **d)
+            nomor = CounterDokumen.berikutnya(ent, "PKG", tgl)
         except DjangoValidationError as e:
-            return _galat(e)
-        ser = (MutasiStokAkuntingSerializer if _akunting(request)
-               else MutasiStokSerializer)
-        return Response(ser(mutasi).data, status=status.HTTP_201_CREATED)
+            raise DRFValidationError({"kode": "PENOMORAN_GAGAL",
+                                      "pesan": str(e)})
+        serializer.save(nomor=nomor, tanggal=tgl,
+                        dibuat_oleh=self.request.user)
 
+    def perform_destroy(self, instance):
+        if instance.status != StatusDokumen.DRAFT:
+            raise DRFValidationError({
+                "kode": "DOKUMEN_TERKUNCI",
+                "pesan": "Hanya packing DRAFT yang bisa dihapus.",
+            })
+        instance.delete()
 
-class LunasView(APIView):
-    """
-    Pelunasan antar entitas. WAJIB dua sisi: yang membayar naik, yang
-    menerima turun, jumlahnya nol. Pelunasan satu sisi menggeser total
-    klaim tanpa menyentuh pool.
-    """
-    permission_classes = IZIN_SUPERVISOR
-
-    def post(self, request):
-        s = LunasSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = dict(s.validated_data)
-        idem_key = d.pop('idem_key') or f'lunas:{uuid.uuid4()}'
+    @action(detail=True, methods=["post"], url_path="post")
+    def posting(self, request, pk=None):
         try:
-            b1, b2 = services.lunasi_antar_entitas(idem_key=idem_key, **d)
-        except DjangoValidationError as e:
+            hasil = services.posting_packing(self.get_object(),
+                                             user=request.user)
+        except GALAT_TERTANGANI as e:
             return _galat(e)
-        return Response({
-            'bayar': MutasiKlaimSerializer(b1).data if b1 else None,
-            'terima': MutasiKlaimSerializer(b2).data if b2 else None,
-        }, status=status.HTTP_201_CREATED)
+        return Response(ser.PackingSerializer(hasil).data)
+
+    @action(detail=False, methods=["get"])
+    def pratinjau(self, request):
+        """
+        GET /packing/pratinjau/?batch=&qty=
+
+        SELALU 200. Pratinjau adalah kalkulator, bukan gerbang -- 4xx
+        memicu penanganan error global yang salah tempat sementara
+        operator masih mengetik.
+        """
+        return Response(services.pratinjau_packing(
+            request.query_params.get("batch"),
+            request.query_params.get("qty") or 0))
 
 
-class LuruskanView(APIView):
+# ==========================================================
+# LAPORAN — READ ONLY
+# ==========================================================
+
+def _int_atau_none(nilai):
+    try:
+        return int(nilai) if nilai not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def pool_list(request):
+    """GET /pool/?grup= — saldo & harga rata per produk."""
+    return Response(services.get_saldo_pool_all(
+        _int_atau_none(request.query_params.get("grup"))))
+
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def pool_kartu_stok(request, produk_id):
     """
-    Menutup selisih pembulatan dengan baris KOREKSI bertanggal.
+    GET /pool/{produk_id}/kartu/?grup=
 
-    Selisih di atas `batas` ditolak: itu bukan pembulatan, dan menutupnya
-    menghapus jejak yang dibutuhkan untuk menemukan penyebabnya.
+    Berapa Kg produk ini yang benar-benar ada: di pool, plus yang masih
+    terkandung di dalam WIP. BOM dirunut rekursif menembus berapa pun
+    lapis blending.
     """
-    permission_classes = IZIN_SUPERVISOR
+    grup = _int_atau_none(request.query_params.get("grup"))
+    if grup is None:
+        return Response(
+            {"kode": "GRUP_WAJIB",
+             "detail": "Parameter `grup` wajib dan harus berupa angka — "
+                       "pool dipisah per grup bahan."},
+            status=status.HTTP_400_BAD_REQUEST)
+    try:
+        return Response(services.get_kartu_stok(int(produk_id), grup))
+    except SaldoPool.DoesNotExist:
+        return Response(
+            {"kode": "POOL_BELUM_ADA",
+             "detail": f"Produk {produk_id} belum punya baris pool di grup "
+                       f"{grup}."},
+            status=status.HTTP_404_NOT_FOUND)
 
-    def post(self, request):
-        s = LuruskanSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        d = dict(s.validated_data)
-        idem_key = d.pop('idem_key') or f'luruskan:{uuid.uuid4()}'
-        try:
-            baris = services.luruskan_pembulatan(idem_key=idem_key, **d)
-        except DjangoValidationError as e:
-            return _galat(e)
-        if baris is None:
-            return Response({'detail': 'Tidak ada selisih.'},
-                            status=status.HTTP_200_OK)
-        return Response(MutasiKlaimSerializer(baris).data,
-                        status=status.HTTP_201_CREATED)
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def mutasi_list(request):
+    """GET /mutasi/ — buku besar klaim, terbaru dulu."""
+    qs = (MutasiKlaim.objects.select_related("entitas", "grup_bahan")
+          .order_by("-waktu", "-id"))
+    p = request.query_params
+    if p.get("entitas"):
+        qs = qs.filter(entitas_id=p["entitas"])
+    if p.get("grup"):
+        qs = qs.filter(grup_bahan_id=p["grup"])
+    if p.get("tipe"):
+        qs = qs.filter(tipe=p["tipe"].upper())
+    if p.get("dari"):
+        qs = qs.filter(waktu__date__gte=p["dari"])
+    if p.get("sampai"):
+        qs = qs.filter(waktu__date__lte=p["sampai"])
+    try:
+        batas = min(int(p.get("limit", 200)), 1000)
+    except (TypeError, ValueError):
+        batas = 200
+    return Response(ser.MutasiKlaimSerializer(qs[:batas], many=True).data)
 
 
-class VerifikasiView(APIView):
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def mutasi_rekap(request):
+    """GET /mutasi/rekap/ — hutang-piutang per entitas, per grup bahan."""
+    return Response(services.get_rekap_klaim(
+        _int_atau_none(request.query_params.get("grup"))))
+
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def pemeriksaan_invarian(request):
     """
-    Dipakai kalau angka di layar terlihat aneh, dan dijalankan nightly.
+    GET /pemeriksaan/
 
-    ?grup= wajib untuk pemeriksaan pool bersih.
-    ?toleransi= menandai selisih kecil sebagai 'dalam_toleransi' --
-    menandai, bukan menyembunyikan. Selisihnya tetap ditampilkan apa
-    adanya.
+    Panel invariant. Taruh PALING ATAS di frontend -- angka yang salah
+    tidak pernah mengumumkan diri sendiri, dan kalau panel ini
+    disembunyikan di bawah, tidak ada yang melihatnya sampai ada yang
+    menagih.
     """
-    permission_classes = IZIN_SUPERVISOR
+    return Response(services.jalankan_pemeriksaan_invarian())
 
-    def get(self, request):
-        from decimal import Decimal
 
-        grup_id = request.query_params.get('grup')
-        toleransi = Decimal(request.query_params.get('toleransi') or '0')
-        hasil = {
-            'kepemilikan': services.verifikasi_kepemilikan(grup_bahan_id=grup_id),
-            'posisi_cache': services.verifikasi_posisi_cache(grup_bahan_id=grup_id),
-        }
-        if grup_id:
-            hasil['pool_bersih'] = services.verifikasi_pool_bersih(
-                grup_bahan_id=grup_id, toleransi=toleransi)
-        return Response(hasil)
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def barang_jadi(request):
+    """GET /barang-jadi/ — stok jadi per entitas × kemasan."""
+    return Response(services.get_barang_jadi(
+        _int_atau_none(request.query_params.get("grup"))))
+
+
+@api_view(["GET"])
+@permission_classes([AksesInventory])
+def stok_list(request):
+    """
+    GET /stok/?lapis=POOL|JADI&grup=
+
+    TIDAK ADA LAPIS "RAW"
+
+        Barang mentah masuk pool begitu gudang menimbangnya -- tidak ada
+        tahap terpisah di antaranya. Versi sebelumnya mengembalikan array
+        kosong untuk lapis RAW, sehingga layar tampil normal untuk konsep
+        yang tidak ada di sistem ini. Sekarang ditolak dengan penjelasan.
+
+    Bentuk respons SERAGAM untuk semua lapis: {lapis, rincian, total}.
+    Versi sebelumnya mengembalikan tiga bentuk berbeda, jadi frontend
+    tidak bisa membedakan "tidak ada data" dari "lapis salah ketik".
+    """
+    lapis = (request.query_params.get("lapis") or "POOL").upper()
+    grup = _int_atau_none(request.query_params.get("grup"))
+
+    if lapis == "POOL":
+        d = services.get_saldo_pool_all(grup)
+        return Response({"lapis": "POOL", "rincian": d["rincian"],
+                         "total_nilai": d["total_nilai_pool"]})
+    if lapis == "JADI":
+        d = services.get_barang_jadi(grup)
+        return Response({"lapis": "JADI", "rincian": d["rincian"],
+                         "total_nilai": d["total_nilai"]})
+
+    return Response(
+        {"kode": "LAPIS_TIDAK_DIKENAL",
+         "detail": f"Lapis '{lapis}' tidak ada. Yang tersedia: POOL "
+                   f"(bahan di gudang) dan JADI (barang terkemas). Bahan "
+                   f"mentah langsung masuk POOL saat diterima gudang."},
+        status=status.HTTP_400_BAD_REQUEST)

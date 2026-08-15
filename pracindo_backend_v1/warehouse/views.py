@@ -98,7 +98,7 @@ class PenerimaanViewSet(viewsets.ModelViewSet):
         s.is_valid(raise_exception=True)
         d = s.validated_data
         try:
-            penerimaan, laporan = services.terima_barang(
+            penerimaan, laporan ,setoran = services.terima_barang(
                 user=request.user, **d,
             )
         except DjangoValidationError as e:
@@ -135,11 +135,6 @@ class PenerimaanViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def ringkasan(self, request, pk=None):
         return Response(services.ringkasan_penerimaan(pk))
-
-
-# =========================================================
-# LAPORAN SELISIH
-# =========================================================
 
 class LaporanSelisihViewSet(viewsets.ModelViewSet):
     """

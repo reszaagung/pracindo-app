@@ -106,8 +106,8 @@
                                 <div class="text-center p-3 rounded-lg border"
                                     :class="pratinjau.cukup ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400' : 'bg-red-900/30 border-red-500/30 text-red-400'">
                                     <div class="text-xs font-bold uppercase mb-1">Status Ketersediaan</div>
-                                    <div class="text-sm">{{ pratinjau.cukup ? 'Tangki Cukup' : pratinjau.pesan || 'Stok
-                                        Curah Kurang' }}</div>
+                                    <div class="text-sm">
+                                        {{ pratinjau.cukup ? 'Tangki Cukup' : pratinjau.pesan || 'StokCurah Kurang' }}</div>
                                 </div>
 
                                 <div class="flex justify-between items-center border-b border-slate-700 pb-3">
