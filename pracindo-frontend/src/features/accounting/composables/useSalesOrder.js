@@ -12,6 +12,25 @@ export function useSalesOrder() {
     const sedangProses = ref(false)
     const pesanError = ref('')
     const periodeDitutup = ref(false)
+    const previewNomor = ref('Pilih entitas & tanggal')
+
+    // Nomor dokumen dihasilkan CounterDokumen di server, per entitas per
+    // bulan. Preview saja -- angka finalnya bisa bergeser kalau ada SO
+    // lain terbit di antara preview dan submit.
+    const muatPreviewNomor = async (entitasId, tanggal) => {
+        if (!entitasId || !tanggal) {
+            previewNomor.value = 'Pilih entitas & tanggal'
+            return
+        }
+        try {
+            const res = await api.get('sales-order/preview-nomor/', {
+                params: { entitas: entitasId, tanggal },
+            })
+            previewNomor.value = res.data?.nomor || 'Otomatis saat disimpan'
+        } catch {
+            previewNomor.value = 'Otomatis saat disimpan'
+        }
+    }
 
     const muatDataMaster = async () => {
         try {
@@ -45,7 +64,7 @@ export function useSalesOrder() {
                 tanggal: so.tanggal,
                 entitas: so.entitas ? { kode: so.entitas.kode } : { kode: 'UMUM' },
                 pelanggan: so.pelanggan ? { nama: so.pelanggan.nama, kota: so.pelanggan.kota || '-' } : { nama: '-', kota: '-' },
-                grand_total: parseFloat(so.subtotal) + parseFloat(so.ppn_nominal || 0),
+                grand_total: so.grand_total ?? 0,
                 status: so.status
             }))
         } catch (error) {
@@ -60,7 +79,7 @@ export function useSalesOrder() {
         sedangProses.value = true
         pesanError.value = ''
         try {
-            const res = await api.post('akunting/sales-order/', payload)
+            const res = await api.post('sales-order/', payload)
             await fetchSO()
             return { success: true, data: res.data }
         } catch (error) {
@@ -74,6 +93,6 @@ export function useSalesOrder() {
     return {
         listEntitas, listPelanggan, listProduk, daftarSO,
         isLoading, sedangProses, pesanError, periodeDitutup,
-        muatDataMaster, fetchSO, simpanSO
+        previewNomor, muatDataMaster, muatPreviewNomor, fetchSO, simpanSO
     }
 }

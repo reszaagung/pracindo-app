@@ -17,14 +17,9 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <!-- Stat 1 -->
-            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">PO BULAN INI</p>
-                <h3 class="text-2xl font-black text-slate-800">Rp {{ (totalBulanIni || 0).toLocaleString('id-ID') }}
-                </h3>
-                <p class="text-xs text-slate-500 mt-2">{{ daftarPO.length }} dokumen dibuat</p>
-            </div>
+
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">BELUM DITERIMA PENUH</p>
                 <h3 class="text-2xl font-black text-slate-800">{{ belumDiterima.length }}</h3>
@@ -126,7 +121,7 @@ const tampilModalPO = ref(false)
 
 const {
     daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
-    belumDiterima, draftCount, totalBulanIni, muatDaftarPO
+    belumDiterima, draftCount, muatDaftarPO
 } = usePurchaseOrder()
 
 onMounted(() => {

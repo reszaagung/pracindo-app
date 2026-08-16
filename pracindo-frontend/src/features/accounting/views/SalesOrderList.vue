@@ -19,10 +19,10 @@
                     class="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg transition-colors">
                     <i class="pi pi-refresh" :class="{ 'pi-spin': isLoading }"></i>
                 </button>
-                <router-link to="/accounting/input/so"
+                <button type="button" @click="tampilModalSO = true"
                     class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-sm">
                     <i class="pi pi-plus"></i> Buat SO Baru
-                </router-link>
+                </button>
             </div>
         </div>
 
@@ -127,12 +127,29 @@
                 <span>Menampilkan <b>{{ filteredSO.length }}</b> dari <b>{{ daftarSO.length }}</b> dokumen</span>
             </div>
         </div>
+
+        <Dialog v-model:visible="tampilModalSO" modal header="Buat Sales Order Baru"
+            :style="{ width: '90vw', maxWidth: '1100px' }">
+            <LazyFormSO v-if="tampilModalSO" @close="tampilModalSO = false" @saved="soBerhasilDisimpan" />
+        </Dialog>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+import Dialog from 'primevue/dialog'
 import { useSalesOrder } from '@/features/accounting/composables/useSalesOrder'
+
+const LazyFormSO = defineAsyncComponent(() =>
+    import('@/features/accounting/views/SalesOrderCreate.vue')
+)
+
+const tampilModalSO = ref(false)
+
+const soBerhasilDisimpan = () => {
+    tampilModalSO.value = false
+    fetchSO()
+}
 const { isLoading, daftarSO, fetchSO } = useSalesOrder()
 
 const pencarian = ref('')

@@ -212,11 +212,10 @@
 
 <script setup>
 import { reactive, computed, ref, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import Dropdown from 'primevue/dropdown'
 import { useSalesOrder } from '@/features/accounting/composables/useSalesOrder'
 
-const router = useRouter()
+const emit = defineEmits(['close', 'saved'])
 const {
     listEntitas, listPelanggan, listProduk, sedangProses, pesanError, previewNomor,
     periodeDitutup, muatDataMaster, muatPreviewNomor, simpanSO
@@ -295,8 +294,10 @@ const kirim = async () => {
     const hasil = await simpanSO(payload)
 
     if (hasil.success) {
-        // Arahkan kembali ke tabel daftar SO (Sesuaikan rute Anda)
-        router.push('/accounting/input/so')
+        // Dipakai sebagai modal dari SalesOrderList: beri tahu induk,
+        // jangan pindah rute. router.push di dalam modal meninggalkan
+        // dialog terbuka di atas halaman yang sama.
+        emit('saved')
     }
 }
 </script>
