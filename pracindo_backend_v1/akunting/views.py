@@ -13,6 +13,7 @@ import uuid
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Prefetch
+import django_filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -157,16 +158,37 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
                         status=status.HTTP_201_CREATED)
 
 
+
+class PurchaseOrderFilter(django_filters.FilterSet):
+    """
+    FilterSet eksplisit.
+
+    filterset_fields mengandalkan django_filters MENEBAK model dari
+    queryset yang dikembalikan get_queryset(). Karena get_queryset() di
+    sini menyaring per entitas dan bentuknya bisa berubah, penebakan itu
+    gagal -- dan galatnya menyebut field yang sebenarnya ADA di model,
+    sehingga menunjuk ke arah yang salah sama sekali.
+    """
+    class Meta:
+        model = PurchaseOrder
+        fields = ['entitas', 'suplier', 'status', 'tanggal']
+
+
 class PurchaseOrderViewSet(BasisAkunting):
     serializer_class = PurchaseOrderSerializer
     queryset = PurchaseOrder.objects.none()
-    filterset_fields = ['entitas', 'suplier', 'status', 'tanggal']
+    filterset_class = PurchaseOrderFilter
     search_fields = ['no_po', 'suplier__nama']
 
     def get_queryset(self):
-        qs = (JurnalUmum.objects
-              .select_related('entitas')
-              .prefetch_related('baris__akun')
+        # Bug salin-tempel: sebelumnya membangun queryset JurnalUmum di
+        # dalam viewset PurchaseOrder. Endpoint tetap merespons dan
+        # filter tetap terpasang, jadi galatnya muncul sebagai "field
+        # suplier tidak ada" -- menunjuk ke serializer yang sebenarnya
+        # sudah benar, dan menyembunyikan penyebab aslinya berjam-jam.
+        qs = (PurchaseOrder.objects
+              .select_related('entitas', 'suplier')
+              .prefetch_related('item')
               .order_by('-tanggal', '-id'))
         return batasi_entitas(qs, self.request)
 
