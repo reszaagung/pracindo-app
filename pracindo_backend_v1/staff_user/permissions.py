@@ -41,6 +41,22 @@ from .models import Role
 # SAKLAR PENGEMBANGAN
 # =========================================================
 
+# Membuka seluruh akses modul, melewati pemeriksaan role.
+#
+# Autentikasi TETAP diwajibkan -- ini hanya melewati peta AKSES_MODUL.
+# Setiap dokumen transaksional punya dibuat_oleh yang non-nullable, jadi
+# request anonim akan tetap gagal, hanya dengan galat yang lebih
+# membingungkan.
+#
+# WAJIB False di produksi. Buku klaim yang bisa ditulis siapa saja bukan
+# buku klaim.
+BUKA_MODUL = False
+
+
+# =========================================================
+# SAKLAR PENGEMBANGAN
+# =========================================================
+
 # Membuka seluruh akses modul selama pengembangan.
 #
 # Autentikasi TETAP diwajibkan. Membuka permission modul berbeda dari
