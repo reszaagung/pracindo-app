@@ -159,6 +159,7 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PurchaseOrderViewSet(BasisAkunting):
     serializer_class = PurchaseOrderSerializer
+    queryset = PurchaseOrder.objects.none()
     filterset_fields = ['entitas', 'suplier', 'status', 'tanggal']
     search_fields = ['no_po', 'suplier__nama']
 
@@ -427,6 +428,7 @@ class UangMukaViewSet(viewsets.ReadOnlyModelViewSet):
 
 class FakturPenjualanViewSet(BasisAkunting):
     serializer_class = FakturPenjualanSerializer
+    queryset = FakturPenjualan.objects.none()
     filterset_fields = ['entitas', 'pelanggan', 'status', 'tanggal_jatuh_tempo']
     search_fields = ['nomor_faktur', 'no_internal', 'pelanggan__nama']
 
