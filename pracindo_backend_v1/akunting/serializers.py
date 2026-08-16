@@ -111,6 +111,35 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
+    # subtotal, ppn_nominal, dan grand_total adalah @property di model,
+    # dihitung dari item -- bukan kolom database.
+    #
+    # ModelSerializer hanya memetakan field database secara otomatis.
+    # Properti yang disebut di Meta.fields tanpa deklarasi ini DIBUANG
+    # dari respons tanpa satu pun galat, dan di layar hasilnya Rp 0 --
+    # terlihat seperti data kosong, bukan seperti field yang hilang.
+    #
+    # PurchaseOrderSerializer sudah melakukannya sejak awal; serializer
+    # list dibuat belakangan dan langkah ini terlewat.
+    subtotal = serializers.DecimalField(max_digits=18, decimal_places=2,
+                                        read_only=True)
+    ppn_nominal = serializers.DecimalField(max_digits=18, decimal_places=2,
+                                           read_only=True)
+    grand_total = serializers.DecimalField(max_digits=18, decimal_places=2,
+                                           read_only=True)
+    # subtotal, ppn_nominal, dan grand_total adalah @property di model,
+    # dihitung dari item -- bukan kolom database.
+    #
+    # ModelSerializer hanya memetakan field database secara otomatis.
+    # Properti yang disebut di Meta.fields tanpa deklarasi ini DIBUANG
+    # dari respons tanpa satu pun galat, dan di layar hasilnya Rp 0 yang
+    # terlihat seperti data kosong, bukan seperti field yang hilang.
+    subtotal = serializers.DecimalField(max_digits=20, decimal_places=2,
+                                        read_only=True)
+    ppn_nominal = serializers.DecimalField(max_digits=20, decimal_places=2,
+                                           read_only=True)
+    grand_total = serializers.DecimalField(max_digits=20, decimal_places=2,
+                                           read_only=True)
     """Tanpa nested item, untuk halaman daftar. Total lewat annotate."""
 
     entitas_kode = serializers.CharField(source='entitas.kode', read_only=True)

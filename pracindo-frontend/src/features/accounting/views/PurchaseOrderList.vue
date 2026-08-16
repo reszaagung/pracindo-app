@@ -88,8 +88,7 @@
                     </thead>
                     <tbody>
                         <tr v-for="po in tampil" :key="po.id"
-                            class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors cursor-pointer"
-                            @click="$router.push(`/accounting/input/po/${po.id}`)">
+                            class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                             <td class="py-3 px-4 font-bold text-slate-800">{{ po.no_po || po.nomor }}</td>
                             <td class="py-3 px-4 text-slate-600">{{ po.tanggal }}</td>
                             <td class="py-3 px-4 text-slate-700 truncate" :title="po.suplier_nama">{{ po.suplier_nama }}
