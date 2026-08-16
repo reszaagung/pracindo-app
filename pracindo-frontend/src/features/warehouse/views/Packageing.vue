@@ -156,14 +156,14 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { usePackaging } from '../composables/usePackaging'
+import { usePackaging } from '../composables/usePackageing'
 
 const emit = defineEmits(['tersimpan'])
 
 const {
     form, opsi, memuat, pratinjau, galat, bisaKirim, tangkiSesuaiGrup,
     muatDataAwal, kirim
-} = usePackaging(emit)
+} = usePackageing(emit)
 
 onMounted(() => {
     muatDataAwal()

@@ -1,0 +1,1 @@
+import{$ as e}from"./core-vendor-CiDgFBUp.js";import{c as t}from"./uang-CkVtNQXL.js";function n(){let n=e([]),r=e(!1);async function i(){r.value=!0;try{let e=await t.daftar({aktif:!0});n.value=Array.isArray(e)?e:e.results||[]}catch(e){console.error(`Gagal memuat daftar tangki:`,e)}finally{r.value=!1}}return{tangkiList:n,memuat:r,muatTangki:i}}export{n as t};

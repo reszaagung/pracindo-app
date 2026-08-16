@@ -1,1 +1,0 @@
-import{f as e}from"./vendor-Dl9Agf3u.js";function t(){let t=e();return{success:e=>{t.add({severity:`success`,summary:`Berhasil`,detail:e,life:3e3})},error:e=>{t.add({severity:`error`,summary:`Gagal`,detail:e,life:4e3})},info:e=>{t.add({severity:`info`,summary:`Informasi`,detail:e,life:3e3})},warn:e=>{t.add({severity:`warn`,summary:`Peringatan`,detail:e,life:4e3})}}}export{t};

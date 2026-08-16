@@ -6,7 +6,6 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-# [PERBAIKAN]: Impor ValidationError dari DRF
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from . import services
@@ -28,8 +27,8 @@ def _galat(e):
     return Response(pesan, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class DaftarView(APIView):
+    authentication_classes = [] 
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -58,6 +57,7 @@ class DaftarView(APIView):
 
 
 class LoginView(APIView):
+    authentication_classes = [] 
     permission_classes = [AllowAny]
 
     def post(self, request):

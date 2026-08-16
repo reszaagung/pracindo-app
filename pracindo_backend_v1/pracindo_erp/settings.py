@@ -1,17 +1,10 @@
-﻿"""
-Django settings â€” pracindo_erp
-Django 5.2 Â· PostgreSQL Â· DRF Token (ExpiringTokenAuthentication)
-
-Semua rahasia dibaca dari .env. Jangan pernah menaruh nilai asli di file ini.
-"""
+﻿
 
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-# =========================================================
-# PATH & ENV
-# =========================================================
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
@@ -24,10 +17,6 @@ def env_list(nama, default=''):
     raw = os.getenv(nama, default)
     return [x.strip() for x in raw.split(',') if x.strip()]
 
-
-# =========================================================
-# KEAMANAN DASAR
-# =========================================================
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
     raise RuntimeError(
@@ -38,19 +27,14 @@ if not SECRET_KEY:
 
 DEBUG = env_bool('DEBUG', 'False')
 
-ALLOWED_HOSTS = env_list('ALLOWED_HOSTS') or [
-    '31.97.221.43',
-    'pracindo-marshitek.company',
-    'www.pracindo-marshitek.company',
-    'localhost',
-    '127.0.0.1',
-    'testserver',          
+ALLOWED_HOSTS = [
+    "pracindo.cloud",
+    "www.pracindo.cloud",
+    "localhost",
+    "127.0.0.1",          
 ]
 
 
-# =========================================================
-# APLIKASI
-# =========================================================
 DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -70,18 +54,11 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    # Lapis 1 â€” fondasi, tidak mengimpor app lokal lain
     'core',
     'staff_user',
-
-    # Lapis 2 â€” master data & infrastruktur generik
     'master',
     'dokumen',
-
-    # Lapis 3
     'inventory',
-
-    # Lapis 4 â€” domain (kelompok sejajar, boleh saling panggil di dalam fungsi)
     'akunting',
     'keuangan',
     'pajak',
@@ -149,7 +126,7 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',
+         #'rest_framework.authentication.SessionAuthentication',
         'staff_user.authentication.ExpiringTokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
@@ -178,15 +155,15 @@ TOKEN_EXPIRE_HOURS = int(os.getenv('TOKEN_EXPIRE_HOURS', '12'))
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS') or [
-    'https://pracindo-marshitek.company',
-    'https://www.pracindo-marshitek.company',
+    "https://pracindo.cloud",
+    "https://www.pracindo.cloud",
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
 
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS') or [
-    'https://pracindo-marshitek.company',
-    'https://www.pracindo-marshitek.company',
+    "https://pracindo.cloud",
+    "https://www.pracindo.cloud",
     'http://localhost:5173',     
     'http://127.0.0.1:5173',
 ]

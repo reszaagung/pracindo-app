@@ -65,10 +65,10 @@
                         </button>
                     </div>
 
-                    <!-- Pesan Error / Notifikasi Sesi -->
-                    <p v-if="pesan" role="alert" class="error-msg">
-                        {{ pesan }}
-                    </p>
+                <!-- Pesan Error / Notifikasi Sesi -->
+                <p v-if="pesan" role="alert" class="error-msg">
+                    {{ pesan }}
+                </p>
 
                     <button type="submit" class="btn-submit" :disabled="sedangProses">
                         <i v-if="sedangProses" class="pi pi-spin pi-spinner" style="margin-right: 8px;"></i>
@@ -129,7 +129,7 @@ const handleLogin = async () => {
     const hasil = await login(form.identifier.trim(), form.password)
 
     if (!hasil.success) {
-        pesan.value = hasil.message
+        pesan.value = hasil.message 
         form.password = ''
         return
     }
