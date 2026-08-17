@@ -70,3 +70,22 @@ class PelangganViewSet(BasisMaster):
     filterset_fields = ['aktif']
     search_fields = ['kode', 'nama', 'npwp']
     serializer_class = PelangganSerializer
+
+class PelangganViewSet(BasisMaster):
+    """
+    Master pelanggan. Dipakai selector di form Sales Order.
+
+    `aktif` disaring lewat query param, bukan otomatis -- daftar master
+    tetap harus bisa menampilkan yang nonaktif untuk diaktifkan kembali.
+    Yang menyaring adalah pemanggil: form SO mengirim ?aktif=true.
+    """
+    queryset = Pelanggan.objects.all().order_by('nama')
+    serializer_class = PelangganSerializer
+    filterset_fields = ['aktif']
+    search_fields = ['kode', 'nama', 'kontak_nama']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.query_params.get('aktif') in ('true', '1', 'True'):
+            qs = qs.filter(aktif=True)
+        return qs

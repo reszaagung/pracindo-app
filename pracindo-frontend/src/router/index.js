@@ -1,9 +1,7 @@
-﻿// src/router/index.js
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { useGuards } from './guards'
 import ModulLayout from '@/components/layout/ModulLayout.vue'
 
-// 1. IMPORT RUTE MODULAR DARI FITUR PRODUKSI
 import ruteProduksi from '@/features/produksi/routes.js'
 
 const routes = [
@@ -25,10 +23,6 @@ const routes = [
     component: () => import('@/views/DashboardView.vue'),
     meta: { perluLogin: true }
   },
-
-  // ==========================================
-  // BLOK AKUNTING
-  // ==========================================
   {
     path: '/accounting',
     meta: { perluLogin: true, modul: 'akunting' },
@@ -108,10 +102,6 @@ const routes = [
       }
     ]
   },
-
-  // ==========================================
-  // BLOK GUDANG (WAREHOUSE)
-  // ==========================================
   {
     path: '/warehouse',
     meta: { perluLogin: true, modul: 'gudang' },
@@ -165,31 +155,18 @@ const routes = [
         redirect: '/warehouse/distribution/packaging'
       },
       {
-        path: 'packaging',
-        name: 'warehouse-packaging',
-        component: () => import('@/features/warehouse/views/Packageing.vue')
-      },
-      {
         path: 'packaging/log',
         name: 'warehouse-packaging-log',
         component: () => import('@/features/warehouse/views/LogPackageingList.vue')
       }
     ]
   },
-
-  // ==========================================
-  // BLOK MASTER
-  // ==========================================
   {
     path: '/master/suplier',
     name: 'master-suplier',
     meta: { perluLogin: true, modul: 'master' },
     component: () => import('@/features/master/views/Supplier.vue')
   },
-
-  // ==========================================
-  // BLOK INVENTORY
-  // ==========================================
   {
     path: '/inventory',
     meta: { perluLogin: true, modul: 'inventory' },
@@ -214,10 +191,6 @@ const routes = [
       },
     ]
   },
-
-  // ==========================================
-  // BLOK DISTRIBUSI & LOGISTIK
-  // ==========================================
   {
     path: '/distribusi',
     meta: { perluLogin: true, modul: 'distribusi' },
@@ -262,16 +235,7 @@ const routes = [
       }
     ]
   },
-
-  // ==========================================
-  // BLOK PRODUKSI
-  // ==========================================
-  // 2. BONGKAR ARRAY DARI ruteProduksi KE DALAM SINI
   ...ruteProduksi,
-
-  // ==========================================
-  // BLOK LAIN-LAIN
-  // ==========================================
   {
     path: '/work-order',
     name: 'work-order',

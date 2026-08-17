@@ -66,3 +66,10 @@ class PelangganSerializer(serializers.ModelSerializer):
         fields = ['id', 'kode', 'nama', 'npwp', 'alamat',
                   'kontak_nama', 'kontak_hp',
                   'termin_hari_default', 'plafon_kredit', 'aktif']
+
+class PelangganSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pelanggan
+        fields = ['id', 'kode', 'nama', 'npwp', 'alamat',
+                  'kontak_nama', 'kontak_hp',
+                  'termin_hari_default', 'plafon_kredit', 'aktif']

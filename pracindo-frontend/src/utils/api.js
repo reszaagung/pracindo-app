@@ -5,7 +5,7 @@ const api = axios.create({
   headers: { Accept: 'application/json' },
 })
 
-const PUBLIK = ['auth/login/', 'auth/daftar/', 'auth/lupa-password/']
+const PUBLIK = ['auth/login/', 'auth/register/', 'auth/lupa-password/']
 const endpointPublik = (url = '') => PUBLIK.some((p) => url.includes(p))
 
 api.interceptors.request.use((cfg) => {
@@ -43,7 +43,5 @@ api.interceptors.response.use(
     return Promise.reject(err)
   }
 )
-
-
 
 export default api

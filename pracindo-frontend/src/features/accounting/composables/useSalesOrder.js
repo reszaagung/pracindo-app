@@ -34,15 +34,36 @@ export function useSalesOrder() {
 
     const muatDataMaster = async () => {
         try {
-            const [resEntitas, resPelanggan, resProduk] = await Promise.all([
-                api.get('master/entitas/'),
+            // allSettled, bukan all.
+            //
+            // Promise.all gagal SELURUHNYA begitu satu request meleset --
+            // satu 404 mengosongkan ketiga dropdown, dan pesannya tidak
+            // menyebut yang mana. Dengan allSettled, yang berhasil tetap
+            // terisi dan yang gagal disebut namanya.
+            //
+            // Entitas ada di app core, bukan master.
+            const [rEnt, rPlg, rPrd] = await Promise.allSettled([
+                api.get('core/entitas/'),
                 api.get('master/pelanggan/'),
-                api.get('master/produk/')
+                api.get('master/produk/'),
             ])
 
-            listEntitas.value = resEntitas.data.results || resEntitas.data
-            listPelanggan.value = resPelanggan.data.results || resPelanggan.data
-            listProduk.value = resProduk.data.results || resProduk.data
+            const ambil = (r) => (r.status === 'fulfilled'
+                ? (r.value.data.results ?? r.value.data ?? [])
+                : [])
+
+            listEntitas.value = ambil(rEnt)
+            listPelanggan.value = ambil(rPlg)
+            listProduk.value = ambil(rPrd)
+
+            const gagal = []
+            if (rEnt.status === 'rejected') gagal.push('entitas')
+            if (rPlg.status === 'rejected') gagal.push('pelanggan')
+            if (rPrd.status === 'rejected') gagal.push('produk')
+            if (gagal.length) {
+                pesanError.value = `Master belum tersedia: ${gagal.join(', ')}.`
+                console.error('Master SO gagal:', gagal)
+            }
         } catch (error) {
             console.error("Gagal memuat master data SO:", error)
             pesanError.value = "Gagal memuat data master dari server."
