@@ -1,6 +1,6 @@
 import { http } from '@/utils/http'
 
-// 1. SISIPKAN 'v1' DI SINI (Hilangkan garis miring di depan)
+// Prefix utama untuk modul produksi
 const P = 'v1/produksi'
 
 export const apiTangki = {
@@ -32,6 +32,6 @@ export const apiPratinjau = (payload) =>
   http.post(`${P}/pratinjau/`, payload).then((r) => r.data)
 
 export const apiRawUntukProduksi = {
-  // 2. SISIPKAN 'v1' JUGA DI SINI UNTUK RAW INVENTORY
+  // Endpoint mengarah ke modul inventory
   daftar: () => http.get('v1/inventory/raw/', { params: { aktif: true } }).then((r) => r.data),
 }

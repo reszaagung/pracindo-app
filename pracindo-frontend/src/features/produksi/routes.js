@@ -5,7 +5,7 @@ export default [
     {
         path: '/produksi',
         component: ProduksiLayout,
-        meta: { perluLogin: true, modul: 'produksi' }, 
+        meta: { perluLogin: true, modul: 'produksi' },
         children: [
             {
                 path: '',
@@ -19,7 +19,7 @@ export default [
             {
                 path: 'batch/baru',
                 name: 'produksi-batch-baru',
-                component: () => import('./views/BatchForm.vue')
+                component: () => import('./views/InputProduksi.vue') // <-- Diperbarui di sini
             },
             {
                 path: 'batch/:id',
