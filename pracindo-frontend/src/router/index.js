@@ -2,7 +2,9 @@
 import { useGuards } from './guards'
 import ModulLayout from '@/components/layout/ModulLayout.vue'
 
+// 1. IMPORT RUTE MODULAR
 import ruteProduksi from '@/features/produksi/routes.js'
+import ruteWarehouse from '@/features/warehouse/routes.js'
 
 const routes = [
   {
@@ -102,65 +104,7 @@ const routes = [
       }
     ]
   },
-  {
-    path: '/warehouse',
-    meta: { perluLogin: true, modul: 'gudang' },
-    component: ModulLayout,
-    children: [
-      {
-        path: '',
-        name: 'warehouse-landing',
-        redirect: '/warehouse/input/receipt'
-      }
-    ]
-  },
-  {
-    path: '/warehouse/input',
-    meta: { perluLogin: true, modul: 'warehouse' },
-    component: () => import('@/features/warehouse/layout/InputEntryLayout.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/warehouse/input/receipt'
-      },
-      {
-        path: 'receipt',
-        name: 'warehouse-receipt-list',
-        component: () => import('@/features/warehouse/views/GoodsReceiptList.vue')
-      },
-      {
-        path: 'receipt/buat',
-        name: 'warehouse-receipt-buat',
-        component: () => import('@/features/warehouse/views/GoodsReceiptForm.vue')
-      },
-      {
-        path: 'receipt/:id',
-        name: 'warehouse-receipt-detail',
-        component: () => import('@/features/warehouse/views/GoodsReceiptDetail.vue')
-      },
-      {
-        path: 'discrepancy',
-        name: 'warehouse-discrepancy-list',
-        component: () => import('@/features/warehouse/views/DiscrepancyList.vue')
-      }
-    ]
-  },
-  {
-    path: '/warehouse/distribution',
-    meta: { perluLogin: true, modul: 'gudang' },
-    component: () => import('@/features/warehouse/layout/DistributionLayout.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/warehouse/distribution/packaging'
-      },
-      {
-        path: 'packaging/log',
-        name: 'warehouse-packaging-log',
-        component: () => import('@/features/warehouse/views/LogPackageingList.vue')
-      }
-    ]
-  },
+  // RUTE GUDANG LAMA DIHAPUS DARI SINI
   {
     path: '/master/suplier',
     name: 'master-suplier',
@@ -235,7 +179,11 @@ const routes = [
       }
     ]
   },
+
+  // 2. INJEKSI RUTE MODULAR (Gudang & Produksi)
   ...ruteProduksi,
+  ...ruteWarehouse,
+
   {
     path: '/work-order',
     name: 'work-order',

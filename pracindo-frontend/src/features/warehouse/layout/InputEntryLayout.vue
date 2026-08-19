@@ -1,6 +1,5 @@
 <template>
     <div class="flex h-screen bg-[#F8FAFC] font-sans text-slate-700 overflow-hidden relative">
-
         <!-- Header Mobile -->
         <header
             class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white shadow-sm z-30 flex items-center justify-between px-4 border-b border-slate-100">
@@ -11,7 +10,6 @@
                 </button>
                 <span class="font-bold text-slate-800 text-base md:text-lg">Input Gudang</span>
             </div>
-
             <button @click="kembali"
                 class="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-transform">
                 <i class="pi pi-arrow-left text-white text-sm"></i>
@@ -37,25 +35,21 @@
                         <i class="pi pi-arrow-left text-white text-xl"></i>
                     </div>
                 </div>
-
                 <nav class="flex flex-col gap-3 lg:gap-4 w-full px-4">
                     <button v-for="menu in menus" :key="menu.id" :disabled="!menu.activate" @click="klikMenu(menu)"
                         class="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 relative mx-auto group"
                         :class="menu.activate
                             ? (aktif(menu.rute) ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600')
                             : 'text-slate-300 cursor-default'">
-
                         <i
                             :class="['pi', menu.ikon, 'text-lg lg:text-xl', 'transition-transform', menu.activate ? 'group-hover:scale-110' : '']"></i>
-
                         <span
                             class="absolute left-16 bg-slate-800 text-white text-[11px] lg:text-xs font-semibold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg transition-opacity">
-                            {{ menu.label }}<template v-if="!menu.activate"> · segera</template>
+                            {{ menu.label }}<template v-if="!menu.activate"> (segera)</template>
                         </span>
                     </button>
                 </nav>
             </div>
-
             <div class="mt-auto flex flex-col items-center group relative mb-4">
                 <button @click="keluar" type="button"
                     class="w-10 h-10 rounded-xl overflow-hidden cursor-pointer border border-slate-200 hover:border-red-500 bg-white hover:bg-red-50 transition-all shadow-sm flex items-center justify-center">
@@ -78,7 +72,6 @@
                 </router-view>
             </div>
         </main>
-
     </div>
 </template>
 
@@ -87,17 +80,22 @@ import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useLayout } from '@/composables/useLayout'
-
 import { useNavInputEntry } from '../composables/useNavInputEntry'
 
 const route = useRoute()
 const router = useRouter()
 const { logout } = useAuth()
 const { sidebarAktif, isMobile, toggleSidebar, tutupDiMobile } = useLayout()
-
 const { menus, aktif } = useNavInputEntry()
 
-const kembali = () => router.push('/')
+// PERBAIKAN: Fungsi kembali menggunakan history browser
+const kembali = () => {
+    if (window.history.length > 2) {
+        router.back()
+    } else {
+        router.push('/warehouse')
+    }
+}
 
 const klikMenu = (menu) => {
     if (!menu.activate) return
@@ -134,7 +132,6 @@ watch(() => route.fullPath, tutupDiMobile)
 }
 
 @media (prefers-reduced-motion: reduce) {
-
     .fade-enter-active,
     .fade-leave-active {
         transition: none;

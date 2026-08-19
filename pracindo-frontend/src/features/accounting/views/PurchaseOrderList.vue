@@ -19,7 +19,6 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <!-- Stat 1 -->
-
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">BELUM DITERIMA PENUH</p>
                 <h3 class="text-2xl font-black text-slate-800">{{ belumDiterima.length }}</h3>
@@ -75,10 +74,12 @@
                 <table class="w-full text-left text-sm table-fixed">
                     <thead class="text-slate-500 bg-slate-50/50">
                         <tr>
-                            <th class="py-3 px-4 font-semibold rounded-tl-xl w-[25%]">No. PO</th>
+                            <th class="py-3 px-4 font-semibold rounded-tl-xl w-[20%]">No. PO</th>
                             <th class="py-3 px-4 font-semibold w-[15%]">Tanggal</th>
                             <th class="py-3 px-4 font-semibold w-[25%]">Supplier</th>
-                            <th class="py-3 px-4 font-semibold w-[15%] text-center rounded-tr-xl">Status</th>
+                            <th class="py-3 px-4 font-semibold w-[15%] text-center">Status</th>
+                            <!-- Kolom Aksi Ditambahkan -->
+                            <th class="py-3 px-4 font-semibold w-[25%] text-center rounded-tr-xl">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -93,6 +94,28 @@
                                     class="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase">
                                     {{ po.status }}
                                 </span>
+                            </td>
+
+                            <!-- Kolom Aksi -->
+                            <td class="py-3 px-4 text-center">
+                                <div class="flex items-center justify-center gap-1.5">
+
+                                    <!-- Muncul KHUSUS jika status DRAFT -->
+                                    <template v-if="po.status === 'DRAFT'">
+                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors">
+                                            <i class="pi pi-send text-[10px] mr-1"></i> Kirim
+                                        </button>
+                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors">
+                                            <i class="pi pi-times text-[10px]"></i>
+                                        </button>
+                                    </template>
+
+                                    <!-- Tombol Detail (muncul di semua status) -->
+                                    <button class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white rounded-lg text-[11px] font-bold transition-colors tooltip-trigger">
+                                        <i class="pi pi-eye text-[10px] mr-1"></i> Detail
+                                    </button>
+
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -116,12 +139,12 @@ const LazyFormPO = defineAsyncComponent(() =>
     import('@/features/accounting/views/ProcurementCreate.vue')
 )
 
-
 const tampilModalPO = ref(false)
 
 const {
     daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
-    belumDiterima, draftCount, muatDaftarPO
+    belumDiterima, draftCount, muatDaftarPO,
+    kirimPO, batalkanPO // <-- Panggil fungsi API yang baru ditambahkan
 } = usePurchaseOrder()
 
 onMounted(() => {
@@ -129,8 +152,29 @@ onMounted(() => {
 })
 
 const poBerhasilDisimpan = () => {
-    tampilModalPO.value = false 
-    muatDaftarPO() 
+    tampilModalPO.value = false
+    muatDaftarPO()
+}
+
+// Handler Kirim PO
+const handleKirim = async (id) => {
+    if(confirm('Kirim PO ini ke Suplier? Status akan menjadi TERKIRIM dan item pesanan tidak bisa diubah lagi.')) {
+        const res = await kirimPO(id)
+        if (res.success) alert('Purchase Order berhasil dikirim.')
+    }
+}
+
+// Handler Batalkan PO
+const handleBatal = async (id) => {
+    const alasan = prompt('Masukkan alasan membatalkan dokumen PO ini:')
+    if(alasan !== null) { // Memastikan user tidak menekan 'Cancel' pada prompt
+        if(alasan.trim().length < 5) {
+            alert('Alasan pembatalan terlalu pendek! Minimal 5 karakter.')
+            return
+        }
+        const res = await batalkanPO(id, alasan)
+        if (res.success) alert('Purchase Order berhasil dibatalkan.')
+    }
 }
 
 const badgeColor = (status) => {

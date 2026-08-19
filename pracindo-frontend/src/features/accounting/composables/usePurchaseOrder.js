@@ -2,8 +2,8 @@ import { ref, computed } from 'vue'
 import api from '@/utils/api'
 import { bacaError } from '@/utils/error'
 import { generateKode } from '@/utils/generate_id'
-export function usePurchaseOrder() {
 
+export function usePurchaseOrder() {
     const daftarPO = ref([])
     const isLoadingDaftar = ref(false)
     const cari = ref('')
@@ -18,7 +18,6 @@ export function usePurchaseOrder() {
     const previewNomor = ref('')
 
     const periodeDitutup = ref(false)
-
 
     const muatDaftarPO = async () => {
         isLoadingDaftar.value = true
@@ -59,6 +58,7 @@ export function usePurchaseOrder() {
             })
             .reduce((s, po) => s + Number(po.total_nilai ?? 0), 0)
     })
+
     const muatDataMaster = async () => {
         sedangProses.value = true
         pesanError.value = ''
@@ -115,7 +115,6 @@ export function usePurchaseOrder() {
             }
         } catch (err) {
             console.error('Gagal mengecek status periode:', err)
-
             periodeDitutup.value = false
         }
     }
@@ -130,6 +129,7 @@ export function usePurchaseOrder() {
             return []
         }
     }
+
     const buatProdukBaru = async (nama) => {
         const namaProduk = nama.trim()
 
@@ -160,6 +160,7 @@ export function usePurchaseOrder() {
         if (produkLokal) {
             return produkLokal
         }
+
         const kode = generateKode('RM')
 
         try {
@@ -212,7 +213,6 @@ export function usePurchaseOrder() {
                 return { success: false, message: pesanError.value }
             }
 
-            // Di dalam function simpanPO()
             const payload = {
                 entitas_id: form.entitas_id,
                 suplier_id: form.suplier_id,
@@ -242,7 +242,37 @@ export function usePurchaseOrder() {
         }
     }
 
+    // Fungsi baru untuk mengeksekusi pengiriman PO
+    const kirimPO = async (po_id) => {
+        sedangProses.value = true
+        pesanError.value = ''
+        try {
+            await api.post(`akunting/purchase-order/${po_id}/kirim/`)
+            await muatDaftarPO()
+            return { success: true }
+        } catch (err) {
+            pesanError.value = bacaError(err, 'Gagal mengirim PO.')
+            return { success: false, message: pesanError.value }
+        } finally {
+            sedangProses.value = false
+        }
+    }
 
+    // Fungsi baru untuk mengeksekusi pembatalan PO
+    const batalkanPO = async (po_id, alasan) => {
+        sedangProses.value = true
+        pesanError.value = ''
+        try {
+            await api.post(`akunting/purchase-order/${po_id}/batalkan/`, { alasan })
+            await muatDaftarPO()
+            return { success: true }
+        } catch (err) {
+            pesanError.value = bacaError(err, 'Gagal membatalkan PO.')
+            return { success: false, message: pesanError.value }
+        } finally {
+            sedangProses.value = false
+        }
+    }
 
     return {
         daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
@@ -250,6 +280,7 @@ export function usePurchaseOrder() {
         listEntitas, listSupplier, listProduk, sedangProses,
         pesanError, previewNomor, muatDataMaster, muatPreviewNomor,
         cariProduk, buatProdukBaru, simpanPO,
-        periodeDitutup, cekStatusPeriode
+        periodeDitutup, cekStatusPeriode,
+        kirimPO, batalkanPO
     }
 }

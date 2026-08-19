@@ -14,8 +14,11 @@ export function useSumberOptions() {
                 apiBatch.tersedia(tangkiTujuanId)
             ])
 
-            opsiRaw.value = rawRes.filter(r => Number(r.saldo_qty) > 0)
-            opsiBatch.value = batchRes
+            const rawData = Array.isArray(rawRes) ? rawRes : (rawRes.results || [])
+            const batchData = Array.isArray(batchRes) ? batchRes : (batchRes.results || [])
+
+            opsiRaw.value = rawData.filter(r => Number(r.saldo_qty) > 0)
+            opsiBatch.value = batchData
         } catch (e) {
             console.error('Gagal memuat opsi sumber:', e)
         } finally {
