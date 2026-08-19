@@ -26,19 +26,14 @@ function kirim() {
                     </p>
                 </div>
             </div>
-
             <div class="p-4 space-y-3 text-sm text-gray-700">
-                <p><strong>Peringatan:</strong> Jika nilai batch ini sudah ada yang ditarik oleh Packing, sistem akan
-                    menolak Void secara otomatis untuk mencegah konflik saldo. Dalam kasus tersebut, gunakan penyesuaian
-                    manual.</p>
-
+                <p><strong>Peringatan:</strong> Jika nilai batch ini sudah ada yang ditarik oleh Packing, sistem akan menolak Void secara otomatis untuk mencegah konflik saldo. Dalam kasus tersebut, gunakan penyesuaian manual.</p>
                 <label class="block">
                     <span class="font-bold text-gray-800">Alasan Pembatalan <span class="text-red-500">*</span></span>
                     <textarea v-model="alasan" rows="3" placeholder="Wajib diisi minimal 5 karakter..."
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-red-500 focus:ring-red-500 text-sm"></textarea>
                 </label>
             </div>
-
             <div class="bg-gray-50 px-4 py-3 border-t flex justify-end gap-2">
                 <button @click="$emit('batal')"
                     class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors">

@@ -13,7 +13,6 @@ export function useBatchDetail() {
         try {
             detail.value = await apiBatch.detail(id)
 
-            // Komposisi (BOM) hanya ada maknanya jika dokumen sudah POSTED atau VOID
             if (detail.value.status === STATUS_BATCH.POSTED || detail.value.status === STATUS_BATCH.VOID) {
                 komposisi.value = await apiBatch.komposisi(id)
             }
@@ -28,11 +27,11 @@ export function useBatchDetail() {
     async function batalkan(id, alasan) {
         try {
             const hasil = await apiBatch.void(id, alasan)
-            usePemeriksaanStore().periksa() // Segarkan panel global
-            await muatDetail(id) // Muat ulang detail agar status berubah jadi VOID
+            usePemeriksaanStore().periksa()
+            await muatDetail(id)
             return hasil
         } catch (e) {
-            throw e // Dilempar ke komponen untuk dirender
+            throw e
         }
     }
 

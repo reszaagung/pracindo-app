@@ -1,41 +1,30 @@
 <script setup>
 import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-
 import { useInputProduksi } from '../composables/useInputProduksi'
 import { useSumberOptions } from '../composables/useSumberOptions'
 import { useTangki } from '../composables/useTangki'
-
 import BarisSumber from '../components/BarisSumber.vue'
 import PanelValuasi from '../components/PanelValuasi.vue'
-
-// Menggunakan komponen global yang sudah ada di luar modul produksi
 import DialogKonfirmasi from '@/components/DialogKonfirmasi.vue'
 
 const router = useRouter()
-
 const {
     form, jenis, pratinjau, memuat, menyimpan, galatServer,
     galatBaris, galatUmum, valuasiBaris, bolehSimpan,
     tambahBaris, hapusBaris, simpanDanPosting,
 } = useInputProduksi()
 
-// Pastikan buatTangki dan memuatSimpan di-import dari useTangki
 const { tangkiList, muatTangki, buatTangki, memuatSimpan: memuatSimpanTangki } = useTangki()
 const { opsiRaw, opsiBatch, muatOpsi } = useSumberOptions()
-
 const konfirmasi = ref(false)
 
-// === STATE & FUNGSI TAMBAH TANGKI BARU ===
 const tampilModalTangki = ref(false)
-const formTangkiBaru = reactive({
-    kode: '',
-    nama: ''
-})
+const formTangkiBaru = reactive({ kode: '', nama: '' })
 
 function cekTambahTangki() {
     if (form.tangki === 'TAMBAH') {
-        form.tangki = null // Bersihkan pilihan agar tidak error
+        form.tangki = null
         formTangkiBaru.kode = ''
         formTangkiBaru.nama = ''
         tampilModalTangki.value = true
@@ -47,21 +36,18 @@ async function simpanTangkiBaru() {
         alert('Kode dan Nama Tangki harus diisi!')
         return
     }
-
     try {
         const tangkiBaru = await buatTangki({
             kode: formTangkiBaru.kode.toUpperCase(),
             nama: formTangkiBaru.nama,
             aktif: true
         })
-
-        form.tangki = tangkiBaru.id // Otomatis pilih tangki yang baru jadi
+        form.tangki = tangkiBaru.id
         tampilModalTangki.value = false
     } catch (e) {
         alert('Gagal menyimpan tangki baru. Periksa koneksi internet Anda.')
     }
 }
-// =========================================
 
 onMounted(() => {
     muatTangki()
@@ -72,81 +58,83 @@ async function jalankan() {
     konfirmasi.value = false
     try {
         const batch = await simpanDanPosting()
-        // Jika berhasil, arahkan langsung ke halaman detail batch yang baru diposting
         router.push({ name: 'produksi-batch-detail', params: { id: batch.id } })
     } catch (e) {
-        // 409 Konflik Saldo: Kenyataan menolak karena saldo berubah di detik terakhir.
-        if (e.konflikSaldo) {
-            await muatOpsi()
-        }
+        if (e.konflikSaldo) await muatOpsi()
     }
 }
 </script>
 
 <template>
-    <div class="batch-form max-w-5xl mx-auto pb-10 space-y-6">
-        <header class="flex justify-between items-end border-b pb-4">
+    <div class="batch-form max-w-5xl mx-auto pb-12 px-3 sm:px-4 space-y-6 md:space-y-8 mt-2 md:mt-4">
+
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end border-b border-slate-200 pb-4 gap-3">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800">Input Produksi</h1>
-                <p class="text-sm text-gray-500 mt-1">Jenis transaksi ditentukan otomatis dari sumber yang Anda pilih.</p>
+                <h1 class="text-2xl font-bold text-slate-800">Input Produksi</h1>
+                <p class="text-sm text-slate-500 mt-1">Jenis transaksi akan menyesuaikan secara otomatis.</p>
             </div>
-            <span class="px-3 py-1 rounded-full text-sm font-bold tracking-wide shadow-sm"
-                :class="jenis === 'BLENDING' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'">
+            <div class="inline-flex items-center justify-center px-3 py-1 rounded-md text-xs font-bold tracking-wide uppercase shadow-sm border self-start sm:self-auto"
+                :class="jenis === 'BLENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'">
+                <i class="pi mr-2" :class="jenis === 'BLENDING' ? 'pi-sync' : 'pi-sitemap'"></i>
                 {{ jenis }}
-            </span>
+            </div>
         </header>
 
-        <!-- Bagian Header Dokumen -->
-        <section class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-md border">
+        <!-- Form Utama -->
+        <section class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-slate-200">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <label class="block">
+                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tangki Tujuan <span class="text-red-500">*</span></span>
+                    <select v-model="form.tangki" @change="cekTambahTangki"
+                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                        <option :value="null">-- Pilih Tangki --</option>
+                        <option v-for="t in tangkiList" :key="t.id" :value="t.id">{{ t.kode }} ({{ t.nama }})</option>
+                        <option disabled>──────────</option>
+                        <option value="TAMBAH" class="font-bold text-blue-600">+ Tambah Tangki Baru...</option>
+                    </select>
+                </label>
 
-            <!-- SELECT TANGKI DENGAN FITUR TAMBAH BARU -->
-            <label class="block text-sm font-medium text-gray-700">
-                Tangki Tujuan <span class="text-red-500">*</span>
-                <select v-model="form.tangki" @change="cekTambahTangki"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    <option :value="null">— pilih tangki —</option>
-                    <option v-for="t in tangkiList" :key="t.id" :value="t.id">
-                        {{ t.kode }} ({{ t.nama }})
-                    </option>
+                <label class="block">
+                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Nama Hasil <span class="text-red-500">*</span></span>
+                    <input v-model="form.nama_hasil" type="text" maxlength="120"
+                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder:text-slate-300"
+                        placeholder="Contoh: SUGAR BROWN" />
+                </label>
 
-                    <!-- Opsi Tambah Tangki -->
-                    <option disabled>──────────</option>
-                    <option value="TAMBAH" class="font-bold text-blue-600">+ Tambah Tangki Baru...</option>
-                </select>
-            </label>
+                <label class="block">
+                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tekor / Susut (Kg)</span>
+                    <div class="relative">
+                        <input v-model="form.tekor_kg" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*"
+                            class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 pr-8 pl-3 text-right focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white" />
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
+                            <span class="text-xs font-medium text-slate-400">Kg</span>
+                        </div>
+                    </div>
+                </label>
 
-            <label class="block text-sm font-medium text-gray-700">
-                Nama Hasil <span class="text-red-500">*</span>
-                <input v-model="form.nama_hasil" type="text" maxlength="120"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Contoh: SUGAR BROWN" />
-            </label>
-
-            <label class="block text-sm font-medium text-gray-700">
-                Tekor Penyusutan (Kg)
-                <input v-model="form.tekor_kg" inputmode="decimal"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm text-right focus:ring-blue-500 focus:border-blue-500" />
-            </label>
-
-            <label class="block text-sm font-medium text-gray-700">
-                Catatan Opsional
-                <input v-model="form.catatan" type="text"
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Catatan produksi..." />
-            </label>
+                <label class="block">
+                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Catatan Tambahan</span>
+                    <input v-model="form.catatan" type="text"
+                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder:text-slate-300"
+                        placeholder="Opsional..." />
+                </label>
+            </div>
         </section>
 
-        <!-- Bagian Baris Sumber -->
-        <section class="sumber space-y-3">
-            <div class="flex justify-between items-center mb-2">
-                <h2 class="text-lg font-semibold text-gray-800">Bahan Sumber</h2>
+        <!-- Daftar Sumber Material -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-center px-1 border-b border-slate-200 pb-2">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="pi pi-box text-blue-500 text-sm"></i> Bahan Sumber
+                </h2>
                 <button type="button" @click="tambahBaris"
-                    class="text-sm bg-gray-100 hover:bg-gray-200 border text-gray-700 px-3 py-1.5 rounded-md font-medium transition-colors">
-                    + Tambah Sumber
+                    class="text-xs bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-md font-semibold transition-colors shadow-sm flex items-center gap-2">
+                    <i class="pi pi-plus text-[10px]"></i> <span class="hidden sm:inline">Tambah Sumber</span><span class="sm:hidden">Tambah</span>
                 </button>
             </div>
 
-            <div class="space-y-3">
+            <div class="space-y-2.5">
                 <BarisSumber v-for="b in form.baris" :key="b._id" v-model="form.baris[form.baris.indexOf(b)]"
                     :opsi-raw="opsiRaw" :opsi-batch="opsiBatch"
                     :valuasi="valuasiBaris[b.sumber === 'RAW' ? `RAW:${b.raw}` : `WIP:${b.batch_sumber}`]"
@@ -154,73 +142,74 @@ async function jalankan() {
             </div>
         </section>
 
-        <!-- Panel Informasi Angka & Valuasi -->
+        <!-- Panel Valuasi -->
         <PanelValuasi :pratinjau="pratinjau" :memuat="memuat" :galat-umum="galatUmum" />
 
-        <!-- Pesan Galat Server -->
-        <div v-if="galatServer" class="p-4 rounded-md border"
-            :class="galatServer.invariantMelenceng ? 'bg-red-100 border-red-500 text-red-900' : 'bg-amber-50 border-amber-300 text-amber-900'">
+        <!-- Pesan Server -->
+        <div v-if="galatServer" class="p-4 rounded-lg border shadow-sm"
+            :class="galatServer.invariantMelenceng ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'">
             <div class="flex items-start gap-3">
-                <div class="text-2xl mt-0.5">
-                    {{ galatServer.invariantMelenceng ? '🚨' : '⚠️' }}
+                <div class="mt-0.5">
+                    <i class="pi" :class="galatServer.invariantMelenceng ? 'pi-times-circle text-red-600 text-xl' : 'pi-exclamation-triangle text-amber-600 text-xl'"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-lg mb-1">
-                        <template v-if="galatServer.invariantMelenceng">Pemeriksaan Keseimbangan Gagal (Sistem Dihentikan Sementara)</template>
-                        <template v-else-if="galatServer.konflikSaldo">Konflik Saldo: Data Berubah</template>
+                    <h3 class="font-bold text-sm mb-1" :class="galatServer.invariantMelenceng ? 'text-red-900' : 'text-amber-900'">
+                        <template v-if="galatServer.invariantMelenceng">Sistem Dihentikan (Pemeriksaan Gagal)</template>
+                        <template v-else-if="galatServer.konflikSaldo">Konflik Saldo Material</template>
                         <template v-else>Pengajuan Ditolak</template>
                     </h3>
-                    <p class="text-sm font-medium">{{ galatServer.pesan }}</p>
-                    <p v-if="galatServer.draftId" class="text-xs mt-2 italic opacity-80">
-                        Jangan khawatir, isian Anda tidak hilang dan telah tersimpan dengan aman sebagai DRAFT #{{ galatServer.draftId }}.
+                    <p class="text-sm text-slate-700">{{ galatServer.pesan }}</p>
+                    <p v-if="galatServer.draftId" class="text-xs mt-2 italic text-slate-500">
+                        Isian tersimpan sebagai DRAFT #{{ galatServer.draftId }}.
                     </p>
                 </div>
             </div>
         </div>
 
         <!-- Tombol Aksi Utama -->
-        <footer class="flex justify-end pt-4 border-t">
+        <footer class="pt-4 flex justify-end">
             <button :disabled="!bolehSimpan" @click="konfirmasi = true"
-                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 px-6 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                class="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm py-2 px-6 rounded-lg shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <i v-if="menyimpan" class="pi pi-spinner pi-spin text-xs"></i>
+                <i v-else class="pi pi-send text-xs"></i>
                 <span v-if="menyimpan">Menyimpan...</span>
-                <span v-else>Simpan & Posting</span>
+                <span v-else>Simpan & Posting Data</span>
             </button>
         </footer>
 
-        <!-- Dialog Konfirmasi Eksternal -->
+        <!-- Dialog-Dialog -->
         <DialogKonfirmasi v-if="konfirmasi" :judul="`Konfirmasi Posting ${jenis}`"
             :pesan="`Anda akan mem-posting dokumen ${jenis} dengan hasil ${form.nama_hasil}. Setelah di-posting, saldo tangki akan bertambah dan uang tidak dapat dikembalikan secara otomatis. Lanjutkan?`"
             @batal="konfirmasi = false" @setuju="jalankan" />
 
-        <!-- MODAL TAMBAH TANGKI BARU -->
-        <div v-if="tampilModalTangki" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div class="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden">
-                <div class="px-4 py-3 border-b border-gray-100">
-                    <h3 class="text-lg font-bold text-gray-800">Tambah Tangki Baru</h3>
+        <div v-if="tampilModalTangki" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                    <i class="pi pi-database text-blue-600"></i>
+                    <h3 class="text-sm font-bold text-slate-800">Tambah Tangki Baru</h3>
                 </div>
-
-                <div class="p-4 space-y-4">
+                <div class="p-5 space-y-4">
                     <label class="block">
-                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Kode Tangki</span>
-                        <input v-model="formTangkiBaru.kode" type="text" placeholder="Contoh: T-05"
-                            class="mt-1 block w-full border-gray-300 rounded-md shadow-sm uppercase focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Kode Tangki</span>
+                        <input v-model="formTangkiBaru.kode" type="text" placeholder="T-05"
+                            class="block w-full border-slate-300 rounded-md shadow-sm uppercase focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 px-3 bg-white" />
                     </label>
                     <label class="block">
-                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Keterangan / Nama</span>
-                        <input v-model="formTangkiBaru.nama" type="text" placeholder="Contoh: Tangki Oksidasi"
-                            class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Nama / Keterangan</span>
+                        <input v-model="formTangkiBaru.nama" type="text" placeholder="Tangki Oksidasi"
+                            class="block w-full border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 px-3 bg-white" />
                     </label>
                 </div>
-
-                <div class="bg-gray-50 px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+                <div class="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
                     <button type="button" @click="tampilModalTangki = false"
-                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+                        class="px-4 py-1.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors">
                         Batal
                     </button>
                     <button type="button" @click="simpanTangkiBaru" :disabled="memuatSimpanTangki"
-                        class="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        <span v-if="memuatSimpanTangki">Menyimpan...</span>
-                        <span v-else>Simpan Tangki</span>
+                        class="px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors flex items-center gap-2">
+                        <i v-if="memuatSimpanTangki" class="pi pi-spinner pi-spin"></i>
+                        <span v-if="memuatSimpanTangki">Memproses...</span>
+                        <span v-else>Simpan</span>
                     </button>
                 </div>
             </div>

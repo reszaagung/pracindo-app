@@ -9,7 +9,6 @@ defineProps({
 
 defineEmits(['detail', 'posting', 'hapus'])
 
-// Fungsi sederhana format tanggal
 const formatWaktu = (iso) => {
     if (!iso) return '-'
     return new Date(iso).toLocaleString('id-ID', {
@@ -65,8 +64,6 @@ const formatWaktu = (iso) => {
                             </span>
                         </td>
                         <td class="px-4 py-3 text-right space-x-2">
-
-                            <!-- Aksi untuk DRAFT -->
                             <template v-if="b.status === STATUS_BATCH.DRAFT">
                                 <button @click="$emit('hapus', b.id)"
                                     class="text-red-600 hover:text-red-800 font-medium text-xs border border-red-200 px-2 py-1 rounded">
@@ -77,15 +74,12 @@ const formatWaktu = (iso) => {
                                     Posting
                                 </button>
                             </template>
-
-                            <!-- Aksi untuk POSTED / VOID -->
                             <template v-else>
                                 <button @click="$emit('detail', b.id)"
                                     class="text-gray-600 hover:text-gray-900 font-medium text-xs border bg-gray-100 px-2 py-1 rounded">
                                     Rincian
                                 </button>
                             </template>
-
                         </td>
                     </tr>
                 </tbody>

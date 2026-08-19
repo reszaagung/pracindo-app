@@ -20,7 +20,6 @@ defineProps({
                 Ini <strong>bukan anomali</strong> atau data ganda.
             </p>
         </div>
-
         <table class="w-full text-sm text-left text-gray-600">
             <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
                 <tr>

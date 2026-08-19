@@ -5,12 +5,13 @@ import { apiBatch, apiPratinjau } from '../api'
 import { usePemeriksaanStore } from '@/stores/pemeriksaan'
 
 let uid = 0
+
 const barisKosong = () => ({
     _id: ++uid,
-    sumber: 'RAW',        // 'RAW' | 'WIP'
-    raw: null,            // id RawMaterial
-    batch_sumber: null,   // id Batch
-    qty_kg: '',
+    sumber: 'RAW',
+    raw: null,
+    batch_sumber: null,
+    qty_kg: ''
 })
 
 export function useInputProduksi() {
@@ -26,7 +27,6 @@ export function useInputProduksi() {
     const memuat = ref(false)
     const menyimpan = ref(false)
     const galatServer = ref(null)
-
     let seq = 0
     let timer = null
 
@@ -41,6 +41,7 @@ export function useInputProduksi() {
         for (const b of form.baris) {
             const q = normalKg(b.qty_kg)
             if (!q) continue
+
             if (b.sumber === 'RAW' && b.raw) input_raw.push({ raw: b.raw, qty_kg: q })
             if (b.sumber === 'WIP' && b.batch_sumber) input_wip.push({ batch_sumber: b.batch_sumber, qty_kg: q })
         }
@@ -95,7 +96,6 @@ export function useInputProduksi() {
         for (const g of pratinjau.value?.galat || []) {
             const m = /^input_(raw|wip)\[(\d+)\]$/.exec(g.field || '')
             if (!m) continue
-
             const kunci = m[1] === 'raw' ? 'raw' : 'batch_sumber'
             const baris = form.baris.find((b) => String(b[kunci]) === m[2])
             if (baris) peta[baris._id] = g.pesan
@@ -124,6 +124,7 @@ export function useInputProduksi() {
     )
 
     function tambahBaris() { form.baris.push(barisKosong()) }
+
     function hapusBaris(id) {
         if (form.baris.length <= 1) return
         form.baris = form.baris.filter((b) => b._id !== id)
@@ -148,9 +149,7 @@ export function useInputProduksi() {
         try {
             draft = await apiBatch.buat(payload())
             const posted = await apiBatch.posting(draft.id)
-
             usePemeriksaanStore().periksa()
-
             reset()
             return posted
         } catch (e) {

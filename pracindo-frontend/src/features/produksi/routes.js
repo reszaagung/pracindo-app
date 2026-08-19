@@ -1,4 +1,3 @@
-// src/features/produksi/routes.js
 const ProduksiLayout = () => import('./layout/ProduksiLayout.vue')
 
 export default [
@@ -19,7 +18,7 @@ export default [
             {
                 path: 'batch/baru',
                 name: 'produksi-batch-baru',
-                component: () => import('./views/InputProduksi.vue') // <-- Diperbarui di sini
+                component: () => import('./views/InputProduksi.vue')
             },
             {
                 path: 'batch/:id',
@@ -31,7 +30,7 @@ export default [
                 path: 'tangki',
                 name: 'produksi-tangki',
                 component: () => import('./views/TangkiMonitor.vue')
-            },
-        ],
-    },
+            }
+        ]
+    }
 ]

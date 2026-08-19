@@ -11,13 +11,10 @@ defineProps({
 
 <template>
     <div class="bg-white border rounded-lg shadow-sm overflow-hidden flex flex-col h-full">
-        <!-- Header Tangki -->
         <div class="bg-gray-50 border-b p-4 flex justify-between items-start">
             <div>
                 <h2 class="text-xl font-bold text-gray-800">{{ data.tangki }}</h2>
             </div>
-
-            <!-- Peringatan Harga Beragam (Bukan Galat, tapi informatif) -->
             <div v-if="data.harga_beragam"
                 class="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-md border border-amber-200 flex items-center gap-1 cursor-help"
                 title="Tagihan packing akan bervariasi bergantung pada batch mana yang ditarik operator.">
@@ -25,7 +22,6 @@ defineProps({
             </div>
         </div>
 
-        <!-- Ringkasan Saldo -->
         <div class="p-4 grid grid-cols-2 gap-4 border-b bg-white">
             <div>
                 <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Total Isi Fisik</p>
@@ -38,7 +34,6 @@ defineProps({
             </div>
         </div>
 
-        <!-- Rincian Batch (Expandable/Scrollable) -->
         <div class="p-4 flex-1 bg-gray-50">
             <h3 class="text-sm font-semibold text-gray-700 mb-3 border-b pb-1">
                 Rincian Batch ({{ data.batches.length }})
@@ -60,7 +55,6 @@ defineProps({
                         <span>Sisa: <strong>{{ formatKg(b.sisa_qty) }}</strong></span>
                         <span>HPP: <strong>{{ formatRp(b.harga_per_kg) }}</strong></span>
                     </div>
-
                     <div v-if="b.kelebihan"
                         class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">
                         KELEBIHAN

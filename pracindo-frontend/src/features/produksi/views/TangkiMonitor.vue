@@ -7,27 +7,21 @@ const tangkiSaldos = ref([])
 const memuat = ref(true)
 const galatMuat = ref(null)
 
-async function muatData() {
-    error.value = false
-    loading.value = true
+async function muatMonitor() {
+    galatMuat.value = null
+    memuat.value = true
     try {
-        // 1. Tarik respons mentahnya dulu
         const res = await apiTangki.daftar({ aktif: true })
-
-        // 2. Ekstrak array-nya agar aman dari struktur paginasi backend
         const daftar = Array.isArray(res) ? res : (res.results || [])
 
-        // 2. Tarik saldo tiap tangki secara paralel
-        const promises = tangkiList.map(t =>
+        const promises = daftar.map(t =>
             apiTangki.saldo(t.id).catch(err => {
                 console.error(`Gagal muat saldo tangki ${t.id}:`, err)
-                return null // Lewati yang gagal agar layar tidak blank total
+                return null
             })
         )
-
         const results = await Promise.all(promises)
         tangkiSaldos.value = results.filter(r => r !== null)
-
     } catch (e) {
         galatMuat.value = "Gagal memuat data dari server. Silakan periksa koneksi atau hubungi administrator."
     } finally {
@@ -45,13 +39,12 @@ onMounted(() => {
         <header class="flex justify-between items-end border-b pb-4">
             <div>
                 <h1 class="text-2xl font-bold text-gray-800">Monitor Tangki Fisik</h1>
-                <p class="text-sm text-gray-500 mt-1">Pantau ketersediaan hasil produksi dan rincian batch di dalam
-                    tangki.</p>
+                <p class="text-sm text-gray-500 mt-1">Pantau ketersediaan hasil produksi dan rincian batch di dalam tangki.</p>
             </div>
             <button @click="muatMonitor" :disabled="memuat"
                 class="text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md shadow-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2">
                 <span v-if="memuat">Memuat...</span>
-                <span v-else>↻ Segarkan Data</span>
+                <span v-else>Segarkan Data</span>
             </button>
         </header>
 
@@ -75,7 +68,6 @@ onMounted(() => {
             Tidak ada data tangki aktif yang ditemukan.
         </div>
 
-        <!-- Grid Tangki -->
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 align-stretch">
             <KartuTangki v-for="t in tangkiSaldos" :key="t.tangki" :data="t" />
         </div>

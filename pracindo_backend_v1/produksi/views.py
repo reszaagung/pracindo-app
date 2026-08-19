@@ -11,6 +11,7 @@ PEMETAAN GALAT KE HTTP
     membuat frontend tidak bisa membedakan "perbaiki isian" dari
     "hubungi admin".
 """
+from dataclasses import asdict
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -50,8 +51,6 @@ class BatchViewSet(viewsets.ModelViewSet):
             else ser.BatchSerializer
 
     def get_permissions(self):
-        # Menjalankan produksi (bahan benar-benar keluar dari pool) butuh
-        # hak yang lebih tinggi daripada menyusun draft.
         if self.action in ("posting", "void"):
             return [ModulProduksi(), OperatorSesi()]
         return super().get_permissions()
@@ -84,9 +83,6 @@ class BatchViewSet(viewsets.ModelViewSet):
                                             "dihapus."})
         instance.delete()
 
-    # Nama method SENGAJA bukan `post`. APIView.dispatch mencari
-    # self.post untuk setiap request POST; memberi nama itu ke sebuah
-    # @action adalah kabel telanjang di dekat pipa air.
     @action(detail=True, methods=["post"], url_path="post")
     def posting(self, request, pk=None):
         try:
@@ -150,15 +146,6 @@ def pratinjau_batch(request):
         return Response({"valid": False, "galat": [galat.as_dict()]})
 
     return Response({
-                "pesan": f"Penerimaan {penerimaan.nomor} tersimpan. "
-                        f"{len(setoran)} setoran hak terbit.",
-                "penerimaan": {"id": penerimaan.id, "nomor": penerimaan.nomor},
-                "laporan_selisih": [
-                    {"nomor": l.nomor, "jenis": l.get_jenis_display(),
-                    "qty_selisih": str(l.qty_selisih),
-                    "nilai": str(l.nilai_selisih)} for l in laporan],
-                "setoran": [
-                    {"nomor": s.nomor, "produk": str(s.produk),
-                    "qty_kg": str(s.qty_kg), "nilai": str(s.nilai)}
-                    for s in setoran],
-            }, status=status.HTTP_201_CREATED)
+        "valid": True,
+        **asdict(v)
+    })
