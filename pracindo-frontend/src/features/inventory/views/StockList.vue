@@ -1,7 +1,6 @@
-<!-- features/inventory/views/StockList.vue -->
+<!-- src/features/inventory/views/StockList.vue -->
 <template>
     <div class="flex flex-col w-full animate-fade-in relative">
-        <!-- Header Halaman -->
         <div class="mb-4 md:mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div>
                 <p class="text-xs text-slate-400 mb-1">
@@ -13,17 +12,14 @@
             </div>
         </div>
 
-        <!-- Notifikasi Galat -->
         <div v-if="galat"
             class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium flex items-start gap-3 shadow-sm">
             <i class="pi pi-exclamation-triangle mt-0.5"></i>
             <span>{{ galat }}</span>
         </div>
 
-        <!-- Area Konten Utama -->
         <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full min-h-[400px]">
 
-            <!-- Header Kartu & Tab Filter Lapis -->
             <div
                 class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
                 <div>
@@ -31,7 +27,6 @@
                     <p class="text-xs text-slate-500">Pilih laporan stok di bawah ini</p>
                 </div>
 
-                <!-- Tab Lapis Stok -->
                 <div class="flex bg-slate-50 p-1 rounded-xl w-full xl:w-auto overflow-x-auto custom-scrollbar">
                     <button v-for="l in LAPIS" :key="l.nilai" @click="pilihLapis(l.nilai)"
                         :class="lapis === l.nilai ? 'bg-white text-emerald-700 shadow-[0_2px_8px_rgba(0,0,0,0.04)] font-bold' : 'text-slate-500 hover:text-slate-700'"
@@ -41,13 +36,11 @@
                 </div>
             </div>
 
-            <!-- State Loading -->
             <div v-if="sedangProses" class="flex flex-col items-center justify-center py-12 text-center">
                 <i class="pi pi-spin pi-spinner text-emerald-500 text-3xl mb-3"></i>
                 <p class="text-xs text-slate-500 font-medium">Memuat data dari server...</p>
             </div>
 
-            <!-- State Kosong -->
             <div v-else-if="daftarStok.length === 0"
                 class="flex flex-col items-center justify-center py-12 text-center">
                 <div
@@ -59,9 +52,6 @@
                     'Saldo Pool' }} saat ini.</p>
             </div>
 
-            <!-- ============================================== -->
-            <!-- TABEL 1: MUTASI ENTITAS                        -->
-            <!-- ============================================== -->
             <div v-else-if="lapis === 'ENTITAS'" class="overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left text-sm table-auto min-w-[800px]">
                     <thead class="text-slate-500 bg-slate-50/50">
@@ -104,9 +94,6 @@
                 </table>
             </div>
 
-            <!-- ============================================== -->
-            <!-- TABEL 2: SALDO POOL                            -->
-            <!-- ============================================== -->
             <div v-else-if="lapis === 'POOL'" class="overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left text-sm table-fixed min-w-[500px]">
                     <thead class="text-slate-500 bg-slate-50/50">
@@ -118,10 +105,10 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        <tr v-for="s in daftarStok" :key="s.raw_id" class="hover:bg-slate-50/50 transition-colors">
+                        <tr v-for="s in daftarStok" :key="s.produk_id" class="hover:bg-slate-50/50 transition-colors">
                             <td class="py-3.5 px-4">
-                                <div class="font-bold text-slate-800 uppercase">{{ s.raw_kode }}</div>
-                                <div class="text-xs text-slate-500">{{ s.raw_nama }}</div>
+                                <div class="font-bold text-slate-800 uppercase">{{ s.produk_kode }}</div>
+                                <div class="text-xs text-slate-500">{{ s.produk_nama }}</div>
                             </td>
                             <td class="py-3.5 px-4 text-right font-black text-slate-800 text-base">
                                 {{ angka(s.qty_kg, 3) }}
@@ -155,7 +142,6 @@ const LAPIS = [
 const router = useRouter()
 const { daftarStok, sedangProses, galat, muatStok } = useStock()
 
-// Default tab saat pertama kali dibuka
 const lapis = ref('ENTITAS')
 
 const pilihLapis = (l) => {
@@ -167,7 +153,7 @@ const getStatusBadge = (status) => {
     const s = String(status).toUpperCase();
     if (s === 'KLAIM') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     if (s === 'HUTANG') return 'bg-rose-50 text-rose-700 border-rose-200';
-    return 'bg-slate-100 text-slate-600 border-slate-200'; // IMPAS
+    return 'bg-slate-100 text-slate-600 border-slate-200';
 }
 
 onMounted(() => {

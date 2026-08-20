@@ -1,3 +1,5 @@
+<!-- src/features/produksi/components/BarisSumber.vue -->
+
 <script setup>
 import { computed } from 'vue'
 import { formatRp, formatHarga, formatKg } from '@/utils/uang'
@@ -29,17 +31,13 @@ function gantiSumber(jenis) {
 <template>
     <div class="relative bg-white border p-3 md:p-4 rounded-lg shadow-sm mb-3 transition-colors hover:border-blue-300"
         :class="galat ? 'border-red-400 bg-red-50/30' : 'border-slate-200'">
-
-        <!-- Tombol Hapus (Mobile) -->
         <button type="button" v-if="bisaHapus"
             class="md:hidden absolute top-3 right-3 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-            @click="$emit('hapus')" title="Hapus baris">
+            @click="$emit('hapus')">
             <i class="pi pi-trash text-sm"></i>
         </button>
 
         <div class="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4">
-
-            <!-- Kolom 1: Jenis Sumber -->
             <div class="w-full md:w-32 shrink-0">
                 <label class="text-xs font-semibold text-slate-600 mb-1 block md:hidden">Jenis Sumber</label>
                 <select :value="baris.sumber" @change="gantiSumber($event.target.value)"
@@ -49,15 +47,14 @@ function gantiSumber(jenis) {
                 </select>
             </div>
 
-            <!-- Kolom 2: Material / Batch -->
             <div class="w-full flex-1">
                 <label class="text-xs font-semibold text-slate-600 mb-1 block md:hidden">Pilih Komponen</label>
                 <select v-if="baris.sumber === SUMBER.RAW" v-model="baris.raw"
                     class="w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white transition-colors"
                     :class="{ 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50': galat }">
                     <option :value="null">-- Pilih Material RAW --</option>
-                    <option v-for="r in opsiRaw" :key="r.id" :value="r.id">
-                        {{ r.nama }} (Sisa: {{ formatKg(r.saldo_qty) }})
+                    <option v-for="r in opsiRaw" :key="r.produk_id" :value="r.produk_id">
+                        {{ r.produk_nama }} (Sisa: {{ formatKg(r.qty_kg) }})
                     </option>
                 </select>
                 <select v-else v-model="baris.batch_sumber"
@@ -70,7 +67,6 @@ function gantiSumber(jenis) {
                 </select>
             </div>
 
-            <!-- Kolom 3: Input Qty -->
             <div class="w-full md:w-36 shrink-0">
                 <label class="text-xs font-semibold text-slate-600 mb-1 block md:hidden">Kuantitas (Kg)</label>
                 <div class="relative">
@@ -83,21 +79,18 @@ function gantiSumber(jenis) {
                 </div>
             </div>
 
-            <!-- Tombol Hapus (Desktop) -->
             <button type="button" v-if="bisaHapus"
                 class="hidden md:flex shrink-0 items-center justify-center w-8 h-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded border border-transparent hover:border-red-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                @click="$emit('hapus')" title="Hapus baris">
+                @click="$emit('hapus')">
                 <i class="pi pi-trash"></i>
             </button>
-            <div v-else class="hidden md:block w-8 shrink-0"></div> <!-- Spacer jika tombol hapus disembunyikan -->
+            <div v-else class="hidden md:block w-8 shrink-0"></div>
         </div>
 
-        <!-- Bagian Valuasi / Galat di Bawah Baris -->
         <div class="mt-3 pt-2 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-1.5 md:pl-[144px]">
             <div v-if="galat" class="text-red-600 font-medium text-xs flex items-center gap-1.5">
                 <i class="pi pi-exclamation-circle text-red-500"></i> {{ galat }}
             </div>
-
             <div v-else-if="valuasi" class="flex flex-wrap gap-x-3 gap-y-1 items-center text-slate-600">
                 <span class="text-xs">Nilai: <strong class="text-slate-900 text-sm tracking-tight">{{ formatRp(valuasi.nilai) }}</strong></span>
                 <span class="text-[11px] text-slate-500">({{ formatHarga(valuasi.harga_per_kg) }})</span>
@@ -106,7 +99,6 @@ function gantiSumber(jenis) {
                     AKAN HABIS
                 </span>
             </div>
-
             <div v-else class="text-slate-400 text-xs italic flex items-center gap-1.5">
                 <i class="pi pi-pencil text-[10px]"></i> Menunggu input...
             </div>

@@ -121,6 +121,13 @@ const routes = [
         name: 'inventory-stok-list',
         component: () => import('@/features/inventory/views/StockList.vue')
       },
+      // 👇 TAMBAHKAN RUTE TANGKI DI SINI 👇
+      {
+        path: 'tangki',
+        name: 'inventory-tangki',
+        component: () => import('@/features/inventory/views/TankMonitor.vue')
+      },
+      // 👆 ============================= 👆
       {
         path: 'stok/:id',
         name: 'inventory-stok-detail',

@@ -604,9 +604,11 @@ def get_saldo_pool_all(grup_bahan_id=None):
     for p in qs.order_by("grup_bahan__kode", "produk__kode"):
         data.append({
             "grup": p.grup_bahan.kode,
-            "produk_id": p.produk_id, "produk_kode": p.produk.kode,
-            "produk_nama": str(p.produk),
-            "qty_kg": str(p.qty_kg), "nilai": str(p.nilai),
+            "produk_id": p.produk_id, 
+            "produk_kode": p.produk.kode, 
+            "produk_nama": str(p.produk), 
+            "qty_kg": str(p.qty_kg), 
+            "nilai": str(p.nilai),
             "harga_rata": str(p.harga_rata),
         })
         total += p.nilai

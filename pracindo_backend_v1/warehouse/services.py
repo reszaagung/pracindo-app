@@ -379,3 +379,63 @@ def ringkasan_penerimaan(penerimaan_id):
             'klaim': l.nilai_klaim,
         } for l in p.laporan_selisih.all()],
     }
+
+from .models import DeliveryOrder
+
+def distribusi_siap_kirim(entitas_id=None):
+    """Mengembalikan daftar DO asli dari database yang berstatus DRAFT."""
+    
+    # Query langsung ke database PracindoERP
+    dos = DeliveryOrder.objects.filter(status='DRAFT').order_by('tanggal')
+    
+    hasil = []
+    for do in dos:
+        hasil.append({
+            'id': do.id,
+            'nomor': do.nomor_do,
+            'pelanggan_nama': 'Pelanggan DO (Belum ada relasi)', 
+            'alamat': 'Belum ada alamat',
+            'lat': None,
+            'lng': None,
+            'berat_kg': Decimal('0.0')
+        })
+    return hasil
+
+def rincian_distribusi(distribusi_id):
+    """Mengembalikan detail DO beserta baris produknya dari database."""
+    try:
+        do = DeliveryOrder.objects.prefetch_related('item__produk').get(id=distribusi_id)
+    except DeliveryOrder.DoesNotExist:
+        return {}
+    
+    hasil = {
+        'id': do.id,
+        'nomor': do.nomor_do,
+        'pelanggan_nama': 'Pelanggan DO (Belum ada relasi)',
+        'alamat': 'Belum ada alamat',
+        'lat': None,
+        'lng': None,
+        'berat_kg': Decimal('0.0'),
+        'baris': []
+    }
+    
+    for itm in do.item.all():
+        hasil['baris'].append({
+            'produk_kode': getattr(itm.produk, 'kode', '-'),
+            'produk_nama': getattr(itm.produk, 'nama', '-'),
+            'stiker': '-', # Fitur stiker belum ada di model DeliveryOrderItem
+            'qty': itm.qty,
+            'unit': 'KG'
+        })
+    return hasil
+
+def tandai_terkirim(distribusi_id, waktu, oleh):
+    """Mengubah status Delivery Order nyata di database."""
+    DeliveryOrder.objects.filter(id=distribusi_id).update(status='SELESAI')
+
+def kembalikan_stok(distribusi_id, alasan, oleh):
+    """
+    Mengubah status retur. 
+    (Logika penambahan stok fisik nanti diletakkan di sini).
+    """
+    DeliveryOrder.objects.filter(id=distribusi_id).update(status='RETUR')

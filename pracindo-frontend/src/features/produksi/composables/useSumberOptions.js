@@ -1,3 +1,5 @@
+// src/features/produksi/composables/useSumberOptions.js
+
 import { ref } from 'vue'
 import { apiBatch, apiRawUntukProduksi } from '../api'
 
@@ -13,14 +15,13 @@ export function useSumberOptions() {
                 apiRawUntukProduksi.daftar(),
                 apiBatch.tersedia(tangkiTujuanId)
             ])
-
-            const rawData = Array.isArray(rawRes) ? rawRes : (rawRes.results || [])
+            const rawData = Array.isArray(rawRes) ? rawRes : (rawRes.rincian || rawRes.results || [])
             const batchData = Array.isArray(batchRes) ? batchRes : (batchRes.results || [])
 
-            opsiRaw.value = rawData.filter(r => Number(r.saldo_qty) > 0)
+            opsiRaw.value = rawData.filter(r => Number(r.qty_kg) > 0)
             opsiBatch.value = batchData
         } catch (e) {
-            console.error('Gagal memuat opsi sumber:', e)
+            console.error(e)
         } finally {
             memuat.value = false
         }

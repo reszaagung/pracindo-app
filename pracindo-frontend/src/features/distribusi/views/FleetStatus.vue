@@ -1,90 +1,119 @@
-﻿<template>
-    <div class="flex flex-col w-full animate-fade-in relative">
-        <!-- Header Halaman -->
-        <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-            <div>
-                <p class="text-xs text-slate-400 mb-1">
-                    <span class="hover:text-slate-700 transition-colors">Distribution</span> /
-                    <span class="text-slate-600 font-semibold">Status Armada</span>
-                </p>
-                <h1 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Pantau Armada</h1>
-                <p class="text-xs md:text-sm text-slate-500 mt-1">Ketersediaan truk dan posisi supir saat ini.</p>
-            </div>
-            
-            <button class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors shadow-md flex items-center gap-2 w-full md:w-auto justify-center">
-                <i class="pi pi-plus text-xs"></i>
-                <span>Registrasi Armada</span>
-            </button>
-        </div>
-
-        <!-- Grid Kartu Armada -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            <div v-for="armada in armadaDummy" :key="armada.id" 
-                class="bg-white border border-slate-200 rounded-[24px] p-5 shadow-sm transition-all hover:shadow-md flex flex-col justify-between"
-                :class="{ 'opacity-70 bg-slate-50': armada.status === 'PERBAIKAN' }">
-                
-                <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
-                                <i class="pi pi-truck text-slate-500 text-lg"></i>
-                            </div>
-                            <div>
-                                <span class="font-black text-slate-800 text-lg block">{{ armada.nopol }}</span>
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{{ armada.jenis }}</span>
-                            </div>
-                        </div>
-                        <span class="px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase border" :class="badgeWarna(armada.status)">
-                            {{ armada.status }}
-                        </span>
-                    </div>
-
-                    <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl mb-4 flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                            <i class="pi pi-user text-slate-500 text-sm"></i>
-                        </div>
-                        <div>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Supir Utama</span>
-                            <p class="text-sm font-bold text-slate-800 m-0">{{ armada.supir ?? 'Belum Ditugaskan' }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-between items-center pt-3 border-t border-slate-100">
-                    <div class="flex flex-col">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kapasitas Maks</span>
-                        <span class="text-sm font-black text-slate-700">{{ armada.kapasitas }} Ton</span>
-                    </div>
-                    <button class="text-blue-600 hover:text-blue-800 text-sm font-bold transition-colors">
-                        Detail <i class="pi pi-arrow-right text-xs ml-1"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
+<template>
+  <div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-8">
+      <div>
+        <div class="text-xs font-semibold text-slate-400 mb-1 tracking-wider uppercase">Distribution / Status Armada</div>
+        <h1 class="text-2xl md:text-3xl font-bold text-slate-800">Pantau Armada</h1>
+        <p class="text-slate-500 text-sm mt-1">Ketersediaan truk dan kendaraan saat ini.</p>
+      </div>
+      <button class="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2 shadow-md">
+        <i class="pi pi-plus text-sm"></i>
+        <span>Registrasi Armada</span>
+      </button>
     </div>
+
+    <div v-if="memuat" class="flex justify-center items-center py-12">
+      <i class="pi pi-spin pi-spinner text-3xl text-emerald-500"></i>
+    </div>
+
+    <div v-else-if="galat" class="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl flex items-start gap-3">
+      <i class="pi pi-exclamation-triangle mt-0.5"></i>
+      <p class="text-sm">{{ galat }}</p>
+    </div>
+
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+      <div v-if="armadaList.length === 0" class="col-span-full bg-slate-50 border border-slate-200 rounded-2xl p-12 text-center">
+        <div class="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="pi pi-truck text-2xl text-slate-400"></i>
+        </div>
+        <h3 class="text-slate-700 font-bold mb-1">Tidak Ada Armada</h3>
+        <p class="text-slate-500 text-sm">Belum ada data kendaraan yang terdaftar di sistem.</p>
+      </div>
+
+      <div v-for="truk in armadaList" :key="truk.id"
+           class="bg-white border rounded-2xl p-6 transition-all duration-300 hover:shadow-lg"
+           :class="truk.aktif ? 'border-slate-200' : 'border-rose-100 bg-rose-50/30'">
+
+        <div class="flex justify-between items-start mb-6">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                 :class="truk.aktif ? 'bg-slate-100 text-slate-600' : 'bg-rose-100 text-rose-500'">
+              <i class="pi pi-truck"></i>
+            </div>
+            <div>
+              <h3 class="text-slate-800 font-bold text-lg leading-tight">
+                {{ truk.plat_nomor || truk.kode }}
+              </h3>
+              <p class="text-slate-500 text-xs">{{ truk.nama }}</p>
+            </div>
+          </div>
+          <span class="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider"
+                :class="truk.aktif
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : 'bg-rose-100 text-rose-700 border border-rose-200'">
+            {{ truk.aktif ? 'TERSEDIA' : 'PERBAIKAN / NONAKTIF' }}
+          </span>
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100">
+          <p class="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Informasi Kendaraan</p>
+          <div class="flex items-center gap-2">
+            <i class="pi pi-id-card text-slate-400"></i>
+            <span class="text-slate-700 text-sm font-medium">Kode: {{ truk.kode }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-end justify-between pt-4 border-t border-slate-100">
+          <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Kapasitas Maks</p>
+            <p class="text-slate-700 font-bold">
+              {{ formatKapasitas(truk.kapasitas_kg) }}
+            </p>
+          </div>
+          <button class="text-blue-600 hover:text-blue-700 text-sm font-semibold flex items-center gap-1 group">
+            Detail
+            <i class="pi pi-arrow-right text-xs transition-transform group-hover:translate-x-1"></i>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { apiDistribusi } from '../api.js'
 
-const armadaDummy = ref([
-    { id: 1, nopol: 'L 8821 XA', jenis: 'Fuso Engkel', supir: 'Ahmad M.', kapasitas: 8, status: 'DALAM PENGIRIMAN' },
-    { id: 2, nopol: 'B 9182 TXY', jenis: 'Truk Tronton', supir: 'Budi Santoso', kapasitas: 20, status: 'TERSEDIA' },
-    { id: 3, nopol: 'D 1234 CD', jenis: 'Truk CDD', supir: 'Jajang', kapasitas: 4, status: 'DALAM PENGIRIMAN' },
-    { id: 4, nopol: 'N 4321 XY', jenis: 'Truk Box', supir: null, kapasitas: 5, status: 'PERBAIKAN' }
-])
+const armadaList = ref([])
+const memuat = ref(true)
+const galat = ref(null)
 
-const badgeWarna = (status) => {
-    switch(status) {
-        case 'TERSEDIA': return 'bg-emerald-50 text-emerald-600 border-emerald-200'
-        case 'DALAM PENGIRIMAN': return 'bg-purple-50 text-purple-600 border-purple-200'
-        case 'PERBAIKAN': return 'bg-rose-50 text-rose-600 border-rose-200'
-        default: return 'bg-slate-50 text-slate-500 border-slate-200'
-    }
+const formatKapasitas = (kg) => {
+  if (!kg) return 'Tidak disetel'
+  const angka = parseFloat(kg)
+  if (angka >= 1000) {
+    return `${(angka / 1000).toLocaleString('id-ID')} Ton`
+  }
+  return `${angka.toLocaleString('id-ID')} Kg`
 }
-</script>
 
-<style scoped>
-.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-</style>
+const muatDataArmada = async () => {
+  memuat.value = true
+  galat.value = null
+  try {
+    const data = await apiDistribusi.getArmada()
+    armadaList.value = data.results || data || []
+  } catch (error) {
+    galat.value = "Gagal memuat daftar kendaraan dari server. Pastikan Anda memiliki akses."
+  } finally {
+    memuat.value = false
+  }
+}
+
+onMounted(() => {
+  muatDataArmada()
+})
+</script>
