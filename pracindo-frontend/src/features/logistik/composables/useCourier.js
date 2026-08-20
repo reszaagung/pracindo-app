@@ -1,101 +1,65 @@
-// src/features/kurir/composables/useCourier.js
 import { ref } from 'vue'
-import api from '@/utils/api'
+import { apiKurir } from '../api'
+
 
 export function useCourier() {
-    const isLoading = ref(false)
-    const isUploading = ref(false)
+    const daftarPengiriman = ref([])
+    const sedangMemuat = ref(false)
 
-    // State Data
-    const daftarTugas = ref([])
-    const detailPengiriman = ref(null)
-
-    // 1. Memuat daftar tugas kurir yang sedang login
-    const fetchTugasSaya = async () => {
-        isLoading.value = true
+    const muatTugas = async () => {
+        sedangMemuat.value = true
         try {
-            const response = await api.get('logistik/pengiriman/tugas-saya/')
-            daftarTugas.value = response.data.results || response.data
+            const data = await apiKurir.getTugasSaya()
+            daftarPengiriman.value = data || []
         } catch (error) {
-            console.error("Gagal memuat daftar tugas:", error)
-            throw error
+            console.error(error)
         } finally {
-            isLoading.value = false
+            sedangMemuat.value = false
         }
     }
 
-    // 2. Mencatat keberangkatan pengiriman
-    const berangkatkanPengiriman = async (id) => {
+    const berangkatkan = async (pengirimanId) => {
         try {
-            await api.post(`logistik/pengiriman/${id}/berangkatkan/`)
-            return true
+            await apiKurir.berangkatkanTugas(pengirimanId)
+            await muatTugas()
+            return { success: true }
         } catch (error) {
-            console.error("Gagal memberangkatkan:", error)
-            throw error
+            return { success: false, error }
         }
     }
 
-    // 3. Memuat detail perjalanan dan titik perhentian
-    const fetchDetailPengiriman = async (id) => {
-        isLoading.value = true
+    const tandaiSampai = async (pengirimanId, perhentianId) => {
         try {
-            const response = await api.get(`logistik/pengiriman/${id}/`)
-            detailPengiriman.value = response.data
+            await apiKurir.tandaiSampai(pengirimanId, perhentianId)
+            await muatTugas()
+            return { success: true }
         } catch (error) {
-            console.error("Gagal memuat detail pengiriman:", error)
-            throw error
-        } finally {
-            isLoading.value = false
+            return { success: false, error }
         }
     }
 
-    // 4. Menandai bahwa kurir sudah tiba di satu titik perhentian
-    const tandaiPerhentianSampai = async (pengirimanId, perhentianId) => {
+    const unggahBukti = async (pengirimanId, perhentianId, file, namaPenerima) => {
         try {
-            await api.post(`logistik/pengiriman/${pengirimanId}/perhentian/${perhentianId}/sampai/`)
-            return true
+            const formData = new FormData()
+            formData.append('foto', file)
+            formData.append('catatan', `Penerima: ${namaPenerima}`)
+
+            const idemKey = `bukti-${perhentianId}-${Date.now()}`
+            await apiKurir.unggahBukti(pengirimanId, perhentianId, formData, idemKey)
+
+            await muatTugas()
+            return { success: true }
         } catch (error) {
-            console.error("Gagal menandai sampai:", error)
-            throw error
-        }
-    }
-
-    // 5. Mengunggah foto Bukti Terima (POD) dengan pengamanan Idempotency-Key (Mode Offline)
-    const unggahBuktiTerima = async (pengirimanId, perhentianId, formData) => {
-        isUploading.value = true
-
-        // Membuat string unik untuk mencegah duplikasi unggahan jika sinyal jelek
-        const idemKey = 'idem-' + Date.now() + '-' + Math.random().toString(36).substring(2)
-
-        try {
-            await api.post(
-                `logistik/pengiriman/${pengirimanId}/perhentian/${perhentianId}/bukti/`,
-                formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        'Idempotency-Key': idemKey
-                    }
-                }
-            )
-            return true
-        } catch (error) {
-            console.error("Gagal mengunggah POD:", error)
-            throw error
-        } finally {
-            isUploading.value = false
+            return { success: false, error }
         }
     }
 
     return {
-        isLoading,
-        isUploading,
-        daftarTugas,
-        detailPengiriman,
-        fetchTugasSaya,
-        berangkatkanPengiriman,
-        fetchDetailPengiriman,
-        tandaiPerhentianSampai,
-        unggahBuktiTerima
+        daftarPengiriman,
+        sedangMemuat,
+        muatTugas,
+        berangkatkan,
+        tandaiSampai,
+        unggahBukti
     }
 }

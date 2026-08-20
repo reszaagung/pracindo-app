@@ -46,7 +46,8 @@ class Role(models.TextChoices):
     GUDANG     = 'GUDANG',     'Gudang'
     PRODUKSI   = 'PRODUKSI',   'Produksi'
     SALES      = 'SALES',      'Sales'
-    STAFF      = 'STAFF',      'Staff'     
+    STAFF      = 'STAFF',      'Staff',
+    KURIR      = 'KURIR',      'Kurir'    
 
 
 class StatusKerja(models.TextChoices):

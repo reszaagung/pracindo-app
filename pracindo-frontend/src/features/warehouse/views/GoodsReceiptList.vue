@@ -30,17 +30,34 @@
                         </p>
                         <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Penerimaan Barang</h2>
                     </div>
-                    <!-- Pemicu Lazy View Form -->
-                    <button @click="modeForm = true"
-                        class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-2 shadow-sm transform hover:-translate-y-0.5">
-                        <i class="pi pi-plus"></i> Penerimaan Baru
-                    </button>
                 </div>
 
-                <!-- Notifikasi Error -->
                 <div v-if="galat" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium flex items-start gap-3 shadow-sm">
                     <i class="pi pi-exclamation-triangle mt-0.5"></i>
                     <span>{{ galat }}</span>
+                </div>
+
+                <div v-if="daftarPOSiapTerima.length > 0"
+                    class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-fade-in relative overflow-hidden">
+                    <div class="absolute -right-6 -top-6 text-blue-100 opacity-50">
+                        <i class="pi pi-box" style="font-size: 6rem;"></i>
+                    </div>
+                    <div class="flex items-center gap-4 relative z-10">
+                        <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                            <i class="pi pi-bell text-xl animate-bounce"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-blue-900">Menunggu Penerimaan Fisik</h3>
+                            <p class="text-xs text-blue-700 mt-0.5">
+                                Terdapat <span class="font-black text-blue-800 text-sm mx-1">{{ daftarPOSiapTerima.length }}</span>
+                                dokumen Purchase Order (PO) yang sudah disetujui suplier dan siap masuk ke gudang.
+                            </p>
+                        </div>
+                    </div>
+                    <button @click="modeForm = true"
+                        class="relative z-10 w-full md:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shadow-md transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
+                        Proses Sekarang <i class="pi pi-arrow-right text-[10px]"></i>
+                    </button>
                 </div>
 
                 <!-- Area Filter & Tabel -->
@@ -151,16 +168,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue' // Hapus defineAsyncComponent
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGoodsReceipt } from '../composables/useGoodsReceipt'
 import { tanggal } from '@/utils/format'
 
-// PERBAIKAN: Import komponen form secara langsung (Statis)
 import FormPenerimaan from './GoodsReceiptForm.vue'
 
 const router = useRouter()
-const { daftarPenerimaan, sedangProses, galat, muatPenerimaan } = useGoodsReceipt()
+
+const {
+    daftarPenerimaan,
+    daftarPOSiapTerima,
+    sedangProses,
+    galat,
+    muatPenerimaan,
+    muatPOSiapTerima
+} = useGoodsReceipt()
 
 const modeForm = ref(false)
 const kataKunci = ref('')
@@ -169,11 +193,12 @@ const cari = () => {
     muatPenerimaan({ search: kataKunci.value })
 }
 const bukaDetail = (id) => {
-    router.push(`/warehouse/penerimaan/${id}`)
+    router.push(`/warehouse/input/receipt/${id}`)
 }
 
 onMounted(() => {
     muatPenerimaan()
+    muatPOSiapTerima()
 })
 </script>
 

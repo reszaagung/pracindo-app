@@ -2,9 +2,10 @@
 import { useGuards } from './guards'
 import ModulLayout from '@/components/layout/ModulLayout.vue'
 
-// 1. IMPORT RUTE MODULAR
 import ruteProduksi from '@/features/produksi/routes.js'
 import ruteWarehouse from '@/features/warehouse/routes.js'
+import ruteDistribusi from '@/features/distribusi/routes.js'
+import ruteLogistik from '@/features/logistik/routes.js'
 
 const routes = [
   {
@@ -104,7 +105,6 @@ const routes = [
       }
     ]
   },
-  // RUTE GUDANG LAMA DIHAPUS DARI SINI
   {
     path: '/master/suplier',
     name: 'master-suplier',
@@ -135,54 +135,11 @@ const routes = [
       },
     ]
   },
-  {
-    path: '/distribusi',
-    meta: { perluLogin: true, modul: 'distribusi' },
-    component: () => import('@/features/distribusi/layout/DistributionLayout.vue'),
-    children: [
-      {
-        path: '',
-        name: 'distribusi-jadwal',
-        component: () => import('@/features/distribusi/views/DeliverySchedule.vue')
-      },
-      {
-        path: 'loading',
-        name: 'distribusi-loading',
-        component: () => import('@/features/distribusi/views/LoadingValidation.vue')
-      },
-      {
-        path: 'armada',
-        name: 'distribusi-armada',
-        component: () => import('@/features/distribusi/views/FleetStatus.vue')
-      },
-    ]
-  },
-  {
-    path: '/kurir',
-    meta: { perluLogin: true, modul: 'logistik' },
-    component: () => import('@/features/logistik/layout/CourirLayout.vue'),
-    children: [
-      {
-        path: '',
-        name: 'kurir-dashboard',
-        component: () => import('@/features/logistik/views/CourirDashboard.vue')
-      },
-      {
-        path: 'tugas-saya',
-        name: 'kurir-tugas-saya',
-        component: () => import('@/features/logistik/views/CourirTaskList.vue')
-      },
-      {
-        path: 'tugas/:id',
-        name: 'kurir-tugas-detail',
-        component: () => import('@/features/logistik/views/CourirTaskDetail.vue')
-      }
-    ]
-  },
 
-  // 2. INJEKSI RUTE MODULAR (Gudang & Produksi)
   ...ruteProduksi,
   ...ruteWarehouse,
+  ...ruteDistribusi,
+  ...ruteLogistik,
 
   {
     path: '/work-order',

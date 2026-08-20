@@ -49,14 +49,16 @@ export const MODUL = [
   {
     id: 'warehouse_distribusi',
     nama: 'Distribusi & Kemasan',
-    ringkas: 'Manajemen packaging dan log distribusi',
+    ringkas: 'Manajemen jadwal pengiriman, armada, dan loading',
     ikon: 'kirim',
-    rute: '/warehouse/distribution',
+    rute: '/distribusi',
     siap: true,
     indukModul: 'warehouse',
     menu: [
-      { label: 'Packaging', rute: '/warehouse/distribution/packaging' },
-      { label: 'Log Packaging', rute: '/warehouse/distribution/log-packaging' },
+      { label: 'Jadwal Pengiriman', rute: '/distribusi' },
+      { label: 'Rakit Pengiriman', rute: '/distribusi/buat' },
+      { label: 'Loading Muatan', rute: '/distribusi/loading' },
+      { label: 'Status Armada', rute: '/distribusi/armada' },
     ],
   },
   {
@@ -78,13 +80,16 @@ export const MODUL = [
 
   {
     id: 'logistik',
-    nama: 'Logistik',
-    ringkas: 'Surat jalan dan pengiriman',
+    nama: 'Logistik (Kurir)',
+    ringkas: 'Aplikasi lapangan kurir dan status pengiriman',
     ikon: 'kirim',
-    rute: '/logistik',
-    siap: false,
-    catatan: 'Belum dibangun backend maupun frontend',
-    menu: [],
+    rute: '/kurir',
+    siap: true,
+    catatan: '',
+    menu: [
+      { label: 'Dashboard', rute: '/kurir' },
+      { label: 'Tugas Saya', rute: '/kurir/tugas-saya' },
+    ],
   },
   {
     id: 'sales_order',

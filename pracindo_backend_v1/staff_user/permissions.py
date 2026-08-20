@@ -37,20 +37,7 @@ from rest_framework import permissions
 from .models import Role
 
 
-# =========================================================
-# SAKLAR PENGEMBANGAN
-# =========================================================
 
-# Membuka seluruh akses modul, melewati pemeriksaan role.
-#
-# Autentikasi TETAP diwajibkan -- ini hanya melewati peta AKSES_MODUL.
-# Setiap dokumen transaksional punya dibuat_oleh yang non-nullable, jadi
-# request anonim akan tetap gagal, hanya dengan galat yang lebih
-# membingungkan.
-#
-# WAJIB False di produksi. Buku klaim yang bisa ditulis siapa saja bukan
-# buku klaim.
-BUKA_MODUL = False
 
 
 # =========================================================
@@ -66,20 +53,21 @@ BUKA_MODUL = False
 #
 # CABUT SEBELUM MENYENTUH DATA NYATA. Buku klaim yang bisa ditulis siapa
 # saja bukan buku klaim.
-
+BUKA_MODUL = False
 
 
 AKSES_MODUL = {
     'dashboard':   [Role.ADMIN, Role.AKUNTING, Role.KEUANGAN, Role.GUDANG,
-                    Role.PRODUKSI, Role.SALES, Role.STAFF],
+                    Role.PRODUKSI, Role.SALES, Role.STAFF, Role.KURIR], 
     'akunting':    [Role.AKUNTING],
     'keuangan':    [Role.KEUANGAN],
     'pajak':       [Role.AKUNTING],
     'warehouse':   [Role.GUDANG],
+    'warehouse_distribusi': [Role.GUDANG], 
     'inventory':   [Role.GUDANG, Role.PRODUKSI, Role.AKUNTING],
     'produksi':    [Role.PRODUKSI],
     'sales_order': [Role.SALES],
-    'logistik':    [Role.GUDANG, Role.SALES],
+    'logistik':    [Role.GUDANG, Role.SALES, Role.KURIR], 
     'work_order':  [Role.ADMIN, Role.AKUNTING, Role.KEUANGAN, Role.GUDANG,
                     Role.PRODUKSI, Role.SALES, Role.STAFF],
     'master':      [Role.ADMIN],
@@ -94,10 +82,11 @@ META_MODUL = {
     'keuangan':    {'label': 'Keuangan',       'ikon': 'pi-wallet',        'rute': '/keuangan'},
     'pajak':       {'label': 'Pajak',          'ikon': 'pi-percentage',    'rute': '/pajak'},
     'warehouse':   {'label': 'Gudang',         'ikon': 'pi-box',           'rute': '/warehouse'},
+    'warehouse_distribusi': {'label': 'Distribusi', 'ikon': 'pi-truck',    'rute': '/distribusi'},
     'inventory':   {'label': 'Persediaan',     'ikon': 'pi-database',      'rute': '/inventory'},
     'produksi':    {'label': 'Produksi',       'ikon': 'pi-cog',           'rute': '/produksi'},
     'sales_order': {'label': 'Sales Order',    'ikon': 'pi-shopping-cart', 'rute': '/sales-order'},
-    'logistik':    {'label': 'Logistik',       'ikon': 'pi-truck',         'rute': '/logistik'},
+    'logistik':    {'label': 'Logistik',       'ikon': 'pi-map',           'rute': '/kurir'}, 
     'work_order':  {'label': 'Papan Tugas',    'ikon': 'pi-list-check',    'rute': '/work-order'},
     'master':      {'label': 'Master Data',    'ikon': 'pi-server',        'rute': '/master'},
     'dokumen':     {'label': 'Dokumen',        'ikon': 'pi-file',          'rute': '/dokumen'},
