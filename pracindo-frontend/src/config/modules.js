@@ -1,13 +1,5 @@
-/**
- * src/config/modules.js
- * ======================
- * Katalog UI SAJA. Siapa yang boleh masuk modul apa ditentukan backend lewat
- * GET auth/portal/ (lihat useAuth().modul) — file ini tidak menyimpan aturan
- * peran, hanya bagaimana modul itu tampil (ikon, label, menu, status siap).
- */
-
-// 1. IMPORT KONFIGURASI MENU DARI MODUL PRODUKSI
 import { produksiModul } from '@/features/produksi/uiConfig'
+import { retailModul } from '@/features/retail/uiConfigRetail'
 
 export const MODUL = [
   {
@@ -73,10 +65,8 @@ export const MODUL = [
     ],
   },
 
-  // ==========================================
-  // BLOK MODUL PRODUKSI (Modular)
-  // ==========================================
   produksiModul,
+  retailModul,
 
   {
     id: 'logistik',
@@ -196,18 +186,6 @@ export const modulDariBackend = (modulBackend = []) =>
     }
   })
 
-/**
- * Rute pendaratan setelah login: modul PERTAMA yang siap dan bukan kartu
- * tersembunyi. Dipakai guards.js dan LoginView.vue — dua tempat yang dulu
- * sama-sama meng-hardcode '/accounting' lalu '/warehouse'.
- *
- * Urutannya mengikuti urutan entri di MODUL, BUKAN urutan kiriman backend.
- * Jadi mengubah prioritas pendaratan = memindahkan entri di file ini, bukan
- * menambah if-else di guard. Itu juga sebabnya rute tidak boleh ditulis
- * ulang di guard: pernah kena 404 waktu path akunting berubah.
- *
- * @returns {string|null} path, atau null kalau tidak ada modul yang siap
- */
 export const rutePertamaSiap = (modulBackend = []) => {
   const urutan = (m) => {
     const i = MODUL.findIndex((k) => k.id === m.id)

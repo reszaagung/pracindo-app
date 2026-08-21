@@ -10,8 +10,8 @@ import DialogKonfirmasi from '@/components/DialogKonfirmasi.vue'
 
 const router = useRouter()
 const {
-    form, jenis, pratinjau, memuat, menyimpan, galatServer,
-    galatBaris, galatUmum, valuasiBaris, bolehSimpan,
+    form, jenis, menyimpan, galatServer,
+    galatBaris, valuasiBaris, bolehSimpan,
     tambahBaris, hapusBaris, simpanDanPosting,
 } = useInputProduksi()
 
@@ -68,7 +68,6 @@ async function jalankan() {
 <template>
     <div class="batch-form max-w-5xl mx-auto pb-12 px-3 sm:px-4 space-y-6 md:space-y-8 mt-2 md:mt-4">
 
-        <!-- Header -->
         <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end border-b border-slate-200 pb-4 gap-3">
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Input Produksi</h1>
@@ -81,7 +80,6 @@ async function jalankan() {
             </div>
         </header>
 
-        <!-- Form Utama -->
         <section class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-slate-200">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <label class="block">
@@ -122,7 +120,6 @@ async function jalankan() {
             </div>
         </section>
 
-        <!-- Daftar Sumber Material -->
         <section class="space-y-3">
             <div class="flex justify-between items-center px-1 border-b border-slate-200 pb-2">
                 <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -142,10 +139,7 @@ async function jalankan() {
             </div>
         </section>
 
-        <!-- Panel Valuasi -->
-        <PanelValuasi :pratinjau="pratinjau" :memuat="memuat" :galat-umum="galatUmum" />
-
-        <!-- Pesan Server -->
+        <PanelValuasi :form="form" :opsi-raw="opsiRaw" :opsi-batch="opsiBatch" :tangki-list="tangkiList" />
         <div v-if="galatServer" class="p-4 rounded-lg border shadow-sm"
             :class="galatServer.invariantMelenceng ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'">
             <div class="flex items-start gap-3">
@@ -196,7 +190,7 @@ async function jalankan() {
                     </label>
                     <label class="block">
                         <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Nama / Keterangan</span>
-                        <input v-model="formTangkiBaru.nama" type="text" placeholder="Tangki Oksidasi"
+                        <input v-model="formTangkiBaru.nama" type="text" placeholder="Tangki Blue Cw"
                             class="block w-full border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 px-3 bg-white" />
                     </label>
                 </div>

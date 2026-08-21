@@ -37,6 +37,8 @@ urlpatterns = [
     path('api/v1/sales-order/', include('sales_order.urls')),
     path('api/v1/logistik/',    include('logistik.urls')),
     path('api/v1/work-order/',  include('work_order.urls')),
+    path('api/v1/retail/',      include('retail.urls')),
+    
 ]
 
 if settings.DEBUG:

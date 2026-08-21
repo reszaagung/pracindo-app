@@ -66,6 +66,8 @@ AKSES_MODUL = {
     'warehouse_distribusi': [Role.GUDANG], 
     'inventory':   [Role.GUDANG, Role.PRODUKSI, Role.AKUNTING],
     'produksi':    [Role.PRODUKSI],
+    'retail':      [Role.ADMIN, Role.SALES, Role.STAFF,Role.SUPERVISOR], 
+    
     'sales_order': [Role.SALES],
     'logistik':    [Role.GUDANG, Role.SALES, Role.KURIR], 
     'work_order':  [Role.ADMIN, Role.AKUNTING, Role.KEUANGAN, Role.GUDANG,
@@ -75,7 +77,6 @@ AKSES_MODUL = {
                     Role.PRODUKSI, Role.SALES],
     'staff_user':  [Role.ADMIN],
 }
-
 META_MODUL = {
     'dashboard':   {'label': 'Dashboard',      'ikon': 'pi-home',          'rute': '/'},
     'akunting':    {'label': 'Akunting',       'ikon': 'pi-book',          'rute': '/akunting'},
@@ -85,6 +86,8 @@ META_MODUL = {
     'warehouse_distribusi': {'label': 'Distribusi', 'ikon': 'pi-truck',    'rute': '/distribusi'},
     'inventory':   {'label': 'Persediaan',     'ikon': 'pi-database',      'rute': '/inventory'},
     'produksi':    {'label': 'Produksi',       'ikon': 'pi-cog',           'rute': '/produksi'},
+    'retail':      {'label': 'Retail & POS',   'ikon': 'pi-shop',          'rute': '/retail/pos'},
+    
     'sales_order': {'label': 'Sales Order',    'ikon': 'pi-shopping-cart', 'rute': '/sales-order'},
     'logistik':    {'label': 'Logistik',       'ikon': 'pi-map',           'rute': '/kurir'}, 
     'work_order':  {'label': 'Papan Tugas',    'ikon': 'pi-list-check',    'rute': '/work-order'},
@@ -92,7 +95,6 @@ META_MODUL = {
     'dokumen':     {'label': 'Dokumen',        'ikon': 'pi-file',          'rute': '/dokumen'},
     'staff_user':  {'label': 'Pengguna',       'ikon': 'pi-users',         'rute': '/pengguna'},
 }
-
 
 
 def role_boleh_modul(role, modul, superuser=False):

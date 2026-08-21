@@ -37,18 +37,17 @@
                     </div>
 
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID Kurir Bertugas</label>
-                        <input type="number" v-model="form.kurir_id" required placeholder="Masukkan ID User Kurir..."
-                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium" />
+                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pilih Kurir Bertugas</label>
+                        <select v-model="form.kurir_id" required
+                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium">
+                            <option value="" disabled>-- Pilih Kurir --</option>
+                            <option v-for="kurir in daftarKurir" :key="kurir.id" :value="kurir.id">
+                                {{ kurir.nama || kurir.username }}
+                            </option>
+                        </select>
                     </div>
 
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Entitas Perusahaan</label>
-                        <input type="number" v-model="form.entitas_id" required placeholder="ID Entitas Perusahaan..."
-                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium" />
-                    </div>
-
-                    <div class="flex flex-col gap-1.5 md:col-span-2">
                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Catatan Tambahan</label>
                         <input type="text" v-model="form.catatan" placeholder="Instruksi khusus untuk kurir..."
                             class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium" />
@@ -67,7 +66,6 @@
                 <div v-if="sedangMemuatBarang" class="py-8 flex justify-center">
                     <i class="pi pi-spin pi-spinner text-2xl text-blue-500"></i>
                 </div>
-
                 <div v-else-if="barangTersedia.length > 0" class="flex flex-col gap-3">
                     <label v-for="barang in barangTersedia" :key="barang.id"
                         class="flex items-start gap-4 p-4 border rounded-xl cursor-pointer transition-colors"
@@ -82,11 +80,10 @@
                         </div>
                     </label>
                 </div>
-
                 <div v-else class="py-8 text-center">
                     <i class="pi pi-check-circle text-3xl text-emerald-500 mb-2"></i>
                     <p class="text-sm font-bold text-slate-800">Gudang Kosong</p>
-                    <p class="text-xs text-slate-500 mt-1">Tidak ada barang yang menunggu pengiriman.</p>
+                    <p class="text-xs text-slate-500 mt-1">Tidak ada barang yang menunggu pengiriman saat ini.</p>
                 </div>
             </div>
 
@@ -111,16 +108,17 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiDistribusi } from '../api'
+import api from '@/utils/api'
 
 const router = useRouter()
 const daftarArmada = ref([])
+const daftarKurir = ref([])
 const barangTersedia = ref([])
 const sedangMemuatBarang = ref(false)
 const sedangProses = ref(false)
 const galat = ref('')
 
 const form = reactive({
-    entitas_id: 1,
     kurir_id: '',
     kendaraan_id: '',
     tanggal: new Date().toISOString().split('T')[0],
@@ -128,17 +126,31 @@ const form = reactive({
     distribusi_ids: []
 })
 
-const muatDataAwal = async () => {
+const muatDataMaster = async () => {
+    try {
+        const [resArmada, resKurir] = await Promise.all([
+            apiDistribusi.getArmada(),
+            api.get('core/users/?role=KURIR').catch(() => ({ data: [] }))
+        ])
+
+        daftarArmada.value = resArmada.results || resArmada || []
+
+        const kurirs = resKurir.data?.results || resKurir.data || []
+        daftarKurir.value = kurirs.length > 0 ? kurirs : [{ id: 1, nama: 'Kurir Sistem (Fallback)' }]
+    } catch (err) {
+        console.error(err)
+        galat.value = 'Gagal memuat data master kendaraan dan kurir.'
+    }
+}
+
+const muatBarangGudang = async () => {
     sedangMemuatBarang.value = true
     try {
-        const [resArmada, resBarang] = await Promise.all([
-            apiDistribusi.getArmada(),
-            apiDistribusi.getDistribusiTersedia()
-        ])
-        daftarArmada.value = resArmada.results || resArmada || []
+        const resBarang = await apiDistribusi.getDistribusiTersedia()
         barangTersedia.value = resBarang || []
     } catch (err) {
-        galat.value = 'Gagal memuat data pendukung dari server.'
+        console.error(err)
+        galat.value = 'Gagal memuat barang dari gudang.'
     } finally {
         sedangMemuatBarang.value = false
     }
@@ -151,6 +163,7 @@ const simpanPengiriman = async () => {
         await apiDistribusi.rakitPengiriman(form)
         router.push('/distribusi')
     } catch (err) {
+        console.error(err)
         galat.value = err.response?.data?.detail || 'Gagal menyimpan pengiriman.'
     } finally {
         sedangProses.value = false
@@ -158,7 +171,8 @@ const simpanPengiriman = async () => {
 }
 
 onMounted(() => {
-    muatDataAwal()
+    muatDataMaster()
+    muatBarangGudang()
 })
 </script>
 

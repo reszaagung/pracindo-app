@@ -1,7 +1,6 @@
+<!-- src/features/logistik/views/CourirDashboard.vue -->
 <template>
   <div class="flex-1 overflow-y-auto pb-24 bg-slate-50">
-
-    <!-- Header Profil (Dark Mode) -->
     <div class="bg-slate-900 px-6 pt-12 pb-8 rounded-b-[2rem] shadow-md relative z-10">
       <div class="flex justify-between items-center mb-6">
         <div class="flex items-center gap-4">
@@ -10,16 +9,14 @@
           </div>
           <div>
             <p class="text-emerald-400 text-xs font-bold tracking-wider uppercase">Kurir Internal</p>
-            <h2 class="text-white text-xl font-bold">Resza</h2>
-            <p class="text-slate-400 text-sm">Staf</p>
+            <h2 class="text-white text-xl font-bold">{{ userNama }}</h2>
+            <p class="text-slate-400 text-sm">{{ userRole }}</p>
           </div>
         </div>
         <button class="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-slate-300 hover:text-white transition-colors shadow-inner">
           <i class="pi pi-bell"></i>
         </button>
       </div>
-
-      <!-- Kartu Absensi -->
       <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 flex items-center justify-between">
         <div>
           <p class="text-slate-400 text-xs mb-1">Status Kehadiran</p>
@@ -33,12 +30,8 @@
         </button>
       </div>
     </div>
-
-    <!-- Area Daftar Tugas -->
     <div class="px-6 py-8 relative z-0">
       <h3 class="text-lg font-bold text-slate-800 mb-4">Daftar Tugas</h3>
-
-      <!-- Placeholder Tidak Ada Tugas -->
       <div class="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center shadow-sm">
         <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4">
           <i class="pi pi-check-square text-2xl"></i>
@@ -47,7 +40,6 @@
         <p class="text-slate-500 text-sm">Anda tidak memiliki jadwal pengiriman aktif saat ini.</p>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -72,7 +64,6 @@ const tugasTefilter = computed(() => {
             let statusTampil = stop.status
             if (kirim.status === 'DISIAPKAN') statusTampil = 'SIAP JALAN'
             else if (stop.status === 'MENUNGGU' && kirim.status === 'BERANGKAT') statusTampil = 'OTW'
-
             tugas.push({
                 pengiriman_id: kirim.id,
                 perhentian_id: stop.id,
@@ -142,14 +133,17 @@ onMounted(() => {
 <style scoped>
 .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
 .animate-fade-in-up { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
+
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
 @media (min-width: 640px) {
     .max-w-md {
         max-width: 440px !important;

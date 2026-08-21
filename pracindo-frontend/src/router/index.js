@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { useGuards } from './guards'
 import ModulLayout from '@/components/layout/ModulLayout.vue'
 
@@ -6,6 +6,7 @@ import ruteProduksi from '@/features/produksi/routes.js'
 import ruteWarehouse from '@/features/warehouse/routes.js'
 import ruteDistribusi from '@/features/distribusi/routes.js'
 import ruteLogistik from '@/features/logistik/routes.js'
+import { retailRoutes } from '@/features/retail/routes.js'
 
 const routes = [
   {
@@ -121,13 +122,11 @@ const routes = [
         name: 'inventory-stok-list',
         component: () => import('@/features/inventory/views/StockList.vue')
       },
-      // 👇 TAMBAHKAN RUTE TANGKI DI SINI 👇
       {
         path: 'tangki',
         name: 'inventory-tangki',
         component: () => import('@/features/inventory/views/TankMonitor.vue')
       },
-      // 👆 ============================= 👆
       {
         path: 'stok/:id',
         name: 'inventory-stok-detail',
@@ -147,6 +146,7 @@ const routes = [
   ...ruteWarehouse,
   ...ruteDistribusi,
   ...ruteLogistik,
+  ...retailRoutes,
 
   {
     path: '/work-order',

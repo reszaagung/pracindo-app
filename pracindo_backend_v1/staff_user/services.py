@@ -12,11 +12,6 @@ from rest_framework.authtoken.models import Token
 
 from .models import Profil, RiwayatAkses, Role, StatusKerja
 
-
-# =========================================================
-# PENDAFTARAN & PERSETUJUAN
-# =========================================================
-
 @transaction.atomic
 def daftar(*, username, password, first_name, last_name='', email='',
            nomor_hp=''):
@@ -33,8 +28,8 @@ def daftar(*, username, password, first_name, last_name='', email='',
     profil = Profil(
         username=username, first_name=first_name, last_name=last_name,
         email=email, nomor_hp=nomor_hp,
-        role=Role.STAFF,        # dipaksa
-        is_active=False,        # dipaksa
+        role=Role.STAFF,      
+        is_active=False,       
     )
     profil.set_password(password)
     profil.save()
@@ -100,10 +95,6 @@ def tolak(*, profil_id, oleh, alasan):
     return profil
 
 
-# =========================================================
-# PERAN & STATUS
-# =========================================================
-
 @transaction.atomic
 def ubah_role(*, profil_id, role_baru, oleh, alasan=''):
     """
@@ -160,10 +151,6 @@ def aktifkan_kembali(*, profil_id, oleh):
     return profil
 
 
-# =========================================================
-# PASSWORD
-# =========================================================
-
 @transaction.atomic
 def ganti_password(*, profil, password_lama, password_baru):
     """
@@ -179,8 +166,6 @@ def ganti_password(*, profil, password_lama, password_baru):
     profil.set_password(password_baru)
     profil.save(update_fields=['password'])
 
-    # Token lama dihapus, lalu satu token baru diterbitkan supaya
-    # perangkat yang sedang dipakai tidak ikut terlempar keluar.
     Token.objects.filter(user=profil).delete()
     return Token.objects.create(user=profil)
 
@@ -198,10 +183,6 @@ def reset_password(*, profil_id, password_baru, oleh):
     Token.objects.filter(user=profil).delete()
     return profil
 
-
-# =========================================================
-# SESI
-# =========================================================
 
 def catat_akses(*, request, username, profil=None, berhasil, alasan=''):
     RiwayatAkses.objects.create(

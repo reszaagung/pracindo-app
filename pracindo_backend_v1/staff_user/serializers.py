@@ -43,8 +43,6 @@ class ProfilSerializer(serializers.ModelSerializer):
             'entitas_diizinkan', 'status_kerja', 'tanggal_masuk',
             'tanggal_keluar', 'is_active', 'last_login',
         ]
-        # role dan is_active hanya berubah lewat service, tidak pernah
-        # lewat PATCH biasa -- itu jalur eskalasi hak akses.
         read_only_fields = ['role', 'is_active', 'nip', 'last_login',
                             'tanggal_keluar']
 
