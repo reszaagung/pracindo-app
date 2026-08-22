@@ -1,4 +1,5 @@
 import RetailLayout from './layout/RetailLayout.vue'
+import AkuntansiLayout from './layout/AkuntansiLayout.vue'
 
 export const retailRoutes = [
     {
@@ -16,29 +17,46 @@ export const retailRoutes = [
                 component: () => import('./views/PosView.vue')
             },
             {
-                path: 'laporan',
-                name: 'retail-laporan',
-                component: () => import('./views/KeuanganView.vue') // Sesuaikan nama file jika berbeda
+                path: 'piutang',
+                name: 'retail-piutang',
+                component: () => import('./views/PiutangView.vue')
+            },
+            {
+                path: 'penerimaan',
+                name: 'retail-penerimaan',
+                component: () => import('./views/PenerimaanView.vue')
+            }
+        ]
+    },
+
+    {
+        path: '/akuntansi',
+        meta: { perluLogin: true, modul: 'akuntansi' },
+        component: AkuntansiLayout,
+        children: [
+            {
+                path: '',
+                redirect: '/akuntansi/buku-besar'
             },
             {
                 path: 'buku-besar',
-                name: 'retail-buku-besar',
+                name: 'akuntansi-buku-besar',
                 component: () => import('./views/BukuBesarView.vue')
             },
             {
                 path: 'jurnal',
-                name: 'retail-jurnal',
-                component: () => import('./views/EntryJurnalView.vue')
-            },
-            {
-                path: 'jurnal',
-                name: 'retail-jurnal',
+                name: 'akuntansi-jurnal',
                 component: () => import('./views/JurnalView.vue')
             },
             {
                 path: 'jurnal/entri',
-                name: 'retail-jurnal-entri',
+                name: 'akuntansi-jurnal-entri',
                 component: () => import('./views/EntriJurnalView.vue')
+            },
+            {
+                path: 'laporan',
+                name: 'akuntansi-laporan',
+                component: () => import('./views/KeuanganView.vue')
             }
         ]
     }

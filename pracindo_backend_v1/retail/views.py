@@ -8,15 +8,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
+# 1. Import semua Model
 from .models import (
     StokRetail, CabangToko, SesiKasir, TransaksiPOS, ItemTransaksi,
     AkunBukuBesar, TransaksiJurnal, DetailJurnal,
-    PelangganRetail, SalesRetail, BukuPiutangRetail, BonusSales,BukuPiutangRetailSerializer
+    PelangganRetail, SalesRetail, BukuPiutangRetail, BonusSales,
+    RiwayatBayarPiutang, SuratJalan
 )
 
+# 2. Import semua Serializer
 from .serializers import (
     KatalogPOSSerializer, RiwayatTransaksiSerializer, SesiKasirSerializer,
-    AkunBukuBesarSerializer, TransaksiJurnalSerializer
+    AkunBukuBesarSerializer, TransaksiJurnalSerializer,
+    PelangganRetailSerializer, SalesRetailSerializer,
+    BukuPiutangRetailSerializer, SuratJalanSerializer,
+    MutasiBukuBesarSerializer # <-- Serializer untuk mutasi buku besar
 )
 
 
@@ -190,6 +196,7 @@ class JurnalUmumAPIView(APIView):
 
         return Response({'status': 'sukses', 'nomor_jurnal': jurnal.nomor_jurnal}, status=status.HTTP_201_CREATED)
 
+
 class PelangganRetailAPIView(generics.ListAPIView):
     serializer_class = PelangganRetailSerializer
     permission_classes = [IsAuthenticated]
@@ -206,6 +213,7 @@ class SalesRetailAPIView(generics.ListAPIView):
     def get_queryset(self):
         cabang = CabangToko.objects.filter(aktif=True).first()
         return SalesRetail.objects.filter(cabang=cabang, aktif=True)
+
 
 class DaftarPiutangAPIView(generics.ListAPIView):
     serializer_class = BukuPiutangRetailSerializer
@@ -235,6 +243,7 @@ class BayarPiutangAPIView(APIView):
 
         if nominal > piutang.sisa_piutang:
             return Response({'status': 'gagal', 'pesan': 'Nominal melebihi sisa piutang.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         RiwayatBayarPiutang.objects.create(
             piutang=piutang,
             tanggal_bayar=timezone.now().date(),
@@ -249,3 +258,53 @@ class BayarPiutangAPIView(APIView):
             sesi.save()
 
         return Response({'status': 'sukses', 'pesan': 'Pembayaran berhasil dicatat.'}, status=status.HTTP_200_OK)
+
+
+class DaftarSuratJalanAPIView(generics.ListAPIView):
+    serializer_class = SuratJalanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        cabang = CabangToko.objects.filter(aktif=True).first()
+        return SuratJalan.objects.filter(cabang=cabang).order_by('status', '-tanggal_kirim')
+
+
+class ProsesPenerimaanAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        try:
+            do = SuratJalan.objects.get(id=pk)
+        except SuratJalan.DoesNotExist:
+            return Response({'status': 'gagal', 'pesan': 'DO tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        items = request.data.get('items', [])
+        for item in items:
+            produk_id = item.get('produk_id')
+            qty = item.get('qty_diterima')
+            
+            if produk_id and qty and int(qty) > 0:
+                stok, created = StokRetail.objects.get_or_create(
+                    cabang=do.cabang, 
+                    produk_id=produk_id,
+                    defaults={'qty': 0, 'harga_jual': 0}
+                )
+                stok.qty += int(qty)
+                stok.save()
+                
+        do.status = 'SELESAI'
+        do.tanggal_terima = timezone.now()
+        do.save()
+
+        return Response({'status': 'sukses'})
+
+
+# CLASS BARU: Untuk Rincian Mutasi Buku Besar
+class BukuBesarMutasiAPIView(generics.ListAPIView):
+    serializer_class = MutasiBukuBesarSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        akun_id = self.kwargs.get('pk')
+        return DetailJurnal.objects.filter(akun_id=akun_id).select_related('jurnal').order_by('jurnal__tanggal', 'id')
