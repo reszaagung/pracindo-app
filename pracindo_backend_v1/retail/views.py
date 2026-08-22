@@ -1,5 +1,6 @@
 import uuid
 from decimal import Decimal
+from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
 from rest_framework import generics, status
@@ -7,13 +8,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-# Import seluruh model
 from .models import (
     StokRetail, CabangToko, SesiKasir, TransaksiPOS, ItemTransaksi,
-    AkunBukuBesar, TransaksiJurnal, DetailJurnal
+    AkunBukuBesar, TransaksiJurnal, DetailJurnal,
+    PelangganRetail, SalesRetail, BukuPiutangRetail, BonusSales
 )
 
-# Import seluruh serializer
 from .serializers import (
     KatalogPOSSerializer, RiwayatTransaksiSerializer, SesiKasirSerializer,
     AkunBukuBesarSerializer, TransaksiJurnalSerializer
@@ -40,17 +40,25 @@ class CheckoutPOSAPIView(APIView):
         if not cabang:
             return Response({'status': 'gagal', 'pesan': 'Cabang tidak ditemukan'}, status=status.HTTP_400_BAD_REQUEST)
 
+        metode_bayar = request.data.get('metode_bayar', 'TUNAI')
+        pelanggan_id = request.data.get('pelanggan_id')
+        sales_id = request.data.get('sales_id')
+
+        if metode_bayar == 'TEMPO' and not pelanggan_id:
+            return Response({'status': 'gagal', 'pesan': 'Transaksi TEMPO wajib memilih Pelanggan.'}, status=status.HTTP_400_BAD_REQUEST)
+
         sesi = SesiKasir.objects.filter(cabang=cabang, status='AKTIF').first()
         if not sesi:
             sesi = SesiKasir.objects.create(cabang=cabang, kasir=request.user, status='AKTIF')
 
         keranjang = request.data.get('keranjang', [])
         subtotal = Decimal(str(request.data.get('subtotal', 0)))
-        metode_bayar = request.data.get('metode_bayar', 'TUNAI')
         
         transaksi = TransaksiPOS.objects.create(
             nomor_struk=f"TRX-{uuid.uuid4().hex[:8].upper()}",
             sesi=sesi,
+            pelanggan_id=pelanggan_id,
+            sales_id=sales_id,
             subtotal=subtotal,
             pajak=Decimal('0'),
             grand_total=subtotal,
@@ -75,6 +83,27 @@ class CheckoutPOSAPIView(APIView):
             
             stok.qty -= qty_beli
             stok.save()
+
+        if metode_bayar == 'TEMPO':
+            pelanggan = PelangganRetail.objects.get(id=pelanggan_id)
+            BukuPiutangRetail.objects.create(
+                pelanggan=pelanggan,
+                transaksi=transaksi,
+                tanggal_piutang=timezone.now().date(),
+                jatuh_tempo=timezone.now().date() + timedelta(days=pelanggan.default_tempo_hari),
+                total_piutang=subtotal
+            )
+
+        if sales_id:
+            sales = SalesRetail.objects.get(id=sales_id)
+            nominal_bonus = subtotal * (sales.persentase_bonus / Decimal('100'))
+            if nominal_bonus > 0:
+                BonusSales.objects.create(
+                    sales=sales,
+                    transaksi=transaksi,
+                    tanggal=timezone.now().date(),
+                    nominal_bonus=nominal_bonus
+                )
 
         sesi.total_penjualan = sesi.total_penjualan + subtotal
         sesi.save()
@@ -155,3 +184,20 @@ class JurnalUmumAPIView(APIView):
             )
 
         return Response({'status': 'sukses', 'nomor_jurnal': jurnal.nomor_jurnal}, status=status.HTTP_201_CREATED)
+
+class PelangganRetailAPIView(generics.ListAPIView):
+    serializer_class = PelangganRetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        cabang = CabangToko.objects.filter(aktif=True).first()
+        return PelangganRetail.objects.filter(cabang=cabang).select_related('sales')
+
+
+class SalesRetailAPIView(generics.ListAPIView):
+    serializer_class = SalesRetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        cabang = CabangToko.objects.filter(aktif=True).first()
+        return SalesRetail.objects.filter(cabang=cabang, aktif=True)

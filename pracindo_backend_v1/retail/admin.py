@@ -2,7 +2,8 @@ from django.contrib import admin
 from .models import (
     CabangToko, StokRetail, SesiKasir, TransaksiPOS, ItemTransaksi,
     BukuHutangRetail, RiwayatBayarHutang,
-    KategoriAkun, AkunBukuBesar, TransaksiJurnal, DetailJurnal
+    KategoriAkun, AkunBukuBesar, TransaksiJurnal, DetailJurnal,
+    SalesRetail, PelangganRetail, BukuPiutangRetail, RiwayatBayarPiutang, BonusSales
 )
 
 @admin.register(CabangToko)
@@ -16,6 +17,18 @@ class StokRetailAdmin(admin.ModelAdmin):
     list_filter = ('cabang',)
     search_fields = ('produk__nama',)
 
+@admin.register(SalesRetail)
+class SalesRetailAdmin(admin.ModelAdmin):
+    list_display = ('nama', 'cabang', 'persentase_bonus', 'aktif')
+    list_filter = ('cabang', 'aktif')
+    search_fields = ('nama',)
+
+@admin.register(PelangganRetail)
+class PelangganRetailAdmin(admin.ModelAdmin):
+    list_display = ('nama', 'cabang', 'sales', 'limit_piutang', 'default_tempo_hari')
+    list_filter = ('cabang', 'sales')
+    search_fields = ('nama',)
+
 @admin.register(SesiKasir)
 class SesiKasirAdmin(admin.ModelAdmin):
     list_display = ('cabang', 'kasir', 'waktu_buka', 'status', 'total_penjualan')
@@ -26,12 +39,28 @@ class ItemTransaksiInline(admin.TabularInline):
     extra = 0
     readonly_fields = ('produk', 'qty', 'harga_satuan', 'subtotal')
 
+class BonusSalesInline(admin.StackedInline):
+    model = BonusSales
+    extra = 0
+    readonly_fields = ('nominal_bonus',)
+
 @admin.register(TransaksiPOS)
 class TransaksiPOSAdmin(admin.ModelAdmin):
-    list_display = ('nomor_struk', 'sesi', 'waktu_transaksi', 'grand_total', 'metode_bayar', 'status')
-    list_filter = ('status', 'metode_bayar')
+    list_display = ('nomor_struk', 'sesi', 'pelanggan', 'sales', 'waktu_transaksi', 'grand_total', 'metode_bayar', 'status')
+    list_filter = ('status', 'metode_bayar', 'sesi__cabang')
     search_fields = ('nomor_struk',)
-    inlines = [ItemTransaksiInline]
+    inlines = [ItemTransaksiInline, BonusSalesInline]
+
+class RiwayatBayarPiutangInline(admin.TabularInline):
+    model = RiwayatBayarPiutang
+    extra = 0
+
+@admin.register(BukuPiutangRetail)
+class BukuPiutangRetailAdmin(admin.ModelAdmin):
+    list_display = ('pelanggan', 'transaksi', 'total_piutang', 'total_dibayar', 'jatuh_tempo', 'status')
+    list_filter = ('status',)
+    search_fields = ('pelanggan__nama', 'transaksi__nomor_struk')
+    inlines = [RiwayatBayarPiutangInline]
 
 class RiwayatBayarHutangInline(admin.TabularInline):
     model = RiwayatBayarHutang

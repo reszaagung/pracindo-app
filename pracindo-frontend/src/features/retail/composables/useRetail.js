@@ -1,24 +1,19 @@
 import { ref } from 'vue'
-import { http } from '@/utils/http' // <-- Menggunakan http bawaan sistem Anda
+import { http } from '@/utils/http'
 
 export function useRetail() {
     const posProducts = ref([])
+    const pelangganList = ref([])
+    const salesList = ref([])
+    const riwayat = ref([])
     const isLoading = ref(false)
     const sesiAktif = ref(null)
 
-    // 1. Mengambil Katalog Produk
     const fetchPosProducts = async () => {
         isLoading.value = true
         try {
             const response = await http.get('v1/retail/pos/katalog/')
-
-            if (response.data && response.data.results) {
-                posProducts.value = response.data.results
-            } else if (response.data) {
-                posProducts.value = response.data
-            } else {
-                posProducts.value = []
-            }
+            posProducts.value = response.data.results || response.data || []
         } catch (error) {
             console.error("Gagal mengambil data produk:", error)
             posProducts.value = []
@@ -27,7 +22,24 @@ export function useRetail() {
         }
     }
 
-    // 2. Checkout
+    const fetchPelanggan = async () => {
+        try {
+            const response = await http.get('v1/retail/pelanggan/') // Pastikan endpoint ini ada di backend
+            pelangganList.value = response.data.results || response.data || []
+        } catch (error) {
+            console.error("Gagal mengambil pelanggan:", error)
+        }
+    }
+
+    const fetchSales = async () => {
+        try {
+            const response = await http.get('v1/retail/sales/') // Pastikan endpoint ini ada di backend
+            salesList.value = response.data.results || response.data || []
+        } catch (error) {
+            console.error("Gagal mengambil sales:", error)
+        }
+    }
+
     const checkoutCart = async (payload) => {
         isLoading.value = true
         try {
@@ -44,7 +56,6 @@ export function useRetail() {
         }
     }
 
-    // 3. Status Shift Kasir
     const fetchSesiKasir = async () => {
         try {
             const response = await http.get('v1/retail/sesi/')
@@ -58,12 +69,27 @@ export function useRetail() {
         }
     }
 
+    const fetchRiwayat = async () => {
+        try {
+            const response = await http.get('v1/retail/riwayat/')
+            riwayat.value = response.data.results || response.data || []
+        } catch (error) {
+            console.error("Gagal memuat riwayat:", error)
+        }
+    }
+
     return {
         posProducts,
+        pelangganList,
+        salesList,
+        riwayat,
         isLoading,
         sesiAktif,
         fetchPosProducts,
+        fetchPelanggan,
+        fetchSales,
         checkoutCart,
-        fetchSesiKasir
+        fetchSesiKasir,
+        fetchRiwayat
     }
 }

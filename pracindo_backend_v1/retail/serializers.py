@@ -1,9 +1,9 @@
 from rest_framework import serializers
-from .models import (
-    StokRetail, TransaksiPOS, SesiKasir,
-    KategoriAkun, AkunBukuBesar, TransaksiJurnal, DetailJurnal
+from .serializers import (
+    KatalogPOSSerializer, RiwayatTransaksiSerializer, SesiKasirSerializer,
+    AkunBukuBesarSerializer, TransaksiJurnalSerializer,
+    PelangganRetailSerializer, SalesRetailSerializer
 )
-
 
 class KatalogPOSSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='produk.id', read_only=True)
@@ -70,3 +70,15 @@ class TransaksiJurnalSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransaksiJurnal
         fields = ['id', 'nomor_jurnal', 'tanggal', 'referensi', 'keterangan', 'cabang', 'item_jurnal']
+
+class SalesRetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesRetail
+        fields = ['id', 'nama', 'persentase_bonus']
+
+class PelangganRetailSerializer(serializers.ModelSerializer):
+    sales_nama = serializers.CharField(source='sales.nama', read_only=True)
+
+    class Meta:
+        model = PelangganRetail
+        fields = ['id', 'nama', 'nomor_telepon', 'alamat', 'limit_piutang', 'default_tempo_hari', 'sales', 'sales_nama']
