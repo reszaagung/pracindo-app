@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .serializers import (
     KatalogPOSSerializer, RiwayatTransaksiSerializer, SesiKasirSerializer,
     AkunBukuBesarSerializer, TransaksiJurnalSerializer,
-    PelangganRetailSerializer, SalesRetailSerializer
+    PelangganRetailSerializer, SalesRetailSerializer,RiwayatBayarPiutang
 )
 
 class KatalogPOSSerializer(serializers.ModelSerializer):
@@ -82,3 +82,40 @@ class PelangganRetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PelangganRetail
         fields = ['id', 'nama', 'nomor_telepon', 'alamat', 'limit_piutang', 'default_tempo_hari', 'sales', 'sales_nama']
+
+class DetailJurnalSerializer(serializers.ModelSerializer):
+    akun_kode = serializers.CharField(source='akun.kode', read_only=True)
+    akun_nama = serializers.CharField(source='akun.nama', read_only=True)
+
+    class Meta:
+        model = DetailJurnal
+        fields = ['id', 'akun_kode', 'akun_nama', 'debit', 'kredit']
+
+class TransaksiJurnalSerializer(serializers.ModelSerializer):
+    item_jurnal = DetailJurnalSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TransaksiJurnal
+        fields = ['id', 'nomor_jurnal', 'tanggal', 'referensi', 'keterangan', 'item_jurnal']
+
+class RiwayatBayarPiutangSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiwayatBayarPiutang
+        fields = '__all__'
+
+class BukuPiutangRetailSerializer(serializers.ModelSerializer):
+    pelanggan_nama = serializers.CharField(source='pelanggan.nama', read_only=True)
+    nomor_struk = serializers.CharField(source='transaksi.nomor_struk', read_only=True)
+    sisa_piutang = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    umur_piutang_hari = serializers.IntegerField(read_only=True)
+    sisa_hari_jatuh_tempo = serializers.IntegerField(read_only=True)
+    riwayat_bayar = RiwayatBayarPiutangSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = BukuPiutangRetail
+        fields = [
+            'id', 'pelanggan', 'pelanggan_nama', 'nomor_struk', 
+            'tanggal_piutang', 'jatuh_tempo', 'total_piutang', 
+            'total_dibayar', 'sisa_piutang', 'status', 
+            'umur_piutang_hari', 'sisa_hari_jatuh_tempo', 'riwayat_bayar'
+        ]

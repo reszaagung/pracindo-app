@@ -86,51 +86,14 @@ import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useLayout } from '@/composables/useLayout'
+import { useNavRetailLayout } from '../composables/useNavRetailLayout'
 
 const route = useRoute()
 const router = useRouter()
 const { logout } = useAuth()
 const { sidebarAktif, isMobile, toggleSidebar, tutupDiMobile } = useLayout()
 
-const menuRetail = [
-    {
-        id: 'pos',
-        label: 'Mesin Kasir (POS)',
-        rute: '/retail/pos',
-        ikon: 'pi-desktop',
-        activate: true
-    },
-    {
-        id: 'laporan',
-        label: 'Laporan Shift',
-        rute: '/retail/laporan',
-        ikon: 'pi-receipt',
-        activate: true
-    },
-    {
-        id: 'buku-besar',
-        label: 'Buku Besar',
-        rute: '/retail/buku-besar',
-        ikon: 'pi-book',
-        activate: true
-    },
-    {
-        id: 'jurnal',
-        label: 'Jurnal Umum',
-        rute: '/retail/jurnal',
-        ikon: 'pi-file-edit',
-        activate: true
-    }
-]
-
-const aktif = (path) => route.path.startsWith(path)
-const kembali = () => router.push('/')
-
-const klikMenu = (menu) => {
-    if (!menu.activate) return
-    router.push(menu.rute)
-    tutupDiMobile()
-}
+const { menuRetail, aktif, kembali, klikMenu } = useNavRetailLayout()
 
 const keluar = async () => {
     await logout()

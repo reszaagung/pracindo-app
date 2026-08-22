@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import (
     StokRetail, CabangToko, SesiKasir, TransaksiPOS, ItemTransaksi,
     AkunBukuBesar, TransaksiJurnal, DetailJurnal,
-    PelangganRetail, SalesRetail, BukuPiutangRetail, BonusSales
+    PelangganRetail, SalesRetail, BukuPiutangRetail, BonusSales,BukuPiutangRetailSerializer
 )
 
 from .serializers import (
@@ -153,6 +153,11 @@ class AkunBukuBesarAPIView(generics.ListCreateAPIView):
 class JurnalUmumAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        cabang = CabangToko.objects.filter(aktif=True).first()
+        jurnal = TransaksiJurnal.objects.filter(cabang=cabang).prefetch_related('item_jurnal__akun')
+        return Response(TransaksiJurnalSerializer(jurnal, many=True).data)
+
     @transaction.atomic
     def post(self, request):
         cabang = CabangToko.objects.filter(aktif=True).first()
@@ -201,3 +206,46 @@ class SalesRetailAPIView(generics.ListAPIView):
     def get_queryset(self):
         cabang = CabangToko.objects.filter(aktif=True).first()
         return SalesRetail.objects.filter(cabang=cabang, aktif=True)
+
+class DaftarPiutangAPIView(generics.ListAPIView):
+    serializer_class = BukuPiutangRetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        cabang = CabangToko.objects.filter(aktif=True).first()
+        # Hanya tampilkan piutang dari pelanggan di cabang ini
+        return BukuPiutangRetail.objects.filter(pelanggan__cabang=cabang).order_by('jatuh_tempo')
+
+
+class BayarPiutangAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        try:
+            piutang = BukuPiutangRetail.objects.get(id=pk)
+        except BukuPiutangRetail.DoesNotExist:
+            return Response({'status': 'gagal', 'pesan': 'Data piutang tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        nominal = Decimal(str(request.data.get('nominal', 0)))
+        metode_bayar = request.data.get('metode_bayar', 'TUNAI')
+
+        if nominal <= 0:
+            return Response({'status': 'gagal', 'pesan': 'Nominal pembayaran tidak valid.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if nominal > piutang.sisa_piutang:
+            return Response({'status': 'gagal', 'pesan': 'Nominal melebihi sisa piutang.'}, status=status.HTTP_400_BAD_REQUEST)
+        RiwayatBayarPiutang.objects.create(
+            piutang=piutang,
+            tanggal_bayar=timezone.now().date(),
+            nominal=nominal,
+            metode_bayar=metode_bayar
+        )
+
+        cabang = piutang.pelanggan.cabang
+        sesi = SesiKasir.objects.filter(cabang=cabang, status='AKTIF').first()
+        if sesi and metode_bayar == 'TUNAI':
+            sesi.total_penjualan = sesi.total_penjualan + nominal
+            sesi.save()
+
+        return Response({'status': 'sukses', 'pesan': 'Pembayaran berhasil dicatat.'}, status=status.HTTP_200_OK)

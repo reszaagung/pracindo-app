@@ -28,7 +28,17 @@ export const retailRoutes = [
             {
                 path: 'jurnal',
                 name: 'retail-jurnal',
+                component: () => import('./views/EntryJurnalView.vue')
+            },
+            {
+                path: 'jurnal',
+                name: 'retail-jurnal',
                 component: () => import('./views/JurnalView.vue')
+            },
+            {
+                path: 'jurnal/entri',
+                name: 'retail-jurnal-entri',
+                component: () => import('./views/EntriJurnalView.vue')
             }
         ]
     }

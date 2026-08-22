@@ -19,4 +19,6 @@ urlpatterns = [
     # Akuntansi
     path('akuntansi/akun/', AkunBukuBesarAPIView.as_view(), name='akuntansi-akun'),
     path('akuntansi/jurnal/', JurnalUmumAPIView.as_view(), name='akuntansi-jurnal'),
+    path('piutang/', DaftarPiutangAPIView.as_view(), name='retail-piutang'),
+    path('piutang/<int:pk>/bayar/', BayarPiutangAPIView.as_view(), name='retail-bayar-piutang'),
 ]
