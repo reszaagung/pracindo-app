@@ -1,15 +1,10 @@
 from django.contrib import admin
 from .models import (
-    CabangToko, StokRetail, SesiKasir, TransaksiPOS, ItemTransaksi,
+    StokRetail, SesiKasir, TransaksiPOS, ItemTransaksi,
     BukuHutangRetail, RiwayatBayarHutang,
     KategoriAkun, AkunBukuBesar, TransaksiJurnal, DetailJurnal,
     SalesRetail, PelangganRetail, BukuPiutangRetail, RiwayatBayarPiutang, BonusSales
 )
-
-@admin.register(CabangToko)
-class CabangTokoAdmin(admin.ModelAdmin):
-    list_display = ('kode', 'nama', 'aktif')
-    search_fields = ('kode', 'nama')
 
 @admin.register(StokRetail)
 class StokRetailAdmin(admin.ModelAdmin):

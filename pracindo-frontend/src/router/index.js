@@ -21,12 +21,14 @@ const routes = [
     component: () => import('@/views/RegisterView.vue'),
     meta: { publik: true }
   },
+
+  // PERBAIKAN: Redirect otomatis ke portal retail
   {
     path: '/',
     name: 'dashboard',
-    component: () => import('@/views/DashboardView.vue'),
-    meta: { perluLogin: true }
+    redirect: '/retail-portal'
   },
+
   {
     path: '/accounting',
     meta: { perluLogin: true, modul: 'akunting' },
