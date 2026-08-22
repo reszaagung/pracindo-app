@@ -15,11 +15,8 @@ class LaporanSelisih(models.Model):
         ('DISELESAIKAN', 'Diselesaikan'),
         ('DITUTUP', 'Ditutup')
     ]
-
     nomor = models.CharField(max_length=50, unique=True, blank=True)
     tanggal = models.DateTimeField(default=timezone.now)
-    # Jika Anda punya model Penerimaan, bisa dihubungkan ke sini (opsional)
-    # penerimaan = models.ForeignKey('PenerimaanGudang', on_delete=models.CASCADE, null=True, blank=True)
     
     jenis = models.CharField(max_length=20, choices=JENIS_CHOICES, default='KURANG_KIRIM')
     qty_selisih = models.DecimalField(max_digits=10, decimal_places=3, default=0)
@@ -28,7 +25,7 @@ class LaporanSelisih(models.Model):
     resolusi = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        db_table = 'warehouse_laporan_selisih'
+        db_table = 'retail_laporan_selisih'
         ordering = ['-tanggal']
 
     def save(self, *args, **kwargs):

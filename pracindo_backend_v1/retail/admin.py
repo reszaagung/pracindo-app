@@ -3,7 +3,7 @@ from .models import (
     StokRetail, SesiKasir, TransaksiPOS, ItemTransaksi,
     BukuHutangRetail, RiwayatBayarHutang,
     KategoriAkun, AkunBukuBesar, TransaksiJurnal, DetailJurnal,
-    SalesRetail, PelangganRetail, BukuPiutangRetail, RiwayatBayarPiutang, BonusSales
+    SalesRetail,BukuPiutangRetail, RiwayatBayarPiutang, BonusSales
 )
 
 @admin.register(StokRetail)
@@ -18,74 +18,3 @@ class SalesRetailAdmin(admin.ModelAdmin):
     list_filter = ('cabang', 'aktif')
     search_fields = ('nama',)
 
-@admin.register(PelangganRetail)
-class PelangganRetailAdmin(admin.ModelAdmin):
-    list_display = ('nama', 'cabang', 'sales', 'limit_piutang', 'default_tempo_hari')
-    list_filter = ('cabang', 'sales')
-    search_fields = ('nama',)
-
-@admin.register(SesiKasir)
-class SesiKasirAdmin(admin.ModelAdmin):
-    list_display = ('cabang', 'kasir', 'waktu_buka', 'status', 'total_penjualan')
-    list_filter = ('status', 'cabang')
-
-class ItemTransaksiInline(admin.TabularInline):
-    model = ItemTransaksi
-    extra = 0
-    readonly_fields = ('produk', 'qty', 'harga_satuan', 'subtotal')
-
-class BonusSalesInline(admin.StackedInline):
-    model = BonusSales
-    extra = 0
-    readonly_fields = ('nominal_bonus',)
-
-@admin.register(TransaksiPOS)
-class TransaksiPOSAdmin(admin.ModelAdmin):
-    list_display = ('nomor_struk', 'sesi', 'pelanggan', 'sales', 'waktu_transaksi', 'grand_total', 'metode_bayar', 'status')
-    list_filter = ('status', 'metode_bayar', 'sesi__cabang')
-    search_fields = ('nomor_struk',)
-    inlines = [ItemTransaksiInline, BonusSalesInline]
-
-class RiwayatBayarPiutangInline(admin.TabularInline):
-    model = RiwayatBayarPiutang
-    extra = 0
-
-@admin.register(BukuPiutangRetail)
-class BukuPiutangRetailAdmin(admin.ModelAdmin):
-    list_display = ('pelanggan', 'transaksi', 'total_piutang', 'total_dibayar', 'jatuh_tempo', 'status')
-    list_filter = ('status',)
-    search_fields = ('pelanggan__nama', 'transaksi__nomor_struk')
-    inlines = [RiwayatBayarPiutangInline]
-
-class RiwayatBayarHutangInline(admin.TabularInline):
-    model = RiwayatBayarHutang
-    extra = 0
-
-@admin.register(BukuHutangRetail)
-class BukuHutangRetailAdmin(admin.ModelAdmin):
-    list_display = ('referensi', 'cabang', 'total_hutang', 'total_dibayar', 'status')
-    list_filter = ('status', 'cabang')
-    search_fields = ('referensi',)
-    inlines = [RiwayatBayarHutangInline]
-
-@admin.register(KategoriAkun)
-class KategoriAkunAdmin(admin.ModelAdmin):
-    list_display = ('nama', 'tipe_saldo')
-    search_fields = ('nama',)
-
-@admin.register(AkunBukuBesar)
-class AkunBukuBesarAdmin(admin.ModelAdmin):
-    list_display = ('kode', 'nama', 'kategori', 'cabang', 'aktif')
-    list_filter = ('aktif', 'kategori', 'cabang')
-    search_fields = ('kode', 'nama')
-
-class DetailJurnalInline(admin.TabularInline):
-    model = DetailJurnal
-    extra = 0
-
-@admin.register(TransaksiJurnal)
-class TransaksiJurnalAdmin(admin.ModelAdmin):
-    list_display = ('nomor_jurnal', 'tanggal', 'referensi', 'cabang')
-    list_filter = ('cabang',)
-    search_fields = ('nomor_jurnal', 'referensi')
-    inlines = [DetailJurnalInline]

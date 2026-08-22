@@ -21,14 +21,12 @@ const routes = [
     component: () => import('@/views/RegisterView.vue'),
     meta: { publik: true }
   },
-
-  // PERBAIKAN: Redirect otomatis ke portal retail
   {
     path: '/',
     name: 'dashboard',
-    redirect: '/retail-portal'
+    meta: { perluLogin: true },
+    component: () => import('@/views/DashboardUtama.vue')
   },
-
   {
     path: '/accounting',
     meta: { perluLogin: true, modul: 'akunting' },
@@ -143,13 +141,11 @@ const routes = [
       },
     ]
   },
-
   ...ruteProduksi,
   ...ruteWarehouse,
   ...ruteDistribusi,
   ...ruteLogistik,
   ...retailRoutes,
-
   {
     path: '/work-order',
     name: 'work-order',
