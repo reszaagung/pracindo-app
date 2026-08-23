@@ -66,7 +66,7 @@ async function jalankan() {
 </script>
 
 <template>
-    <div class="batch-form max-w-5xl mx-auto pb-12 px-3 sm:px-4 space-y-6 md:space-y-8 mt-2 md:mt-4">
+    <div class="batch-form w-full mx-auto pb-12 px-3 sm:px-4 space-y-6 md:space-y-8 mt-2 md:mt-4">
 
         <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end border-b border-slate-200 pb-4 gap-3">
             <div>
@@ -81,7 +81,8 @@ async function jalankan() {
         </header>
 
         <section class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-slate-200">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Penyesuaian Grid: Hanya maksimal 2 kolom agar muat di panel sempit -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label class="block">
                     <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tangki Tujuan <span class="text-red-500">*</span></span>
                     <select v-model="form.tangki" @change="cekTambahTangki"
@@ -132,14 +133,18 @@ async function jalankan() {
             </div>
 
             <div class="space-y-2.5">
-                <BarisSumber v-for="b in form.baris" :key="b._id" v-model="form.baris[form.baris.indexOf(b)]"
+                <!-- PERBAIKAN: Gunakan (b, index) dan v-model="form.baris[index]" -->
+                <BarisSumber v-for="(b, index) in form.baris" :key="b._id"
+                    v-model="form.baris[index]"
                     :opsi-raw="opsiRaw" :opsi-batch="opsiBatch"
                     :valuasi="valuasiBaris[b.sumber === 'RAW' ? `RAW:${b.raw}` : `WIP:${b.batch_sumber}`]"
-                    :galat="galatBaris[b._id]" :bisa-hapus="form.baris.length > 1" @hapus="hapusBaris(b._id)" />
+                    :galat="galatBaris[b._id]" :bisa-hapus="form.baris.length > 1"
+                    @hapus="hapusBaris(b._id)" />
             </div>
         </section>
 
         <PanelValuasi :form="form" :opsi-raw="opsiRaw" :opsi-batch="opsiBatch" :tangki-list="tangkiList" />
+
         <div v-if="galatServer" class="p-4 rounded-lg border shadow-sm"
             :class="galatServer.invariantMelenceng ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'">
             <div class="flex items-start gap-3">

@@ -1,13 +1,13 @@
 """
 Purchase order — komitmen pembelian.
 
-PO BUKAN kejadian ekonomi. Tidak ada satu pun panggilan posting jurnal di
-file ini, dan itu disengaja. Jurnal pertama lahir di warehouse saat barang
-benar-benar diterima.
+PO BUKAN kejadian ekonomi. Tidak ada satu pun panggilan posting jurnal 
+di file ini, dan itu disengaja. Jurnal pertama lahir di warehouse saat 
+barang benar-benar diterima.
 
-Kolom `entitas` menjawab "siapa yang berhutang ke suplier", bukan "siapa
-yang memiliki bahannya". Kepemilikan bahan dilacak terpisah di
-inventory.SaldoEntitas sesuai spesifikasi SZA.
+Kolom `entitas` menjawab "siapa yang berhutang ke suplier", bukan 
+"siapa yang memiliki bahannya". Kepemilikan bahan dilacak terpisah di inventory.
+SaldoEntitas sesuai spesifikasi SZA.
 """
 from decimal import Decimal
 
@@ -28,22 +28,26 @@ from core.models import CounterDokumen, DiauditModel
 
 class StatusPO(models.TextChoices):
     DRAFT     = 'DRAFT',     'Draft'
+    PENDING   = 'PENDING',   'Menunggu Persetujuan'
+    APPROVED  = 'APPROVED',  'Disetujui Internal'
     TERKIRIM  = 'TERKIRIM',  'Terkirim ke suplier'
     DISETUJUI = 'DISETUJUI', 'Disetujui suplier'
-    DITOLAK   = 'DITOLAK',   'Ditolak suplier'
+    DITOLAK   = 'DITOLAK',   'Ditolak'
     SEBAGIAN  = 'SEBAGIAN',  'Diterima sebagian'
     SELESAI   = 'SELESAI',   'Diterima penuh'
     BATAL     = 'BATAL',     'Dibatalkan'
 
 
 class PurchaseOrderQuerySet(models.QuerySet):
-
     def untuk_entitas(self, entitas_id):
         return self.filter(entitas_id=entitas_id)
 
     def terbuka(self):
         """Dasar laporan komitmen — PO yang masih menunggu barang untuk Akunting."""
-        return self.filter(status__in=[StatusPO.TERKIRIM, StatusPO.DISETUJUI, StatusPO.SEBAGIAN])
+        return self.filter(status__in=[
+            StatusPO.APPROVED, StatusPO.TERKIRIM, 
+            StatusPO.DISETUJUI, StatusPO.SEBAGIAN
+        ])
 
     def dengan_total(self):
         """
@@ -67,11 +71,15 @@ class PurchaseOrderQuerySet(models.QuerySet):
     def untuk_gudang(self):
         """
         Prefetch untuk Received.vue.
-        GEMBOK GUDANG: Gudang HANYA melihat PO yang sudah disetujui atau sedang berjalan.
+        GEMBOK GUDANG: Gudang otomatis bisa melihat dan memproses PO 
+        hanya jika statusnya sudah APPROVED, TERKIRIM, DISETUJUI, atau SEBAGIAN.
         """
-        return self.filter(status__in=[StatusPO.DISETUJUI, StatusPO.SEBAGIAN]) \
-                   .select_related('suplier', 'entitas') \
-                   .prefetch_related('item')
+        return self.filter(status__in=[
+            StatusPO.APPROVED, StatusPO.TERKIRIM, 
+            StatusPO.DISETUJUI, StatusPO.SEBAGIAN
+        ]) \
+        .select_related('suplier', 'entitas') \
+        .prefetch_related('item')
 
 
 class PurchaseOrder(DiauditModel):
@@ -81,17 +89,15 @@ class PurchaseOrder(DiauditModel):
     suplier = models.ForeignKey(
         'master.Suplier', on_delete=models.PROTECT, related_name='purchase_order',
     )
-
+    
     no_po   = models.CharField(max_length=32, editable=False)
     tanggal = models.DateField(default=timezone.localdate)
     status  = models.CharField(
         max_length=10, choices=StatusPO.choices,
         default=StatusPO.DRAFT, db_index=True,
     )
-
     tanggal_kirim_diminta = models.DateField(null=True, blank=True)
     catatan = models.TextField(blank=True)
-
     ppn_persen = models.DecimalField(
         max_digits=5, decimal_places=2,
         default=Decimal('0.00'),
@@ -115,12 +121,11 @@ class PurchaseOrder(DiauditModel):
         ]
 
     def __str__(self):
-        return f"{self.no_po} · {self.suplier.nama}"
-
+        return f"{self.no_po} — {self.suplier.nama}"
 
     @property
     def subtotal(self):
-        """Halaman detail saja (Ganti nama dari total_nilai). Di list view pakai .dengan_total()."""
+        """Halaman detail saja. Di list view pakai .dengan_total()."""
         return self.item.aggregate(t=Coalesce(Sum('amount'), Decimal('0')))['t']
 
     @property
@@ -144,7 +149,6 @@ class PurchaseOrder(DiauditModel):
     def ada_penerimaan(self):
         return self.item.filter(qty_diterima__gt=0).exists()
 
-
     def save(self, *args, **kwargs):
         if not self.no_po:
             self.no_po = CounterDokumen.berikutnya(self.entitas, 'PO', self.tanggal)
@@ -156,16 +160,61 @@ class PurchaseOrder(DiauditModel):
 
     def delete(self, *args, **kwargs):
         if self.status != StatusPO.DRAFT:
-            raise ValidationError('PO yang sudah terkirim tidak bisa dihapus. Batalkan saja.')
+            raise ValidationError('PO yang sudah diproses tidak bisa dihapus. Batalkan saja.')
         return super().delete(*args, **kwargs)
+
+
+    # =========================================================
+    # STATE TRANSITIONS
+    # =========================================================
+    
+    @transaction.atomic
+    def ajukan(self):
+        """Merubah DRAFT menjadi PENDING (Menunggu Persetujuan Manajer)"""
+        po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
+        if po.status != StatusPO.DRAFT:
+            raise ValidationError('Hanya PO DRAFT yang bisa diajukan.')
+        if not po.item.exists():
+            raise ValidationError('PO tanpa item tidak bisa diajukan.')
+        
+        po.status = StatusPO.PENDING
+        po.save(update_fields=['status'])
+        return po
+
+    @transaction.atomic
+    def setujui(self):
+        """
+        Approve Internal.
+        Saat ini dipanggil, PO otomatis terbaca oleh Warehouse via untuk_gudang().
+        """
+        po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
+        if po.status != StatusPO.PENDING:
+            raise ValidationError('Hanya PO PENDING yang bisa disetujui.')
+        
+        po.status = StatusPO.APPROVED
+        po.save(update_fields=['status'])
+        return po
+
+    @transaction.atomic
+    def tolak(self, alasan=''):
+        """Tolak Internal (Bisa dikembalikan dari PENDING/APPROVED ke DITOLAK)"""
+        po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
+        if po.status not in [StatusPO.PENDING, StatusPO.APPROVED, StatusPO.TERKIRIM]:
+            raise ValidationError('Status saat ini tidak bisa ditolak.')
+        
+        po.status = StatusPO.DITOLAK
+        if alasan:
+            po.catatan = f"{po.catatan}\n[DITOLAK] {alasan}".strip()
+        po.save(update_fields=['status', 'catatan'])
+        return po
 
     @transaction.atomic
     def kirim(self):
+        """Setelah Approve, PO resmi dikirim ke Suplier"""
         po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
-        if po.status != StatusPO.DRAFT:
-            raise ValidationError('PO ini sudah pernah dikirim.')
-        if not po.item.exists():
-            raise ValidationError('PO tanpa item tidak bisa dikirim.')
+        if po.status != StatusPO.APPROVED:
+            raise ValidationError('PO harus di-Approve terlebih dahulu sebelum dikirim ke Suplier.')
+        
         po.status = StatusPO.TERKIRIM
         po.save(update_fields=['status'])
         return po
@@ -175,28 +224,9 @@ class PurchaseOrder(DiauditModel):
         po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
         if po.ada_penerimaan():
             raise ValidationError('PO sudah diterima sebagian. Tutup lewat retur, bukan pembatalan.')
+        
         po.status  = StatusPO.BATAL
         po.catatan = f"{po.catatan}\n[BATAL] {alasan}".strip()
-        po.save(update_fields=['status', 'catatan'])
-        return po
-
-    @transaction.atomic
-    def setujui(self):
-        po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
-        if po.status != StatusPO.TERKIRIM:
-            raise ValidationError('Hanya PO dengan status TERKIRIM yang bisa disetujui.')
-        po.status = StatusPO.DISETUJUI
-        po.save(update_fields=['status'])
-        return po
-
-    @transaction.atomic
-    def tolak(self, alasan=''):
-        po = PurchaseOrder.objects.select_for_update().get(pk=self.pk)
-        if po.status != StatusPO.TERKIRIM:
-            raise ValidationError('Hanya PO dengan status TERKIRIM yang bisa ditolak.')
-        po.status = StatusPO.DITOLAK
-        if alasan:
-            po.catatan = f"{po.catatan}\n[DITOLAK] {alasan}".strip()
         po.save(update_fields=['status', 'catatan'])
         return po
 
@@ -206,9 +236,10 @@ class PurchaseOrderItem(models.Model):
         PurchaseOrder, on_delete=models.CASCADE, related_name='item',
     )
     produk = models.ForeignKey('master.Produk', on_delete=models.PROTECT)
+    
     nama_item = models.CharField(max_length=200)
     satuan    = models.CharField(max_length=8, default='kg')
-
+    
     qty_pesan = models.DecimalField(
         max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
         validators=[MinValueValidator(Decimal('0.001'))],
@@ -217,12 +248,10 @@ class PurchaseOrderItem(models.Model):
         max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
         default=Decimal('0'), editable=False,
     )
-
     harga_per_kg = models.DecimalField(
         max_digits=HARGA_DIGITS, decimal_places=HARGA_PLACES,
         validators=[MinValueValidator(Decimal('0'))],
     )
-
     amount = models.DecimalField(
         max_digits=NILAI_DIGITS, decimal_places=NILAI_PLACES,
         default=Decimal('0'), editable=False,
@@ -247,7 +276,7 @@ class PurchaseOrderItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.nama_item} · {self.qty_pesan} {self.satuan}"
+        return f"{self.nama_item} — {self.qty_pesan} {self.satuan}"
 
     @property
     def sisa_qty(self):
@@ -260,11 +289,13 @@ class PurchaseOrderItem(models.Model):
     def save(self, *args, **kwargs):
         if self.produk_id and not self.nama_item:
             self.nama_item = self.produk.nama
+            
         self.amount = (self.qty_pesan * self.harga_per_kg).quantize(Decimal('0.01'))
-
+        
         if self.pk is None and not self.purchase_order.boleh_diubah:
             raise ValidationError('Item hanya bisa ditambah saat PO masih draft.')
-
+            
         if kwargs.get('update_fields') is not None:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'amount'}
-        super().save(*args, **kwargs) 
+            
+        super().save(*args, **kwargs)

@@ -6,19 +6,19 @@
   (lihat layouts/ModulLayout.vue).
 -->
 <template>
-    <div class="dash">
-        <header class="dash__kepala">
+    <div class="dash w-full min-h-screen flex flex-col bg-slate-50/50">
+        <!-- Header disesuaikan dengan Tailwind untuk responsivitas mobile & desktop -->
+        <header class="flex flex-col md:flex-row md:justify-between md:items-start gap-6 pb-7 border-b border-slate-200">
             <div>
                 <div class="merek">
                     <span class="merek__kotak">PC</span>
                     <span class="merek__teks">Pracindo · Sistem Internal</span>
                 </div>
-                <!-- Menggunakan sapaan computed yang aman -->
                 <h1 class="sapa">{{ sapaan }}, {{ namaDepan }}</h1>
                 <p class="sub">Pilih modul untuk mulai bekerja.</p>
             </div>
 
-            <div class="orang">
+            <div class="text-left md:text-right">
                 <p class="orang__nama">{{ kartu?.nama ?? 'Pengguna' }}</p>
                 <p class="orang__peran">
                     {{ kartu?.role_display ?? 'Staf' }} · {{ kartu?.entitas_default_kode ?? 'Semua entitas' }}
@@ -28,7 +28,7 @@
         </header>
 
         <!-- BAGIAN ATAS: KARTU MODUL -->
-        <section class="blok">
+        <section class="blok w-full">
             <h2 class="stensil">Modul</h2>
             <div class="kartu">
                 <ModuleCard v-for="m in modulSaya" :key="m.id" :modul="m" />
@@ -98,19 +98,11 @@ const keluar = async () => {
 </script>
 <style scoped>
 .dash {
+    width: 100%;
     max-width: 1180px;
     margin: 0 auto;
     padding: 2.5rem clamp(1rem, 4vw, 2.5rem) 4rem;
-}
-
-.dash__kepala {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 2rem;
-    flex-wrap: wrap;
-    padding-bottom: 1.75rem;
-    border-bottom: 1px solid var(--garis);
+    overflow-x: hidden;
 }
 
 .merek {
@@ -151,10 +143,6 @@ const keluar = async () => {
     margin: .35rem 0 0;
     font-size: .9375rem;
     color: var(--redup);
-}
-
-.orang {
-    text-align: right;
 }
 
 .orang__nama {
@@ -226,7 +214,8 @@ const keluar = async () => {
 
 .kartu {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    /* Disesuaikan menggunakan fungsi min() agar tidak meluap di perangkat dengan layar kecil */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
     gap: 1rem;
 }
 

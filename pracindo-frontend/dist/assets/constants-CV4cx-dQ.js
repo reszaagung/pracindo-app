@@ -1,0 +1,1 @@
+var e={DRAFT:`DRAFT`,POSTED:`POSTED`,VOID:`VOID`},t={[e.DRAFT]:`bg-gray-200 text-gray-800`,[e.POSTED]:`bg-blue-100 text-blue-800`,[e.VOID]:`bg-red-100 text-red-800`};export{t as n,e as t};

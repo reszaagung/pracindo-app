@@ -4,7 +4,7 @@ from .models import LaporanSelisih, Packaging, PenerimaanBarang, PenerimaanItem
 
 from .models import (
     LaporanSelisih, Packaging, PenerimaanBarang, PenerimaanItem,
-    DeliveryOrder, DeliveryOrderItem # <-- TAMBAHKAN IMPORT INI
+    DeliveryOrder, DeliveryOrderItem 
 )
 
 
@@ -42,7 +42,7 @@ class PenerimaanBarangAdmin(admin.ModelAdmin):
     inlines = [PenerimaanItemInline, LaporanSelisihInline]
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        return True
 
 
 @admin.register(LaporanSelisih)

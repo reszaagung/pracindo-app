@@ -181,11 +181,6 @@ class PurchaseOrderViewSet(BasisAkunting):
     search_fields = ['no_po', 'suplier__nama']
 
     def get_queryset(self):
-        # Bug salin-tempel: sebelumnya membangun queryset JurnalUmum di
-        # dalam viewset PurchaseOrder. Endpoint tetap merespons dan
-        # filter tetap terpasang, jadi galatnya muncul sebagai "field
-        # suplier tidak ada" -- menunjuk ke serializer yang sebenarnya
-        # sudah benar, dan menyembunyikan penyebab aslinya berjam-jam.
         qs = (PurchaseOrder.objects
               .select_related('entitas', 'suplier')
               .prefetch_related('item')
@@ -268,6 +263,36 @@ class PurchaseOrderViewSet(BasisAkunting):
         return Response(PurchaseOrderSerializer(po).data)
 
     @action(detail=True, methods=['post'])
+    def ajukan(self, request, pk=None):
+        try:
+            po = services.ajukan_po(po_id=pk, user=request.user)
+        except DjangoValidationError as e:
+            return _galat(e)
+        return Response(PurchaseOrderSerializer(po).data)
+
+    @action(detail=True, methods=['post'])
+    def setujui(self, request, pk=None):
+        try:
+            po = services.setujui_po(po_id=pk, user=request.user)
+        except DjangoValidationError as e:
+            return _galat(e)
+        return Response(PurchaseOrderSerializer(po).data)
+
+    @action(detail=True, methods=['post'])
+    def tolak(self, request, pk=None):
+        s = BatalPOSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        try:
+            po = services.tolak_po(
+                po_id=pk, 
+                user=request.user, 
+                alasan=s.validated_data['alasan']
+            )
+        except DjangoValidationError as e:
+            return _galat(e)
+        return Response(PurchaseOrderSerializer(po).data)
+
+    @action(detail=True, methods=['post'])
     def kirim(self, request, pk=None):
         try:
             po = services.kirim_po(po_id=pk, user=request.user)
@@ -280,27 +305,11 @@ class PurchaseOrderViewSet(BasisAkunting):
         s = BatalPOSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         try:
-            po = services.batalkan_po(po_id=pk, user=request.user,
-                                      alasan=s.validated_data['alasan'])
-        except DjangoValidationError as e:
-            return _galat(e)
-        return Response(PurchaseOrderSerializer(po).data)
-        
-    @action(detail=True, methods=['post'])
-    def setujui(self, request, pk=None):
-        try:
-            po = self.get_object()
-            po = po.setujui()
-        except DjangoValidationError as e:
-            return _galat(e)
-
-    @action(detail=True, methods=['post'])
-    def tolak(self, request, pk=None):
-        s = BatalPOSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        try:
-            po = self.get_object()
-            po = po.tolak(alasan=s.validated_data['alasan'])
+            po = services.batalkan_po(
+                po_id=pk, 
+                user=request.user,
+                alasan=s.validated_data['alasan']
+            )
         except DjangoValidationError as e:
             return _galat(e)
         return Response(PurchaseOrderSerializer(po).data)
@@ -539,6 +548,8 @@ class PenerimaanPiutangView(viewsets.ViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
 class PengeluaranKasViewSet(viewsets.ModelViewSet):
     queryset = PengeluaranKas.objects.select_related(
         'entitas', 'kategori_beban', 'sumber_dana'

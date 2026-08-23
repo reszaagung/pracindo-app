@@ -19,6 +19,9 @@ RIWAYAT BUG
     dan tidak bisa diberi atribut kelas. Jadi permission-nya yang dibuat
     mandiri.
 """
+"""
+Hak akses produksi — produksi/permissions.py
+"""
 from staff_user.models import Role
 from staff_user.permissions import (
     AksesModul, AtauPermission, HanyaSupervisor, PunyaRole,
@@ -27,23 +30,24 @@ from staff_user.permissions import (
 
 class ModulProduksi(AksesModul):
     """
-    Membaca `modul` dari PERMISSION, bukan dari view.
-
-    Berlaku sama untuk ViewSet maupun @api_view. Jangan menghapus
-    has_permission() di bawah dengan alasan "sudah ada di induk" -- induknya
-    membaca atribut dari tempat yang berbeda.
+    Membaca `modul` dari PERMISSION, dan otomatis meloloskan Superuser / Supervisor.
     """
     modul = 'produksi'
 
     def has_permission(self, request, view):
         user = request.user
         if not (user and user.is_authenticated):
-            return False
+            return False  
+        if getattr(user, 'is_superuser', False):
+            return True
+        if HanyaSupervisor().has_permission(request, view):
+            return True
+
         cek = getattr(user, 'bisa_akses_modul', None)
         return bool(callable(cek) and cek(self.modul))
 
 
-OperatorProduksi = PunyaRole.dengan(Role.PRODUKSI, Role.GUDANG)
+OperatorProduksi = PunyaRole.dengan(Role.PRODUKSI, Role.GUDANG, Role.SUPERVISOR)
 OperatorSesi = AtauPermission.dari(OperatorProduksi, HanyaSupervisor)
 
 ModulProduksiPermission = ModulProduksi

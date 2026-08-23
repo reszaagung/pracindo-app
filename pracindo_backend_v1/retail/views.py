@@ -299,8 +299,6 @@ class ProsesPenerimaanAPIView(APIView):
 
         return Response({'status': 'sukses'})
 
-
-# CLASS BARU: Untuk Rincian Mutasi Buku Besar
 class BukuBesarMutasiAPIView(generics.ListAPIView):
     serializer_class = MutasiBukuBesarSerializer
     permission_classes = [IsAuthenticated]

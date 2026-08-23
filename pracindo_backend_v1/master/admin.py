@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from .models import Kategori, Pelanggan, Produk, Satuan, Suplier
+from import_export.admin import ImportExportModelAdmin
+from django.contrib import admin
+from .models import Produk, Kategori, Satuan, Suplier, Pelanggan
 
 
 @admin.register(Kategori)
@@ -24,7 +26,7 @@ class SatuanAdmin(admin.ModelAdmin):
 
 
 @admin.register(Produk)
-class ProdukAdmin(admin.ModelAdmin):
+class ProdukAdmin(ImportExportModelAdmin): # <-- Ganti admin.ModelAdmin menjadi ImportExportModelAdmin
     list_display = ('kode', 'nama', 'jenis', 'kategori', 'satuan',
                     'disimpan_di_tanki', 'aktif')
     list_filter = ('jenis', 'kategori', 'disimpan_di_tanki', 'aktif')

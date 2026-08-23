@@ -24,8 +24,8 @@ const routes = [
   {
     path: '/',
     name: 'dashboard',
-    meta: { perluLogin: true },
-    component: () => import('@/views/DashboardUtama.vue')
+    meta: { perluLogin: true, modul: 'dashboard' },
+    component: () => import('@/views/DashboardView.vue')
   },
   {
     path: '/accounting',

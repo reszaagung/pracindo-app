@@ -24,7 +24,7 @@ export function useRetail() {
 
     const fetchPelanggan = async () => {
         try {
-            const response = await http.get('v1/retail/pelanggan/') // Pastikan endpoint ini ada di backend
+            const response = await http.get('v1/retail/pelanggan/')
             pelangganList.value = response.data.results || response.data || []
         } catch (error) {
             console.error("Gagal mengambil pelanggan:", error)
@@ -33,7 +33,7 @@ export function useRetail() {
 
     const fetchSales = async () => {
         try {
-            const response = await http.get('v1/retail/sales/') // Pastikan endpoint ini ada di backend
+            const response = await http.get('v1/retail/sales/')
             salesList.value = response.data.results || response.data || []
         } catch (error) {
             console.error("Gagal mengambil sales:", error)
@@ -56,7 +56,8 @@ export function useRetail() {
         }
     }
 
-    const fetchSesiKasir = async () => {
+    // PERBAIKAN: Namanya disamakan jadi fetchSesi agar cocok dengan KeuanganView.vue
+    const fetchSesi = async () => {
         try {
             const response = await http.get('v1/retail/sesi/')
             if (response.data.status !== 'TIDAK_ADA_SHIFT') {
@@ -78,6 +79,20 @@ export function useRetail() {
         }
     }
 
+    const tutupShift = async () => {
+        isLoading.value = true
+        try {
+            const response = await http.post('v1/retail/sesi/')
+            sesiAktif.value = null // Reset state setelah tutup shift
+            return response.data
+        } catch (error) {
+            console.error("Gagal menutup shift:", error)
+            throw error
+        } finally {
+            isLoading.value = false
+        }
+    }
+
     return {
         posProducts,
         pelangganList,
@@ -89,7 +104,8 @@ export function useRetail() {
         fetchPelanggan,
         fetchSales,
         checkoutCart,
-        fetchSesiKasir,
-        fetchRiwayat
+        fetchSesi,
+        fetchRiwayat,
+        tutupShift
     }
 }

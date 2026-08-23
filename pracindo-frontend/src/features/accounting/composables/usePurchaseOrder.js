@@ -11,7 +11,6 @@ export function usePurchaseOrder() {
 
     const listEntitas = ref([])
     const listSupplier = ref([])
-    const listProduk = ref([])
     const listSatuan = ref([])
     const sedangProses = ref(false)
     const pesanError = ref('')
@@ -42,7 +41,7 @@ export function usePurchaseOrder() {
     })
 
     const belumDiterima = computed(() =>
-        daftarPO.value.filter(po => ['TERKIRIM', 'SEBAGIAN'].includes(po.status))
+        daftarPO.value.filter(po => ['TERKIRIM', 'DISETUJUI', 'SEBAGIAN'].includes(po.status))
     )
 
     const draftCount = computed(() =>
@@ -63,22 +62,18 @@ export function usePurchaseOrder() {
         sedangProses.value = true
         pesanError.value = ''
         try {
-            const [resPortal, resSupplier, resProduk] = await Promise.all([
+            const [resPortal, resSupplier] = await Promise.all([
                 api.get('auth/portal/'),
-                api.get('master/suplier/', { params: { ringkas: 1, aktif: true } }),
-                api.get('master/produk/', { params: { ringkas: 1, aktif: true, jenis: 'BAHAN_BAKU' } })
+                api.get('master/suplier/', { params: { ringkas: 1, aktif: true } })
             ])
 
-            console.log("📦 ISI MENTAH DATA PORTAL DARI DJANGO:", resPortal.data)
             const pd = resPortal.data;
             listEntitas.value = pd?.entitas || pd?.data?.entitas || pd?.results || pd?.data || (Array.isArray(pd) ? pd : []);
-
             listSupplier.value = resSupplier.data?.results || resSupplier.data || [];
-            listProduk.value = resProduk.data?.results || resProduk.data || [];
 
         } catch (err) {
             console.error("Gagal memuat master:", err)
-            pesanError.value = bacaError(err, 'Gagal memuat data master (Entitas/Suplier/Produk).')
+            pesanError.value = bacaError(err, 'Gagal memuat data master (Entitas/Suplier).')
         } finally {
             sedangProses.value = false
         }
@@ -119,74 +114,29 @@ export function usePurchaseOrder() {
         }
     }
 
-    const cariProduk = async (query) => {
-        try {
-            const { data } = await api.get('master/produk/', {
-                params: { ringkas: 1, aktif: true, jenis: 'BAHAN_BAKU', search: query }
-            })
-            return data.results || data || []
-        } catch {
-            return []
-        }
-    }
-
     const buatProdukBaru = async (nama) => {
         const namaProduk = nama.trim()
-
-        if (!namaProduk) {
-            throw new Error('Nama produk wajib diisi.')
-        }
+        if (!namaProduk) throw new Error('Nama produk wajib diisi.')
 
         if (!listSatuan.value.length) {
-            const { data } = await api.get('master/satuan/', {
-                params: { aktif: true }
-            })
+            const { data } = await api.get('master/satuan/', { params: { aktif: true } })
             listSatuan.value = data.results || data || []
         }
 
-        const satuanKg =
-            listSatuan.value.find(
-                s => s.kode?.toLowerCase() === 'kg'
-            ) || listSatuan.value[0]
-
-        if (!satuanKg) {
-            throw new Error('Belum ada data satuan pada master.')
-        }
-
-        const produkLokal = listProduk.value.find(
-            p => p.nama.trim().toLowerCase() === namaProduk.toLowerCase()
-        )
-
-        if (produkLokal) {
-            return produkLokal
-        }
+        const satuanKg = listSatuan.value.find(s => s.kode?.toLowerCase() === 'kg') || listSatuan.value[0]
+        if (!satuanKg) throw new Error('Belum ada data satuan pada master.')
 
         const kode = generateKode('RM')
-
         try {
             const { data } = await api.post('master/produk/', {
-                kode,
-                nama: namaProduk,
-                jenis: 'BAHAN_BAKU',
-                satuan: satuanKg.id
+                kode, nama: namaProduk, jenis: 'BAHAN_BAKU', satuan: satuanKg.id
             })
-
-            const produkBaru = {
-                id: data.id,
-                kode: data.kode,
-                nama: data.nama,
-                satuan_kode: data.satuan_kode,
-                jenis: data.jenis
+            return {
+                id: data.id, kode: data.kode, nama: data.nama,
+                satuan_kode: data.satuan_kode, jenis: data.jenis
             }
-            listProduk.value.unshift(produkBaru)
-
-            return produkBaru
-
         } catch (err) {
-            throw new Error(
-                bacaError(err, 'Gagal membuat produk baru.'),
-                { cause: err }
-            )
+            throw new Error(bacaError(err, 'Gagal membuat produk baru.'), { cause: err })
         }
     }
 
@@ -227,8 +177,9 @@ export function usePurchaseOrder() {
             const res = await api.post('akunting/purchase-order/', payload)
             const idPO = res.data.id
 
+            // Jika isKirim true, langsung ajukan ke Manajer (DRAFT -> PENDING)
             if (isKirim && idPO) {
-                await api.post(`akunting/purchase-order/${idPO}/kirim/`)
+                await api.post(`akunting/purchase-order/${idPO}/ajukan/`)
             }
 
             await muatDaftarPO()
@@ -242,7 +193,55 @@ export function usePurchaseOrder() {
         }
     }
 
-    // Fungsi baru untuk mengeksekusi pengiriman PO
+    // ==========================================
+    // ACTION PERUBAHAN STATUS (API ENDPOINTS)
+    // ==========================================
+
+    const ajukanPO = async (po_id) => {
+        sedangProses.value = true
+        pesanError.value = ''
+        try {
+            await api.post(`akunting/purchase-order/${po_id}/ajukan/`)
+            await muatDaftarPO()
+            return { success: true }
+        } catch (err) {
+            pesanError.value = bacaError(err, 'Gagal mengajukan PO.')
+            return { success: false, message: pesanError.value }
+        } finally {
+            sedangProses.value = false
+        }
+    }
+
+    const setujuiPO = async (po_id) => {
+        sedangProses.value = true
+        pesanError.value = ''
+        try {
+            await api.post(`akunting/purchase-order/${po_id}/setujui/`)
+            await muatDaftarPO()
+            return { success: true }
+        } catch (err) {
+            pesanError.value = bacaError(err, 'Gagal menyetujui PO.')
+            return { success: false, message: pesanError.value }
+        } finally {
+            sedangProses.value = false
+        }
+    }
+
+    const tolakPO = async (po_id, alasan) => {
+        sedangProses.value = true
+        pesanError.value = ''
+        try {
+            await api.post(`akunting/purchase-order/${po_id}/tolak/`, { alasan })
+            await muatDaftarPO()
+            return { success: true }
+        } catch (err) {
+            pesanError.value = bacaError(err, 'Gagal menolak PO.')
+            return { success: false, message: pesanError.value }
+        } finally {
+            sedangProses.value = false
+        }
+    }
+
     const kirimPO = async (po_id) => {
         sedangProses.value = true
         pesanError.value = ''
@@ -251,14 +250,13 @@ export function usePurchaseOrder() {
             await muatDaftarPO()
             return { success: true }
         } catch (err) {
-            pesanError.value = bacaError(err, 'Gagal mengirim PO.')
+            pesanError.value = bacaError(err, 'Gagal mengirim PO ke Suplier.')
             return { success: false, message: pesanError.value }
         } finally {
             sedangProses.value = false
         }
     }
 
-    // Fungsi baru untuk mengeksekusi pembatalan PO
     const batalkanPO = async (po_id, alasan) => {
         sedangProses.value = true
         pesanError.value = ''
@@ -277,10 +275,10 @@ export function usePurchaseOrder() {
     return {
         daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
         belumDiterima, draftCount, totalBulanIni, muatDaftarPO,
-        listEntitas, listSupplier, listProduk, sedangProses,
+        listEntitas, listSupplier, sedangProses,
         pesanError, previewNomor, muatDataMaster, muatPreviewNomor,
-        cariProduk, buatProdukBaru, simpanPO,
+        buatProdukBaru, simpanPO,
         periodeDitutup, cekStatusPeriode,
-        kirimPO, batalkanPO
+        ajukanPO, setujuiPO, tolakPO, kirimPO, batalkanPO // Export fungsi baru
     }
 }

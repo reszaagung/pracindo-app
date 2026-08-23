@@ -1,36 +1,34 @@
-<!-- views/WorkOrderBoard.vue -->
 <template>
     <div class="wo-board animate-fade-in">
-        <!-- HEADER -->
-        <header class="wo-header">
-            <div class="wo-title">
-                <div class="title-wrapper">
-                    <div class="title-icon">
-                        <i class="pi pi-desktop"></i>
-                    </div>
-                    <div>
-                        <h1>Mading Operasional</h1>
-                        <p>Kontrol pusat pesanan pabrik dan penugasan tim.</p>
-                    </div>
+        <header :class="['flex justify-between gap-4 mb-8 pb-6 border-b border-slate-200', isMobile ? 'flex-col' : 'flex-row items-center']">
+            <div class="flex items-center gap-4">
+                <div :class="['bg-slate-900 rounded-xl flex items-center justify-center shrink-0 shadow-sm', isMobile ? 'w-10 h-10' : 'w-12 h-12']">
+                    <i :class="['pi pi-desktop text-teal-400', isMobile ? 'text-lg' : 'text-xl']"></i>
+                </div>
+                <div class="flex flex-col">
+                    <h1 :class="['font-black text-slate-900 leading-tight m-0 tracking-tight', isMobile ? 'text-2xl' : 'text-3xl']">
+                        Mading Operasional
+                    </h1>
+                    <p :class="['text-slate-500 mt-1 m-0', isMobile ? 'text-xs' : 'text-sm']">
+                        Kontrol pusat pesanan pabrik dan penugasan tim.
+                    </p>
                 </div>
             </div>
-            <div class="header-actions">
-                <button @click="bukaModalBuat" class="btn-primary-tech">
-                    <i class="pi pi-plus"></i> <span>Buat Tugas Baru</span>
+            <div :class="['flex gap-3', isMobile ? 'w-full' : 'w-auto']">
+                <button @click="bukaModalBuat" class="btn-primary-tech" :class="isMobile ? 'flex-1 justify-center' : ''">
+                    <i class="pi pi-plus"></i> <span>{{ isMobile ? 'Tugas Baru' : 'Buat Tugas Baru' }}</span>
                 </button>
-                <button @click="fetchMading" class="btn-icon-tech" aria-label="Refresh">
+                <button @click="fetchMading" class="btn-icon-tech shrink-0" aria-label="Refresh">
                     <i class="pi pi-refresh" :class="{ 'pi-spin': isLoading }"></i>
                 </button>
             </div>
         </header>
 
-        <!-- LOADING STATE -->
         <div v-if="isLoading && madingList.length === 0" class="wo-loading">
             <div class="loader-pulse"></div>
             <p>Sinkronisasi data...</p>
         </div>
 
-        <!-- EMPTY STATE -->
         <div v-else-if="!isLoading && madingList.length === 0" class="wo-empty">
             <div class="empty-glow">
                 <i class="pi pi-check-circle"></i>
@@ -39,26 +37,20 @@
             <p>Tidak ada antrean pesanan atau tugas aktif. Ruang kerja bersih!</p>
         </div>
 
-        <!-- GRID MADING DENGAN KOMPONEN CARD -->
         <div v-else class="wo-grid" :data-count="madingList.length > 4 ? 'more' : madingList.length">
-
             <PostWorkOrderCard v-for="wo in madingList" :key="wo.id" :wo="wo" :currentUserId="currentUserId"
                 @open-chat="openChatModal" @approve="handleApprove" />
-
         </div>
 
-        <!-- MODAL INISIASI TUGAS BARU -->
         <Dialog v-model:visible="isCreateOpen" modal header="Inisiasi Tugas Baru" :style="{ width: '500px' }"
             class="tech-modal">
             <form @submit.prevent="handleCreate" class="tech-form">
-
                 <div class="form-row">
                     <div class="input-wrap">
                         <label>Target Penerima Tugas (PIC)</label>
                         <MultiSelect v-model="formCreate.staff_ids" :options="staffList" optionLabel="nama_lengkap"
                             optionValue="id" placeholder="Pilih pelaksana..." display="chip" fluid />
                     </div>
-
                     <div class="input-wrap">
                         <label>Tenggat Waktu</label>
                         <DatePicker v-model="formCreate.deadline" showTime hourFormat="24" dateFormat="dd/mm/yy"
@@ -67,26 +59,21 @@
                             }" />
                     </div>
                 </div>
-
                 <div class="input-wrap">
                     <label>Target Penerima Tugas (PIC)</label>
-                    <!-- Menggunakan staffTanpaPembuat agar user aktif tidak bisa tag dirinya sendiri -->
                     <MultiSelect v-model="formCreate.staff_ids" :options="staffTanpaPembuat" optionLabel="nama_lengkap"
                         optionValue="id" placeholder="Pilih pelaksana..." display="chip" fluid />
                 </div>
-
                 <div class="input-wrap">
                     <label>Identifikasi Tugas</label>
                     <input type="text" v-model="formCreate.judul" required class="neo-input"
                         placeholder="Masukkan judul spesifik...">
                 </div>
-
                 <div class="input-wrap">
                     <label>Parameter Detail</label>
                     <textarea v-model="formCreate.deskripsi" rows="4" class="neo-input resize-none"
                         placeholder="Uraikan instruksi pekerjaan di sini..."></textarea>
                 </div>
-
                 <div class="form-footer">
                     <button type="button" @click="isCreateOpen = false" class="btn-ghost"
                         :disabled="isCreating">Batalkan</button>
@@ -98,7 +85,6 @@
             </form>
         </Dialog>
 
-        <!-- MODAL DISKUSI -->
         <Dialog v-model:visible="isChatOpen" modal header="Terminal Diskusi" :style="{ width: '450px' }"
             class="tech-modal">
             <div v-if="activeWO" class="chat-wrapper">
@@ -127,15 +113,15 @@
 </template>
 
 <script setup>
-// Menambahkan import computed
 import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { useWorkOrder } from '@/features/work-order/composables/useWorkOrder'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import MultiSelect from 'primevue/multiselect'
-
-// Import komponen child
 import PostWorkOrderCard from '../components/PostWorkOrderCard.vue'
+import { useDevice } from '@/composables/useDevice'
+
+const { isMobile } = useDevice()
 
 const {
     isLoading, isSending, isCreating, isChatLoading,
@@ -143,10 +129,8 @@ const {
     approveTask, sendReply, createTask, fetchChat
 } = useWorkOrder()
 
-// PENTING: Sesuaikan ID ini dengan ID user yang sedang login di sistem Anda
 const currentUserId = ref(1)
 
-// FILTER LOGIC: Menyembunyikan user yang sedang login dari pilihan dropdown
 const staffTanpaPembuat = computed(() => {
     return staffList.value.filter(staff => staff.id !== currentUserId.value)
 })
@@ -179,7 +163,6 @@ const bukaModalBuat = () => {
 
 const handleCreate = async () => {
     const payload = { ...formCreate }
-
     if (!payload.deadline) {
         delete payload.deadline
     } else if (payload.deadline instanceof Date) {
@@ -188,7 +171,6 @@ const handleCreate = async () => {
         const day = String(payload.deadline.getDate()).padStart(2, '0');
         payload.deadline = `${year}-${month}-${day}`;
     }
-
     const res = await createTask(payload)
     if (res.success) {
         isCreateOpen.value = false
@@ -202,7 +184,6 @@ const handleApprove = async (wo) => {
         alert('Akses Ditolak: Anda adalah pemberi tugas. Hanya penerima tugas (PIC) yang dapat menyelesaikan tugas ini.');
         return;
     }
-
     if (confirm('Konfirmasi: Tandai tugas ini sebagai selesai?')) {
         await approveTask(wo.id)
     }
@@ -217,7 +198,6 @@ const openChatModal = async (wo) => {
 
 const kirimPesan = async () => {
     if (!activeWO.value || !chatInput.value.trim()) return
-
     const pesanBaru = await sendReply(activeWO.value.id, chatInput.value)
     if (pesanBaru) {
         activeWO.value.pesan_chat.push(pesanBaru)
@@ -237,65 +217,13 @@ const scrollToBottom = () => {
 </script>
 
 <style scoped>
-/* ====================================================
-   TECH / SAAS DASHBOARD STYLE (BOARD & MODAL SAJA)
-==================================================== */
-* {
-    box-sizing: border-box;
-}
-
 .wo-board {
+    box-sizing: border-box;
     padding: 2rem;
     max-width: 1440px;
     margin: 0 auto;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #0f172a;
-}
-
-.wo-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2.5rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
-}
-
-.title-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.title-icon {
-    width: 3rem;
-    height: 3rem;
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    color: #14b8a6;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
-}
-
-.wo-title h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    margin: 0 0 0.25rem 0;
-    letter-spacing: -0.03em;
-}
-
-.wo-title p {
-    font-size: 0.875rem;
-    color: #64748b;
-    margin: 0;
-}
-
-.header-actions {
-    display: flex;
-    gap: 0.75rem;
 }
 
 .btn-primary-tech {
@@ -361,12 +289,10 @@ const scrollToBottom = () => {
         transform: scale(0.9);
         box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.5);
     }
-
     70% {
         transform: scale(1);
         box-shadow: 0 0 0 15px rgba(20, 184, 166, 0);
     }
-
     100% {
         transform: scale(0.9);
         box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
@@ -616,7 +542,6 @@ const scrollToBottom = () => {
 }
 
 @media (max-width: 1024px) {
-
     .wo-grid[data-count="3"],
     .wo-grid[data-count="4"],
     .wo-grid[data-count="more"] {
@@ -625,11 +550,13 @@ const scrollToBottom = () => {
 }
 
 @media (max-width: 768px) {
+    .wo-board {
+        padding: 1rem;
+    }
     .wo-grid[data-count] {
         grid-template-columns: 1fr;
         max-width: 100%;
     }
-
     .form-row {
         grid-template-columns: 1fr;
     }
@@ -644,7 +571,6 @@ const scrollToBottom = () => {
         opacity: 0;
         transform: translateY(10px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);

@@ -329,6 +329,48 @@ def buat_po(*, entitas_id, suplier_id, tanggal, items, user,
 
     return po
 
+@transaction.atomic
+def ajukan_po(*, po_id, user):
+    """DRAFT -> PENDING (Diajukan ke Manajer)"""
+    from .models import PurchaseOrder, StatusPO
+
+    po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status != StatusPO.DRAFT:
+        raise ValidationError(f'PO sudah {po.get_status_display()}, tidak bisa diajukan.')
+    if not po.item.exists():
+        raise ValidationError('PO tanpa item tidak bisa diajukan.')
+
+    po.status = StatusPO.PENDING
+    po.save(update_fields=['status'])
+    return po
+
+@transaction.atomic
+def setujui_po(*, po_id, user):
+    """PENDING -> APPROVED (Gudang sudah bisa melihat dokumen ini)"""
+    from .models import PurchaseOrder, StatusPO
+
+    po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status != StatusPO.PENDING:
+        raise ValidationError(f'PO harus berstatus PENDING. Status saat ini: {po.get_status_display()}.')
+
+    po.status = StatusPO.APPROVED
+    po.save(update_fields=['status'])
+    return po
+
+@transaction.atomic
+def tolak_po(*, po_id, user, alasan=''):
+    """Tolak persetujuan internal"""
+    from .models import PurchaseOrder, StatusPO
+
+    po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status not in [StatusPO.PENDING, StatusPO.APPROVED, StatusPO.TERKIRIM]:
+        raise ValidationError('Status saat ini tidak bisa ditolak.')
+
+    po.status = StatusPO.DITOLAK
+    if alasan:
+        po.catatan = f"{po.catatan}\n[DITOLAK {timezone.now():%Y-%m-%d} oleh {user}] {alasan}".strip()
+    po.save(update_fields=['status', 'catatan'])
+    return po
 
 @transaction.atomic
 def ubah_item_po(*, po_id, items):
@@ -362,12 +404,12 @@ def ubah_item_po(*, po_id, items):
 
 @transaction.atomic
 def kirim_po(*, po_id, user):
-    """DRAFT -> TERKIRIM. Setelah ini item terkunci."""
+    """APPROVED -> TERKIRIM. Setelah ini PO resmi dikirim ke Suplier."""
     from .models import PurchaseOrder, StatusPO
 
     po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
-    if po.status != StatusPO.DRAFT:
-        raise ValidationError(f'PO sudah {po.get_status_display()}.')
+    if po.status != StatusPO.APPROVED:
+        raise ValidationError(f'PO harus di-Approve sebelum dikirim. Status saat ini: {po.get_status_display()}.')
     if not po.item.exists():
         raise ValidationError('PO tanpa item tidak bisa dikirim.')
 

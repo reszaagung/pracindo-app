@@ -1,8 +1,6 @@
-<!-- components/PostCardWorkOrder.vue -->
 <template>
     <div class="tech-card">
         <div class="card-indicator" :class="'ind-' + wo.kategori.toLowerCase()"></div>
-
         <div class="card-inner">
             <div class="card-top">
                 <span class="tech-badge" :class="'badge-' + wo.kategori.toLowerCase()">
@@ -38,7 +36,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div v-if="wo.kategori === 'PRODUKSI' && wo.detail_produksi" class="specs-panel">
                     <div class="specs-header">
                         <i class="pi pi-cog"></i> PARAMETER MANUFAKTUR
@@ -59,8 +56,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Footer / Meta -->
             <div class="card-footer">
                 <div class="meta-info">
                     <i class="pi pi-clock"></i>
@@ -69,26 +64,33 @@
                     </span>
                 </div>
             </div>
-
             <div class="card-actions">
                 <button class="btn-action chat" @click="$emit('open-chat', wo)">
                     <i class="pi pi-comments"></i>
                     <span class="count" v-if="wo.jumlah_pesan">{{ wo.jumlah_pesan }}</span>
                 </button>
 
-                <button class="btn-action complete" :class="{ 'disabled-action': wo.dibuat_oleh === currentUserId }"
-                    @click="$emit('approve', wo)" :disabled="wo.dibuat_oleh === currentUserId"
-                    :title="wo.dibuat_oleh === currentUserId ? 'Pemberi tugas tidak diizinkan menyelesaikan tugas ini' : 'Tandai Selesai'">
-                    <i class="pi pi-check" v-if="wo.dibuat_oleh !== currentUserId"></i>
-                    <i class="pi pi-lock" v-else></i>
-                    {{ wo.dibuat_oleh === currentUserId ? 'Terkunci' : 'Selesaikan' }}
+                <!-- Jika yang login adalah pembuat tugas -->
+                <button v-if="wo.dibuat_oleh === currentUserId"
+                    class="btn-action close-session"
+                    @click="$emit('close-session', wo)"
+                    title="Tutup Sesi (Sembunyikan dari Mading)">
+                    <i class="pi pi-power-off"></i> Tutup Sesi
+                </button>
+
+                <!-- Jika yang login adalah penerima tugas (PIC) -->
+                <button v-else
+                    class="btn-action complete"
+                    @click="$emit('approve', wo)"
+                    title="Tandai Selesai">
+                    <i class="pi pi-check"></i> Selesaikan
                 </button>
             </div>
         </div>
     </div>
 </template>
+
 <script setup>
-// Menerima data dari parent (WorkOrderBoard)
 const props = defineProps({
     wo: {
         type: Object,
@@ -100,12 +102,10 @@ const props = defineProps({
     }
 })
 
-// Mendaftarkan event yang bisa ditangkap oleh parent
-defineEmits(['open-chat', 'approve'])
+defineEmits(['open-chat', 'approve', 'close-session'])
 </script>
 
 <style scoped>
-/* Pindahkan semua CSS yang berhubungan dengan CARD ke sini */
 .tech-card {
     background: #ffffff;
     border: 1px solid rgba(226, 232, 240, 0.8);
@@ -129,17 +129,9 @@ defineEmits(['open-chat', 'approve'])
     border-radius: 12px 12px 0 0;
 }
 
-.ind-produksi {
-    background: linear-gradient(90deg, #f43f5e, #fb7185);
-}
-
-.ind-gudang {
-    background: linear-gradient(90deg, #f59e0b, #fbbf24);
-}
-
-.ind-umum {
-    background: linear-gradient(90deg, #3b82f6, #60a5fa);
-}
+.ind-produksi { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+.ind-gudang { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.ind-umum { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
 
 .card-inner {
     padding: 1.25rem;
@@ -173,35 +165,12 @@ defineEmits(['open-chat', 'approve'])
     border-radius: 50%;
 }
 
-.badge-produksi {
-    background: #fff1f2;
-    color: #be123c;
-    border: 1px solid #ffe4e6;
-}
-
-.badge-produksi .dot {
-    background: #e11d48;
-}
-
-.badge-gudang {
-    background: #fffbeb;
-    color: #b45309;
-    border: 1px solid #fef3c7;
-}
-
-.badge-gudang .dot {
-    background: #d97706;
-}
-
-.badge-umum {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #dbeafe;
-}
-
-.badge-umum .dot {
-    background: #2563eb;
-}
+.badge-produksi { background: #fff1f2; color: #be123c; border: 1px solid #ffe4e6; }
+.badge-produksi .dot { background: #e11d48; }
+.badge-gudang { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.badge-gudang .dot { background: #d97706; }
+.badge-umum { background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; }
+.badge-umum .dot { background: #2563eb; }
 
 .tech-id {
     font-family: 'Courier New', Courier, monospace;
@@ -230,7 +199,6 @@ defineEmits(['open-chat', 'approve'])
     line-height: 1.5;
 }
 
-/* Assignment Panel */
 .assignment-panel {
     margin-top: 1rem;
     display: flex;
@@ -310,7 +278,6 @@ defineEmits(['open-chat', 'approve'])
     color: #0d9488 !important;
 }
 
-/* Specs Panel */
 .specs-panel {
     margin-top: 1rem;
     background: #0f172a;
@@ -362,7 +329,6 @@ defineEmits(['open-chat', 'approve'])
     text-overflow: ellipsis;
 }
 
-/* Card Footer & Actions */
 .card-footer {
     display: flex;
     justify-content: space-between;
@@ -436,12 +402,15 @@ defineEmits(['open-chat', 'approve'])
     border-color: #86efac;
 }
 
-.btn-action.complete:disabled,
-.btn-action.complete.disabled-action {
-    background: #f1f5f9;
-    color: #94a3b8;
-    border: 1px solid #e2e8f0;
-    cursor: not-allowed;
-    opacity: 0.7;
+.btn-action.close-session {
+    background: #fff1f2;
+    color: #e11d48;
+    border: 1px solid #fecdd3;
+}
+
+.btn-action.close-session:hover {
+    background: #ffe4e6;
+    color: #be123c;
+    border-color: #fda4af;
 }
 </style>

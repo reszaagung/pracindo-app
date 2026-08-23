@@ -54,6 +54,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    'import_export',
     'core',
     'staff_user',
     'master',
@@ -258,7 +259,6 @@ LOGGING = {
             'propagate': False,
             'handlers': ['console'],
         },
-        # Semua posting jurnal dan mutasi kas lewat sini.
         'akunting': {'level': 'INFO', 'propagate': True},
         'keuangan': {'level': 'INFO', 'propagate': True},
     },

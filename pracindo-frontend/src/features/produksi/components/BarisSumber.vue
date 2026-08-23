@@ -1,9 +1,7 @@
 <!-- src/features/produksi/components/BarisSumber.vue -->
-
 <script setup>
 import { computed } from 'vue'
 import { formatRp, formatHarga, formatKg } from '@/utils/uang'
-import { SUMBER } from '../constants'
 
 const props = defineProps({
     modelValue: Object,
@@ -22,15 +20,20 @@ const baris = computed({
 })
 
 function gantiSumber(jenis) {
-    baris.value.sumber = jenis
-    baris.value.raw = null
-    baris.value.batch_sumber = null
+    // PERBAIKAN: Emit objek baru agar Vue mendeteksi perubahan state dengan sempurna
+    emit('update:modelValue', {
+        ...props.modelValue,
+        sumber: jenis,
+        raw: null,
+        batch_sumber: null
+    })
 }
 </script>
 
 <template>
     <div class="relative bg-white border p-3 md:p-4 rounded-lg shadow-sm mb-3 transition-colors hover:border-blue-300"
         :class="galat ? 'border-red-400 bg-red-50/30' : 'border-slate-200'">
+
         <button type="button" v-if="bisaHapus"
             class="md:hidden absolute top-3 right-3 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
             @click="$emit('hapus')">
@@ -42,14 +45,14 @@ function gantiSumber(jenis) {
                 <label class="text-xs font-semibold text-slate-600 mb-1 block md:hidden">Jenis Sumber</label>
                 <select :value="baris.sumber" @change="gantiSumber($event.target.value)"
                     class="w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white transition-colors">
-                    <option :value="SUMBER.RAW">RAW (Bahan)</option>
-                    <option :value="SUMBER.WIP">WIP (Batch)</option>
+                    <option value="RAW">RAW (Bahan)</option>
+                    <option value="WIP">WIP (Batch)</option>
                 </select>
             </div>
 
             <div class="w-full flex-1">
                 <label class="text-xs font-semibold text-slate-600 mb-1 block md:hidden">Pilih Komponen</label>
-                <select v-if="baris.sumber === SUMBER.RAW" v-model="baris.raw"
+                <select v-if="baris.sumber === 'RAW'" v-model="baris.raw"
                     class="w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white transition-colors"
                     :class="{ 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50': galat }">
                     <option :value="null">-- Pilih Material RAW --</option>

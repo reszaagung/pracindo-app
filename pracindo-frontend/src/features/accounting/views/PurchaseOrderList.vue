@@ -27,7 +27,7 @@
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">DRAFT</p>
                 <h3 class="text-2xl font-black text-slate-800">{{ draftCount }}</h3>
-                <p class="text-xs text-slate-500 mt-2">Belum dikirim ke suplier</p>
+                <p class="text-xs text-slate-500 mt-2">Belum diajukan / dikirim</p>
             </div>
         </div>
         <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full min-h-[400px]">
@@ -46,8 +46,9 @@
                     </div>
 
                     <div class="flex bg-slate-50 p-1 rounded-xl w-full md:w-auto overflow-x-auto custom-scrollbar">
+                        <!-- Tab filter diperbarui dengan status PENDING dan APPROVED -->
                         <button
-                            v-for="tab in ['semua', 'DRAFT', 'TERKIRIM', 'DISETUJUI', 'DITOLAK', 'SEBAGIAN', 'SELESAI', 'BATAL']"
+                            v-for="tab in ['semua', 'DRAFT', 'PENDING', 'APPROVED', 'TERKIRIM', 'DISETUJUI', 'DITOLAK', 'SEBAGIAN', 'SELESAI', 'BATAL']"
                             :key="tab" @click="saringStatus = tab.toLowerCase()"
                             :class="saringStatus === tab.toLowerCase() ? 'bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.04)] font-bold' : 'text-slate-500 hover:text-slate-700'"
                             class="px-3 py-1.5 text-xs rounded-lg transition-all whitespace-nowrap capitalize">
@@ -100,18 +101,38 @@
                             <td class="py-3 px-4 text-center">
                                 <div class="flex items-center justify-center gap-1.5">
 
-                                    <!-- Muncul KHUSUS jika status DRAFT -->
+                                    <!-- Aksi: DRAFT -->
                                     <template v-if="po.status === 'DRAFT'">
-                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors">
-                                            <i class="pi pi-send text-[10px] mr-1"></i> Kirim
+                                        <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-send text-[10px] mr-1"></i> Ajukan
                                         </button>
-                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors">
+                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-trash text-[10px]"></i>
+                                        </button>
+                                    </template>
+
+                                    <!-- Aksi: PENDING -->
+                                    <template v-else-if="po.status === 'PENDING'">
+                                        <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-check text-[10px] mr-1"></i> Setuju
+                                        </button>
+                                        <button @click="handleTolak(po.id)" title="Tolak PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-times text-[10px]"></i>
                                         </button>
                                     </template>
 
+                                    <!-- Aksi: APPROVED -->
+                                    <template v-else-if="po.status === 'APPROVED'">
+                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-envelope text-[10px] mr-1"></i> Kirim
+                                        </button>
+                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-trash text-[10px]"></i>
+                                        </button>
+                                    </template>
+
                                     <!-- Tombol Detail (muncul di semua status) -->
-                                    <button class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white rounded-lg text-[11px] font-bold transition-colors tooltip-trigger">
+                                    <button @click="bukaDetail(po.id)" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                         <i class="pi pi-eye text-[10px] mr-1"></i> Detail
                                     </button>
 
@@ -127,6 +148,10 @@
             :style="{ width: '90vw', maxWidth: '1000px' }" class="p-fluid">
             <LazyFormPO v-if="tampilModalPO" @close="tampilModalPO = false" @saved="poBerhasilDisimpan" />
         </Dialog>
+        <Dialog v-model:visible="tampilModalDetail" modal :header="'Detail PO'"
+            :style="{ width: '85vw', maxWidth: '800px' }" class="p-fluid">
+            <LazyDetailPO v-if="tampilModalDetail" :poId="poIdTerpilih" />
+        </Dialog>
     </div>
 </template>
 
@@ -134,17 +159,25 @@
 import { onMounted, ref, defineAsyncComponent } from 'vue'
 import Dialog from 'primevue/dialog'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
-
+const tampilModalDetail = ref(false)
+const poIdTerpilih = ref(null)
 const LazyFormPO = defineAsyncComponent(() =>
     import('@/features/accounting/views/ProcurementCreate.vue')
 )
+const LazyDetailPO = defineAsyncComponent(() =>
+    import('@/features/accounting/views/PurchaseOrderDetail.vue')
+)
 
+const bukaDetail = (id) => {
+    poIdTerpilih.value = id
+    tampilModalDetail.value = true
+}
 const tampilModalPO = ref(false)
 
 const {
     daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
     belumDiterima, draftCount, muatDaftarPO,
-    kirimPO, batalkanPO // <-- Panggil fungsi API yang baru ditambahkan
+    ajukanPO, setujuiPO, tolakPO, kirimPO, batalkanPO
 } = usePurchaseOrder()
 
 onMounted(() => {
@@ -156,18 +189,42 @@ const poBerhasilDisimpan = () => {
     muatDaftarPO()
 }
 
-// Handler Kirim PO
-const handleKirim = async (id) => {
-    if(confirm('Kirim PO ini ke Suplier? Status akan menjadi TERKIRIM dan item pesanan tidak bisa diubah lagi.')) {
-        const res = await kirimPO(id)
-        if (res.success) alert('Purchase Order berhasil dikirim.')
+const handleAjukan = async (id) => {
+    if(confirm('Ajukan PO ini untuk persetujuan Manajer?')) {
+        const res = await ajukanPO(id)
+        if (res.success) alert('Purchase Order berhasil diajukan.')
     }
 }
 
-// Handler Batalkan PO
+const handleSetujui = async (id) => {
+    if(confirm('Setujui PO ini? Dokumen otomatis akan diteruskan dan dapat diproses oleh Gudang.')) {
+        const res = await setujuiPO(id)
+        if (res.success) alert('Purchase Order berhasil disetujui.')
+    }
+}
+
+const handleTolak = async (id) => {
+    const alasan = prompt('Masukkan alasan penolakan PO ini:')
+    if(alasan !== null) {
+        if(alasan.trim().length < 3) {
+            alert('Alasan penolakan harus diisi jelas!')
+            return
+        }
+        const res = await tolakPO(id, alasan)
+        if (res.success) alert('Purchase Order berhasil ditolak.')
+    }
+}
+
+const handleKirim = async (id) => {
+    if(confirm('Tandai PO ini sebagai TERKIRIM ke Suplier? Item pesanan tidak akan bisa diubah lagi.')) {
+        const res = await kirimPO(id)
+        if (res.success) alert('Purchase Order berhasil ditandai Terkirim.')
+    }
+}
+
 const handleBatal = async (id) => {
     const alasan = prompt('Masukkan alasan membatalkan dokumen PO ini:')
-    if(alasan !== null) { // Memastikan user tidak menekan 'Cancel' pada prompt
+    if(alasan !== null) {
         if(alasan.trim().length < 5) {
             alert('Alasan pembatalan terlalu pendek! Minimal 5 karakter.')
             return
@@ -180,6 +237,8 @@ const handleBatal = async (id) => {
 const badgeColor = (status) => {
     const st = String(status).toUpperCase()
     if (st === 'DRAFT') return 'bg-slate-100 text-slate-600'
+    if (st === 'PENDING') return 'bg-amber-100 text-amber-700'
+    if (st === 'APPROVED') return 'bg-teal-50 text-teal-700 border border-teal-200'
     if (st === 'TERKIRIM') return 'bg-blue-50 text-blue-600'
     if (st === 'DISETUJUI') return 'bg-emerald-50 text-emerald-600 border border-emerald-200'
     if (st === 'DITOLAK') return 'bg-red-50 text-red-600'

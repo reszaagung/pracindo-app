@@ -2,15 +2,12 @@ const RetailLayout = () => import('./layout/RetailLayout.vue')
 const AkuntansiLayout = () => import('./layout/AkuntansiLayout.vue')
 
 export const retailRoutes = [
-  // 1. Rute Portal Utama (Halaman dengan 2 kotak pilihan)
   {
-    path: '/retail-portal',
+    path: '/retail',
     name: 'retail-portal',
     meta: { perluLogin: true, modul: 'retail' },
     component: () => import('./views/DashboardView.vue')
   },
-
-  // 2. Rute Operasional Retail (Mesin Kasir, Penerimaan, Piutang)
   {
     path: '/retail',
     component: RetailLayout,
@@ -28,7 +25,8 @@ export const retailRoutes = [
       {
         path: 'penerimaan',
         name: 'retail-penerimaan',
-        component: () => import('./views/PenerimaanView.vue')
+        // PERBAIKAN: Arahkan ke file yang ada logikanya, bukan yang dummy!
+        component: () => import('./views/Penerimaan.vue')
       },
       {
         path: 'piutang',
@@ -42,8 +40,6 @@ export const retailRoutes = [
       }
     ]
   },
-
-  // 3. Rute Akuntansi & Keuangan Retail (Buku Besar, Jurnal)
   {
     path: '/retail/keuangan',
     component: AkuntansiLayout,

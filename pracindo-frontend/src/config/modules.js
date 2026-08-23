@@ -21,7 +21,6 @@ export const MODUL = [
     ikon: 'transaksi',
     rute: '/accounting/invoice',
     siap: true,
-    indukModul: 'akunting',
     menu: [
       { label: 'Dokumen', rute: '/accounting/invoice/dokumen' },
     ],
@@ -45,7 +44,6 @@ export const MODUL = [
     ikon: 'kirim',
     rute: '/distribusi',
     siap: true,
-    indukModul: 'warehouse',
     menu: [
       { label: 'Jadwal Pengiriman', rute: '/distribusi' },
       { label: 'Rakit Pengiriman', rute: '/distribusi/buat' },

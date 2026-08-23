@@ -86,10 +86,11 @@
                             class="block md:table-row bg-white border border-slate-200 md:border-b md:border-x-0 md:border-t-0 md:border-slate-100 rounded-2xl md:rounded-none mb-6 md:mb-0 p-4 md:p-0">
                             <td class="block md:table-cell md:py-3 md:px-2 mb-3 md:mb-0">
                                 <label class="md:hidden text-xs font-bold text-slate-500 mb-1 block">Produk</label>
+                                <!-- Tambahkan indikator loadingProduk -->
                                 <Dropdown v-model="item.produk" :options="produkBerdasarkanSuplier" optionLabel="label"
                                     appendTo="body"
                                     :placeholder="draf.suplier_id ? 'Pilih atau cari produk...' : 'Pilih supplier dulu'"
-                                    class="w-full" :disabled="!draf.suplier_id" filter :pt="{
+                                    class="w-full" :disabled="!draf.suplier_id" filter :loading="loadingProduk" :pt="{
                                         root: { class: 'w-full h-[42px] md:h-[38px] bg-slate-50 border border-slate-200 rounded-lg flex items-center' }
                                     }">
                                 </Dropdown>
@@ -171,7 +172,6 @@
             </div>
         </form>
 
-
         <SupplierForm v-if="showModalSupplier" @close="showModalSupplier = false" @saved="handleSupplierSaved" />
         <ProductEntry v-if="showModalProduct" @close="showModalProduct = false" @saved="handleProductSaved" />
     </div>
@@ -183,16 +183,19 @@ import Dropdown from 'primevue/dropdown'
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
+import api from '@/utils/api' // PENTING: Tambahkan ini untuk memanggil API langsung
 
 const emit = defineEmits(['close', 'saved'])
 
 const {
-    listEntitas, listSupplier, listProduk, sedangProses, pesanError, previewNomor,
+    listEntitas, listSupplier, sedangProses, pesanError, previewNomor,
     periodeDitutup, muatDataMaster, muatPreviewNomor, simpanPO, cekStatusPeriode
 } = usePurchaseOrder()
 
 const showModalSupplier = ref(false)
 const showModalProduct = ref(false)
+const produkBerdasarkanSuplier = ref([])
+const loadingProduk = ref(false)
 
 const hariIni = () => {
     const t = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
@@ -227,14 +230,16 @@ const handleSupplierSaved = async () => {
 
 const handleProductSaved = async (produkBaru) => {
     showModalProduct.value = false
-    await muatDataMaster()
+    // Tarik ulang daftar produk untuk suplier yang sedang dipilih saat ini
+    if (draf.suplier_id) {
+        await tarikProdukDariAPI(draf.suplier_id)
 
-    const produkTerpilih = produkBerdasarkanSuplier.value.find(p => p.id === produkBaru.id)
-
-    if (produkTerpilih) {
-        const barisTerakhir = draf.items[draf.items.length - 1]
-        if (!barisTerakhir.produk) {
-            barisTerakhir.produk = produkTerpilih
+        const produkTerpilih = produkBerdasarkanSuplier.value.find(p => p.id === produkBaru.id)
+        if (produkTerpilih) {
+            const barisTerakhir = draf.items[draf.items.length - 1]
+            if (!barisTerakhir.produk) {
+                barisTerakhir.produk = produkTerpilih
+            }
         }
     }
 }
@@ -251,26 +256,39 @@ watch([() => draf.entitas_id, () => draf.tanggal], async ([entitas, tanggal]) =>
     }
 })
 
-watch(() => draf.suplier_id, (newVal, oldVal) => {
+// === LOGIKA BARU PENCARIAN PRODUK BERDASARKAN SUPLIER ===
+const tarikProdukDariAPI = async (idSuplier) => {
+    if (!idSuplier) {
+        produkBerdasarkanSuplier.value = []
+        return
+    }
+
+    loadingProduk.value = true
+    try {
+        const response = await api.get('master/produk/', {
+            params: {
+                suplier: idSuplier,
+                jenis: 'BAHAN_BAKU',
+                aktif: true,
+                ringkas: 1
+            }
+        })
+        const hasil = response.data.results || response.data || []
+        produkBerdasarkanSuplier.value = hasil.map(p => ({ ...p, label: `${p.kode} - ${p.nama}` }))
+    } catch (err) {
+        console.error("Gagal menarik produk berdasarkan suplier:", err)
+    } finally {
+        loadingProduk.value = false
+    }
+}
+
+watch(() => draf.suplier_id, async (newVal, oldVal) => {
+    // Hanya reset tabel item jika user MENGGANTI suplier (bukan saat inisialisasi awal)
     if (oldVal && newVal !== oldVal) {
         draf.items = [itemKosong()]
     }
-})
-
-const produkBerdasarkanSuplier = computed(() => {
-    if (!draf.suplier_id) return []
-    return listProduk.value
-        .filter(p => {
-            if (!p.suplier || !Array.isArray(p.suplier)) return false;
-            return p.suplier.some(sup => {
-                if (sup !== null && typeof sup === 'object' && sup.id !== undefined) {
-                    return String(sup.id) === String(draf.suplier_id);
-                }
-                return String(sup) === String(draf.suplier_id);
-            });
-        })
-        .map(p => ({ ...p, label: `${p.kode} - ${p.nama}` }))
-})
+    await tarikProdukDariAPI(newVal)
+}, { immediate: true })
 
 const subtotal = (item) => (Number(item.qty) || 0) * (Number(item.harga_per_kg) || 0)
 const subtotalSemua = computed(() => draf.items.reduce((s, i) => s + subtotal(i), 0))
@@ -299,7 +317,7 @@ const kirim = async () => {
         tanggal: draf.tanggal,
         tanggal_kirim_diminta: draf.tanggal_kirim_diminta || null,
         catatan: draf.catatan,
-        pakai_ppn: draf.ppn_persen > 0, 
+        pakai_ppn: draf.ppn_persen > 0,
         ppn_persen: draf.ppn_persen || 0,
         items: draf.items.map(i => {
             const idSatuan = i.produk.satuan?.id || i.produk.satuan_id || i.produk.satuan;
