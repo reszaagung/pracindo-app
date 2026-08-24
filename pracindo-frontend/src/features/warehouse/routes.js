@@ -27,32 +27,25 @@ export default [
         name: 'warehouse-receipt-list',
         component: () => import('@/features/warehouse/views/GoodsReceiptList.vue')
       },
-      // Catatan: path 'receipt/buat' SUDAH DIHAPUS karena form sekarang menggunakan Lazy View
       {
         path: 'receipt/:id',
         name: 'warehouse-receipt-detail',
         component: () => import('@/features/warehouse/views/GoodsReceiptDetail.vue')
       },
       {
-        path: 'discrepancy',
-        name: 'warehouse-discrepancy-list',
-        component: () => import('@/features/warehouse/views/DiscrepancyList.vue')
-      }
-    ]
-  },
-  {
-    path: '/warehouse/distribution',
-    meta: { perluLogin: true, modul: 'gudang' },
-    component: () => import('@/features/warehouse/layout/DistributionLayout.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/warehouse/distribution/packaging'
+        path: 'packing',
+        name: 'warehouse-packing',
+        component: () => import('@/features/warehouse/views/InputPackingForm.vue')
       },
       {
         path: 'packaging/log',
         name: 'warehouse-packaging-log',
         component: () => import('@/features/warehouse/views/LogPackageingList.vue')
+      },
+      {
+        path: 'discrepancy',
+        name: 'warehouse-discrepancy-list',
+        component: () => import('@/features/warehouse/views/DiscrepancyList.vue')
       }
     ]
   }

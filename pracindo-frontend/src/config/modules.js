@@ -44,7 +44,9 @@ export const MODUL = [
     ikon: 'kirim',
     rute: '/distribusi',
     siap: true,
-    menu: [
+  menu: [
+      { label: 'Input Packing', rute: '/distribusi/packing' },
+      { label: 'Riwayat Packing', rute: '/distribusi/packing/log' },
       { label: 'Jadwal Pengiriman', rute: '/distribusi' },
       { label: 'Rakit Pengiriman', rute: '/distribusi/buat' },
       { label: 'Loading Muatan', rute: '/distribusi/loading' },

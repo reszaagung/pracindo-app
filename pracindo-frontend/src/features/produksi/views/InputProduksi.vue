@@ -81,7 +81,6 @@ async function jalankan() {
         </header>
 
         <section class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-slate-200">
-            <!-- Penyesuaian Grid: Hanya maksimal 2 kolom agar muat di panel sempit -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label class="block">
                     <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tangki Tujuan <span class="text-red-500">*</span></span>
@@ -133,7 +132,6 @@ async function jalankan() {
             </div>
 
             <div class="space-y-2.5">
-                <!-- PERBAIKAN: Gunakan (b, index) dan v-model="form.baris[index]" -->
                 <BarisSumber v-for="(b, index) in form.baris" :key="b._id"
                     v-model="form.baris[index]"
                     :opsi-raw="opsiRaw" :opsi-batch="opsiBatch"
@@ -165,7 +163,6 @@ async function jalankan() {
             </div>
         </div>
 
-        <!-- Tombol Aksi Utama -->
         <footer class="pt-4 flex justify-end">
             <button :disabled="!bolehSimpan" @click="konfirmasi = true"
                 class="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm py-2 px-6 rounded-lg shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
@@ -176,7 +173,6 @@ async function jalankan() {
             </button>
         </footer>
 
-        <!-- Dialog-Dialog -->
         <DialogKonfirmasi v-if="konfirmasi" :judul="`Konfirmasi Posting ${jenis}`"
             :pesan="`Anda akan mem-posting dokumen ${jenis} dengan hasil ${form.nama_hasil}. Setelah di-posting, saldo tangki akan bertambah dan uang tidak dapat dikembalikan secara otomatis. Lanjutkan?`"
             @batal="konfirmasi = false" @setuju="jalankan" />

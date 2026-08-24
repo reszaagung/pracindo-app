@@ -40,8 +40,13 @@ export function useInputProduksi() {
         const input_wip = []
 
         for (const b of form.baris) {
-            const q = normalKg(b.qty_kg)
-            if (!q || Number(q) <= 0) continue
+            // PERBAIKAN: Menjamin pembacaan angka desimal yang aman
+            // baik menggunakan titik maupun koma dari input operator
+            let qStr = normalKg(b.qty_kg) || '0'
+            qStr = qStr.toString().replace(',', '.')
+            const q = parseFloat(qStr)
+
+            if (isNaN(q) || q <= 0) continue
 
             if (b.sumber === 'RAW' && b.raw) {
                 input_raw.push({ raw: Number(b.raw), qty_kg: Number(q).toFixed(3) })
@@ -51,10 +56,15 @@ export function useInputProduksi() {
             }
         }
 
+        let tekorStr = normalKg(form.tekor_kg) || '0'
+        tekorStr = tekorStr.toString().replace(',', '.')
+        let tekor = parseFloat(tekorStr)
+        if (isNaN(tekor) || tekor < 0) tekor = 0
+
         return {
             tangki: form.tangki,
             nama_hasil: form.nama_hasil,
-            tekor_kg: Number(normalKg(form.tekor_kg) || 0).toFixed(3),
+            tekor_kg: Number(tekor).toFixed(3),
             catatan: form.catatan,
             input_raw,
             input_wip,
@@ -69,31 +79,43 @@ export function useInputProduksi() {
     async function hitung() {
         if (!adaIsi.value) {
             pratinjau.value = null
+            galatServer.value = null
             memuat.value = false
             return
         }
 
         const ini = ++seq
         memuat.value = true
-        console.log(`[DEBUG hitung] Request #${ini} dikirim dengan payload:`, payload())
+        galatServer.value = null // Bersihkan pesan error sebelumnya saat memuat ulang
 
         try {
             const hasil = await apiPratinjau(payload())
-            console.log(`[DEBUG hitung] Request #${ini} menerima respons mentah:`, hasil)
 
             if (ini === seq) {
-                // PERHATIAN: Jika apiPratinjau menggunakan axios, struktur aslinya
-                // mungkin berada di dalam 'hasil.data'. Cek log konsol Anda nanti!
-                pratinjau.value = hasil.data !== undefined ? hasil.data : hasil
+                const data = hasil.data !== undefined ? hasil.data : hasil
+                pratinjau.value = data
+
+                // PERBAIKAN FATAL: Mencegah error kalkulasi tertelan diam-diam.
+                // Jika backend menolak pratinjau, paksa UI memunculkan alasannya!
+                if (data && data.valid === false && data.galat && data.galat.length > 0) {
+                    const pesanError = data.galat.map(g => g.pesan).join(' | ')
+                    galatServer.value = {
+                        pesan: pesanError,
+                        konflikSaldo: true // Memicu UI menguning/memerah agar operator sadar
+                    }
+                }
             }
         } catch (e) {
-            console.error(`[DEBUG hitung] Request #${ini} gagal:`, e)
             if (ini === seq) {
                 pratinjau.value = { valid: false, galat: [{ pesan: 'Gagal memuat pratinjau: Cek koneksi' }] }
+                galatServer.value = { pesan: 'Gagal terhubung ke server untuk kalkulasi.', konflikSaldo: false }
             }
         } finally {
-            memuat.value = false
-            console.log(`[DEBUG hitung] Request #${ini} selesai. Status memuat: false`)
+            // PERBAIKAN: Hanya matikan status memuat jika ini adalah antrean hitung terakhir.
+            // Sebelumnya, antrean yang selesai lebih cepat mematikan indikator loading lebih awal.
+            if (ini === seq) {
+                memuat.value = false
+            }
         }
     }
 
@@ -131,23 +153,16 @@ export function useInputProduksi() {
         return peta
     })
 
-    // --- EVALUASI KONDISI TOMBOL SIMPAN DENGAN DEBUGGER ---
     const bolehSimpan = computed(() => {
         const val = pratinjau.value
 
         const kondisi = {
             tidakSedangMenyimpan: !menyimpan.value,
             tidakSedangMemuat: !memuat.value,
-            pratinjauValid: val?.valid === true,   // <--- Titik rawan sering bernilai false/undefined
+            pratinjauValid: val?.valid === true,
             tangkiTerpilih: !!form.tangki,
             namaHasilTerisi: Boolean(form.nama_hasil && form.nama_hasil.trim().length > 0)
         }
-
-        console.log('[DEBUG bolehSimpan Evaluasi]:', kondisi, {
-            'Nilai pratinjau.value': val,
-            'Nilai form.tangki': form.tangki,
-            'Nilai form.nama_hasil': form.nama_hasil
-        })
 
         return Object.values(kondisi).every(Boolean)
     })
@@ -168,10 +183,7 @@ export function useInputProduksi() {
     }
 
     async function simpanDanPosting() {
-        if (!bolehSimpan.value) {
-            console.warn('[DEBUG Simpan] Ditolak karena bolehSimpan bernilai false!')
-            return null
-        }
+        if (!bolehSimpan.value) return null
 
         menyimpan.value = true
         galatServer.value = null

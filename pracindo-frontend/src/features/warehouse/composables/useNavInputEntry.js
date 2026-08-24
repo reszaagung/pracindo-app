@@ -1,8 +1,6 @@
 // src/features/warehouse/composables/useNavInputEntry.js
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-
-// Letakkan state di luar fungsi agar bersifat global (shared state) antar komponen
 const judulHeader = ref('Input Entry')
 const breadcrumb = ref('')
 
@@ -14,6 +12,20 @@ export function useNavInputEntry() {
             label: 'Penerimaan',
             ikon: 'pi-box',
             rute: '/warehouse/input/receipt',
+            activate: true
+        },
+        {
+            id: 'packing',
+            label: 'Input Packing',
+            ikon: 'pi-box',
+            rute: '/warehouse/input/packing',
+            activate: true
+        },
+        {
+            id: 'log-packaging',
+            label: 'Riwayat Packing',
+            ikon: 'pi-history',
+            rute: '/warehouse/input/packaging/log',
             activate: true
         },
         {
@@ -36,13 +48,10 @@ export function useNavInputEntry() {
         return computed(() => route.path.startsWith(path)).value
     }
 
-    // Fungsi untuk mengubah teks header dari dalam komponen form/detail
     const setNavInfo = (judulBaru, breadcrumbBaru = '') => {
         judulHeader.value = judulBaru
         breadcrumb.value = breadcrumbBaru
     }
-
-    // Fungsi untuk mengembalikan judul ke semula saat keluar dari form
     const resetNav = () => {
         judulHeader.value = 'Input Entry'
         breadcrumb.value = ''

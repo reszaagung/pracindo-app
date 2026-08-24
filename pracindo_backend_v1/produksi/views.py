@@ -12,6 +12,7 @@ PEMETAAN GALAT KE HTTP
     "hubungi admin".
 """
 from dataclasses import asdict
+from decimal import Decimal
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -21,10 +22,8 @@ from . import services
 from .models import Batch, StatusBatch, Tangki, nomor_baru
 from .permissions import ModulProduksi, OperatorSesi
 
-
 def _galat_response(e):
     return Response({"detail": e.pesan, **e.as_dict()}, status=e.http)
-
 
 class TangkiViewSet(viewsets.ModelViewSet):
     queryset = Tangki.objects.all().order_by("kode")
@@ -40,7 +39,6 @@ class TangkiViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def saldo(self, request, pk=None):
         return Response(services.saldo_tangki(self.get_object()))
-
 
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.select_related("tangki").order_by("-waktu", "-id")
@@ -79,8 +77,7 @@ class BatchViewSet(viewsets.ModelViewSet):
         from rest_framework.exceptions import ValidationError
         if instance.status != StatusBatch.DRAFT:
             raise ValidationError({"kode": "BATCH_TERKUNCI",
-                                   "pesan": "Hanya batch DRAFT yang bisa "
-                                            "dihapus."})
+                                   "pesan": "Hanya batch DRAFT yang bisa dihapus."})
         instance.delete()
 
     @action(detail=True, methods=["post"], url_path="post")
@@ -122,30 +119,39 @@ class BatchViewSet(viewsets.ModelViewSet):
         return Response({"nomor": nomor_baru(
             awalan, timezone.now().strftime("%Y%m"))})
 
-
 @api_view(["POST"])
 @permission_classes([ModulProduksi])
 def pratinjau_batch(request):
-    """
-    POST /api/produksi/pratinjau/
-
-    SELALU 200. Pratinjau adalah kalkulator, bukan gerbang -- 4xx akan
-    memicu penanganan error global yang salah tempat sementara operator
-    masih mengetik.
-    """
     s = ser.PratinjauRequestSerializer(data=request.data)
     if not s.is_valid():
-        return Response({"valid": False, "galat": [s.errors]})
-
+        errs = []
+        for field, messages in s.errors.items():
+            if isinstance(messages, list):
+                for m in messages:
+                    if isinstance(m, dict) and "pesan" in m:
+                        errs.append(m)
+                    else:
+                        errs.append({"field": field if field != "non_field_errors" else "", "pesan": str(m)})
+            elif isinstance(messages, dict) and "pesan" in messages:
+                errs.append(messages)
+            else:
+                errs.append({"field": field if field != "non_field_errors" else "", "pesan": str(messages)})
+        return Response({"valid": False, "galat": errs})
+    
     d = s.validated_data
-    pakai_raw = {r["raw"]: r["qty_kg"] for r in d.get("input_raw", [])}
-    pakai_wip = {w["batch_sumber"]: w["qty_kg"] for w in d.get("input_wip", [])}
+    pakai_raw = {r["raw"]: r["qty_kg"] for r in d.get("input_raw", []) if r.get("raw") and r.get("qty_kg", 0) > 0}
+    pakai_wip = {w["batch_sumber"]: w["qty_kg"] for w in d.get("input_wip", []) if w.get("batch_sumber") and w.get("qty_kg", 0) > 0}
+    
+    if not pakai_raw and not pakai_wip:
+        return Response({"valid": False, "galat": [{"pesan": "Pilih minimal satu sumber dengan qty > 0."}]})
 
-    v, galat = services.pratinjau(pakai_raw, pakai_wip, d["tekor_kg"])
-    if galat is not None:
-        return Response({"valid": False, "galat": [galat.as_dict()]})
-
-    return Response({
-        "valid": True,
-        **asdict(v)
-    })
+    try:
+        v, galat = services.pratinjau(pakai_raw, pakai_wip, d.get("tekor_kg", Decimal("0")))
+        if galat is not None:
+            return Response({"valid": False, "galat": [galat.as_dict()]})
+        return Response({
+            "valid": True,
+            **asdict(v)
+        })
+    except Exception as e:
+        return Response({"valid": False, "galat": [{"pesan": str(e)}]})
