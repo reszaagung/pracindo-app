@@ -1,214 +1,504 @@
-// src/features/produksi/composables/useInputProduksi.js
-import { computed, reactive, ref, watch } from 'vue'
-import { PRATINJAU_DEBOUNCE_MS } from '@/config/api'
-import { normalKg } from '@/utils/uang'
-import { apiBatch, apiPratinjau } from '../api'
-import { usePemeriksaanStore } from '@/stores/pemeriksaan'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { apiTangki, apiBatch, apiPratinjau, apiRawUntukProduksi } from '@/api/produksi'
 
-let uid = 0
-const barisKosong = () => ({
-    _id: ++uid,
-    sumber: 'RAW',
-    raw: null,
-    batch_sumber: null,
-    qty_kg: '',
-})
+const JENIS = {
+  MIXING: 'MIXING',
+  BLENDING: 'BLENDING'
+}
 
 export function useInputProduksi() {
-    const form = reactive({
-        tangki: null,
-        nama_hasil: '',
-        tekor_kg: '0',
-        catatan: '',
-        baris: [barisKosong()],
-    })
+  // ============================================================
+  // STATE UTAMA
+  // ============================================================
+  const mode = ref('list')            // 'list' | 'form'
+  const jenisProduksi = ref(JENIS.MIXING)
+  const editingBatchId = ref(null)    // null = batch baru, terisi = mengedit draft
 
-    const pratinjau = ref(null)
-    const memuat = ref(false)
-    const menyimpan = ref(false)
-    const galatServer = ref(null)
+  const loadingList = ref(false)
+  const loadingForm = ref(false)
+  const submitting = ref(false)
+  const errorMsg = ref('')
 
-    let seq = 0
-    let timer = null
+  const daftarTangki = ref([])
+  const daftarRaw = ref([])           // pool bahan baku (v1/inventory/pool/)
+  const daftarBatch = ref([])         // daftar batch untuk tampilan list
 
-    const jenis = computed(() =>
-        form.baris.some((b) => b.sumber === 'WIP' && b.batch_sumber) ? 'BLENDING' : 'MIXING',
-    )
+  const filter = reactive({
+    jenis: '',
+    status: '',
+    tangki: '',
+    search: ''
+  })
 
-    function payload() {
-        const input_raw = []
-        const input_wip = []
+  const form = reactive({
+    nama_hasil: '',
+    tangki_tujuan: '',
+    batch: '',
+    tekor_kg: 0
+  })
 
-        for (const b of form.baris) {
-            // PERBAIKAN: Menjamin pembacaan angka desimal yang aman
-            // baik menggunakan titik maupun koma dari input operator
-            let qStr = normalKg(b.qty_kg) || '0'
-            qStr = qStr.toString().replace(',', '.')
-            const q = parseFloat(qStr)
+  const bomRows = ref([])   // baris bahan baku
+  const wipRows = ref([])   // baris sumber WIP (khusus blending)
+  const pratinjau = ref(null)
 
-            if (isNaN(q) || q <= 0) continue
+  // ============================================================
+  // FACTORY BARIS
+  // ============================================================
+  let seqBom = 0
+  function buatBarisBom() {
+    seqBom += 1
+    return { _id: `bom-${seqBom}`, raw: '', qty: 0, saldo: 0, harga: 0, subtotal: 0 }
+  }
 
-            if (b.sumber === 'RAW' && b.raw) {
-                input_raw.push({ raw: Number(b.raw), qty_kg: Number(q).toFixed(3) })
-            }
-            if (b.sumber === 'WIP' && b.batch_sumber) {
-                input_wip.push({ batch_sumber: Number(b.batch_sumber), qty_kg: Number(q).toFixed(3) })
-            }
-        }
-
-        let tekorStr = normalKg(form.tekor_kg) || '0'
-        tekorStr = tekorStr.toString().replace(',', '.')
-        let tekor = parseFloat(tekorStr)
-        if (isNaN(tekor) || tekor < 0) tekor = 0
-
-        return {
-            tangki: form.tangki,
-            nama_hasil: form.nama_hasil,
-            tekor_kg: Number(tekor).toFixed(3),
-            catatan: form.catatan,
-            input_raw,
-            input_wip,
-        }
-    }
-
-    const adaIsi = computed(() => {
-        const p = payload()
-        return p.input_raw.length > 0 || p.input_wip.length > 0
-    })
-
-    async function hitung() {
-        if (!adaIsi.value) {
-            pratinjau.value = null
-            galatServer.value = null
-            memuat.value = false
-            return
-        }
-
-        const ini = ++seq
-        memuat.value = true
-        galatServer.value = null // Bersihkan pesan error sebelumnya saat memuat ulang
-
-        try {
-            const hasil = await apiPratinjau(payload())
-
-            if (ini === seq) {
-                const data = hasil.data !== undefined ? hasil.data : hasil
-                pratinjau.value = data
-
-                // PERBAIKAN FATAL: Mencegah error kalkulasi tertelan diam-diam.
-                // Jika backend menolak pratinjau, paksa UI memunculkan alasannya!
-                if (data && data.valid === false && data.galat && data.galat.length > 0) {
-                    const pesanError = data.galat.map(g => g.pesan).join(' | ')
-                    galatServer.value = {
-                        pesan: pesanError,
-                        konflikSaldo: true // Memicu UI menguning/memerah agar operator sadar
-                    }
-                }
-            }
-        } catch (e) {
-            if (ini === seq) {
-                pratinjau.value = { valid: false, galat: [{ pesan: 'Gagal memuat pratinjau: Cek koneksi' }] }
-                galatServer.value = { pesan: 'Gagal terhubung ke server untuk kalkulasi.', konflikSaldo: false }
-            }
-        } finally {
-            // PERBAIKAN: Hanya matikan status memuat jika ini adalah antrean hitung terakhir.
-            // Sebelumnya, antrean yang selesai lebih cepat mematikan indikator loading lebih awal.
-            if (ini === seq) {
-                memuat.value = false
-            }
-        }
-    }
-
-    watch(
-        () => JSON.stringify(payload()),
-        () => {
-            clearTimeout(timer)
-            timer = setTimeout(hitung, PRATINJAU_DEBOUNCE_MS || 300)
-        },
-        { immediate: true },
-    )
-
-    const galatBaris = computed(() => {
-        const peta = {}
-        for (const g of pratinjau.value?.galat || []) {
-            const m = /^input_(raw|wip)\[(\d+)\]$/.exec(g.field || '')
-            if (!m) continue
-
-            const kunci = m[1] === 'raw' ? 'raw' : 'batch_sumber'
-            const baris = form.baris.find((b) => String(b[kunci]) === m[2])
-            if (baris) peta[baris._id] = g.pesan
-        }
-        return peta
-    })
-
-    const galatUmum = computed(() =>
-        (pratinjau.value?.galat || []).filter((g) => !g.field).map((g) => g.pesan),
-    )
-
-    const valuasiBaris = computed(() => {
-        const peta = {}
-        for (const b of pratinjau.value?.baris || []) {
-            peta[`${b.sumber}:${b.id_sumber}`] = b
-        }
-        return peta
-    })
-
-    const bolehSimpan = computed(() => {
-        const val = pratinjau.value
-
-        const kondisi = {
-            tidakSedangMenyimpan: !menyimpan.value,
-            tidakSedangMemuat: !memuat.value,
-            pratinjauValid: val?.valid === true,
-            tangkiTerpilih: !!form.tangki,
-            namaHasilTerisi: Boolean(form.nama_hasil && form.nama_hasil.trim().length > 0)
-        }
-
-        return Object.values(kondisi).every(Boolean)
-    })
-
-    function tambahBaris() { form.baris.push(barisKosong()) }
-    function hapusBaris(id) {
-        if (form.baris.length <= 1) return
-        form.baris = form.baris.filter((b) => b._id !== id)
-    }
-
-    function reset() {
-        form.nama_hasil = ''
-        form.tekor_kg = '0'
-        form.catatan = ''
-        form.baris = [barisKosong()]
-        pratinjau.value = null
-        galatServer.value = null
-    }
-
-    async function simpanDanPosting() {
-        if (!bolehSimpan.value) return null
-
-        menyimpan.value = true
-        galatServer.value = null
-        let draft = null
-
-        try {
-            draft = await apiBatch.buat(payload())
-            const posted = await apiBatch.posting(draft.id)
-
-            usePemeriksaanStore().periksa()
-
-            reset()
-            return posted
-        } catch (e) {
-            galatServer.value = e
-            if (draft) e.draftId = draft.id
-            throw e
-        } finally {
-            menyimpan.value = false
-        }
-    }
-
+  let seqWip = 0
+  function buatBarisWip() {
+    seqWip += 1
     return {
-        form, jenis, pratinjau, memuat, menyimpan, galatServer,
-        galatBaris, galatUmum, valuasiBaris, adaIsi, bolehSimpan,
-        tambahBaris, hapusBaris, reset, hitung, simpanDanPosting,
+      _id: `wip-${seqWip}`,
+      tangki_asal: '',
+      batch: '',
+      qty: 0,
+      tersedia: 0,
+      harga: 0,
+      opsiBatch: []
     }
+  }
+
+  // ============================================================
+  // FETCHERS
+  // ============================================================
+  async function muatTangki() {
+    try {
+      const res = await apiTangki.daftar()
+      daftarTangki.value = res?.results ?? res ?? []
+    } catch {
+      errorMsg.value = 'Gagal memuat daftar tangki'
+    }
+  }
+
+  async function muatRawPool() {
+    try {
+      const res = await apiRawUntukProduksi.daftar()
+      const list = res?.results ?? res ?? []
+      daftarRaw.value = list.filter((item) => Number(item.qty_kg) > 0)
+    } catch {
+      errorMsg.value = 'Gagal memuat saldo bahan baku'
+    }
+  }
+
+  async function muatDaftarBatch() {
+    loadingList.value = true
+    try {
+      const params = {}
+      if (filter.jenis) params.jenis = filter.jenis
+      if (filter.status) params.status = filter.status
+      if (filter.tangki) params.tangki = filter.tangki
+      if (filter.search) params.search = filter.search
+      const res = await apiBatch.daftar(params)
+      daftarBatch.value = res?.results ?? res ?? []
+    } catch {
+      errorMsg.value = 'Gagal memuat daftar batch produksi'
+    } finally {
+      loadingList.value = false
+    }
+  }
+
+  async function muatBatchTersediaUntukTangki(tangkiId) {
+    if (!tangkiId) return []
+    try {
+      const res = await apiBatch.tersedia(tangkiId)
+      return res?.results ?? res ?? []
+    } catch {
+      errorMsg.value = 'Gagal memuat batch WIP tersedia'
+      return []
+    }
+  }
+
+  async function initHalaman() {
+    await Promise.all([muatTangki(), muatDaftarBatch()])
+  }
+
+  // ============================================================
+  // NAVIGASI FORM
+  // ============================================================
+  async function bukaFormBaru(jenis = JENIS.MIXING) {
+    resetForm()
+    jenisProduksi.value = jenis
+    editingBatchId.value = null
+    mode.value = 'form'
+    loadingForm.value = true
+    await muatRawPool()
+    bomRows.value = [buatBarisBom()]
+    wipRows.value = jenis === JENIS.BLENDING ? [buatBarisWip()] : []
+    loadingForm.value = false
+  }
+
+  async function bukaFormEdit(batchId) {
+    editingBatchId.value = batchId
+    mode.value = 'form'
+    loadingForm.value = true
+    errorMsg.value = ''
+    try {
+      const [detail, komposisi] = await Promise.all([
+        apiBatch.detail(batchId),
+        apiBatch.komposisi(batchId)
+      ])
+
+      jenisProduksi.value = detail.jenis || JENIS.MIXING
+      form.nama_hasil = detail.nama_hasil || ''
+      form.tangki_tujuan = detail.tangki_tujuan || detail.tangki || ''
+      form.batch = detail.batch || detail.nomor_batch || ''
+      form.tekor_kg = Number(detail.tekor_kg || 0)
+
+      await muatRawPool()
+
+      bomRows.value = (komposisi?.materials || komposisi?.bahan_baku || []).map((m) => {
+        const row = buatBarisBom()
+        row.raw = m.raw
+        row.qty = Number(m.qty_kg)
+        row.harga = Number(m.harga_per_kg)
+        row.subtotal = row.qty * row.harga
+        perbaruiTelemetriBom(row)
+        return row
+      })
+      if (bomRows.value.length === 0) bomRows.value = [buatBarisBom()]
+
+      if (jenisProduksi.value === JENIS.BLENDING) {
+        const wipSources = komposisi?.wip_sources || komposisi?.info_blending || []
+        wipRows.value = await Promise.all(
+          wipSources.map(async (w) => {
+            const row = buatBarisWip()
+            row.tangki_asal = w.tangki_asal
+            row.opsiBatch = await muatBatchTersediaUntukTangki(w.tangki_asal)
+            row.batch = w.batch
+            row.qty = Number(w.qty_kg)
+            const opsi = row.opsiBatch.find((b) => b.batch === row.batch)
+            row.tersedia = Number(opsi?.sisa_qty ?? opsi?.saldo_qty ?? 0)
+            row.harga = Number(opsi?.harga_per_kg ?? w.harga_per_kg ?? 0)
+            return row
+          })
+        )
+        if (wipRows.value.length === 0) wipRows.value = [buatBarisWip()]
+      } else {
+        wipRows.value = []
+      }
+
+      pratinjau.value = null
+    } catch {
+      errorMsg.value = 'Gagal memuat detail batch'
+    } finally {
+      loadingForm.value = false
+    }
+  }
+
+  function tutupForm() {
+    mode.value = 'list'
+    resetForm()
+  }
+
+  function resetForm() {
+    form.nama_hasil = ''
+    form.tangki_tujuan = ''
+    form.batch = ''
+    form.tekor_kg = 0
+    bomRows.value = []
+    wipRows.value = []
+    pratinjau.value = null
+    errorMsg.value = ''
+  }
+
+  function gantiJenisProduksi(jenis) {
+    if (editingBatchId.value) return
+    jenisProduksi.value = jenis
+    bomRows.value = [buatBarisBom()]
+    wipRows.value = jenis === JENIS.BLENDING ? [buatBarisWip()] : []
+    pratinjau.value = null
+  }
+
+  // ============================================================
+  // TANGKI & NOMOR BATCH
+  // ============================================================
+  async function tambahTangkiBaru(nama) {
+    const namaBersih = String(nama || '').trim().toUpperCase()
+    if (!namaBersih) return null
+    const existing = daftarTangki.value.find(
+      (t) => (t.nama || t.kode || '').toUpperCase() === namaBersih
+    )
+    if (existing) return existing
+    try {
+      const dibuat = await apiTangki.buat({ nama: namaBersih, kode: namaBersih })
+      await muatTangki()
+      return dibuat
+    } catch {
+      errorMsg.value = 'Gagal membuat tangki baru'
+      return null
+    }
+  }
+
+  async function generateNomorBatch() {
+    try {
+      const res = await apiBatch.nomorBaru(jenisProduksi.value)
+      form.batch = res?.nomor ?? res?.batch ?? ''
+    } catch {
+      errorMsg.value = 'Gagal membuat nomor batch otomatis'
+    }
+  }
+
+  // ============================================================
+  // MANAJEMEN BARIS (BOM & WIP)
+  // ============================================================
+  function tambahBomRow() { bomRows.value.push(buatBarisBom()) }
+  function hapusBomRow(id) {
+    if (bomRows.value.length <= 1) return
+    bomRows.value = bomRows.value.filter((r) => r._id !== id)
+  }
+  function perbaruiTelemetriBom(row) {
+    const item = daftarRaw.value.find((r) => r.raw === row.raw)
+    row.saldo = item ? Number(item.qty_kg) : 0
+    row.harga = item ? Number(item.harga_rata) : 0
+    row.subtotal = (Number(row.qty) || 0) * row.harga
+  }
+
+  function tambahWipRow() { wipRows.value.push(buatBarisWip()) }
+  function hapusWipRow(id) {
+    wipRows.value = wipRows.value.filter((r) => r._id !== id)
+  }
+  async function saatTangkiAsalDipilih(row) {
+    row.batch = ''
+    row.tersedia = 0
+    row.harga = 0
+    row.opsiBatch = await muatBatchTersediaUntukTangki(row.tangki_asal)
+  }
+  function saatBatchWipDipilih(row) {
+    const opsi = row.opsiBatch.find((b) => b.batch === row.batch)
+    row.tersedia = opsi ? Number(opsi.sisa_qty ?? opsi.saldo_qty ?? 0) : 0
+    row.harga = opsi ? Number(opsi.harga_per_kg ?? 0) : 0
+  }
+
+  // ============================================================
+  // PROYEKSI (ESTIMASI KLIEN)
+  // ============================================================
+  const totalQtyBom = computed(() => bomRows.value.reduce((s, r) => s + (Number(r.qty) || 0), 0))
+  const totalNilaiBom = computed(() => bomRows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.harga) || 0), 0))
+
+  const totalQtyWip = computed(() => jenisProduksi.value === JENIS.BLENDING
+    ? wipRows.value.reduce((s, r) => s + (Number(r.qty) || 0), 0) : 0)
+  const totalNilaiWip = computed(() => jenisProduksi.value === JENIS.BLENDING
+    ? wipRows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.harga) || 0), 0) : 0)
+
+  const totalInputKg = computed(() => totalQtyBom.value + totalQtyWip.value)
+  const totalInputNilai = computed(() => totalNilaiBom.value + totalNilaiWip.value)
+  const proyeksiYield = computed(() => totalInputKg.value - (Number(form.tekor_kg) || 0))
+  const proyeksiHargaRata = computed(() => proyeksiYield.value > 0 ? totalInputNilai.value / proyeksiYield.value : 0)
+
+  // ============================================================
+  // PAYLOAD
+  // ============================================================
+  function susunPayload() {
+    const payload = {
+      jenis: jenisProduksi.value,
+      nama_hasil: form.nama_hasil.trim(),
+      tangki_tujuan: form.tangki_tujuan,
+      batch: form.batch.trim(),
+      tekor_kg: Number(form.tekor_kg) || 0,
+      materials: bomRows.value
+        .filter((r) => r.raw && Number(r.qty) > 0)
+        .map((r) => ({ raw: String(r.raw), qty_kg: Number(r.qty) }))
+    }
+
+    if (jenisProduksi.value === JENIS.BLENDING) {
+      payload.wip_sources = wipRows.value
+        .filter((r) => r.batch && Number(r.qty) > 0)
+        .map((r) => ({
+          tangki_asal: r.tangki_asal,
+          batch: String(r.batch),
+          qty_kg: Number(r.qty)
+        }))
+    }
+    return payload
+  }
+
+  // ============================================================
+  // VALIDASI CLIENT-SIDE
+  // ============================================================
+  function validasiForm() {
+    if (!form.nama_hasil.trim()) return 'Nama hasil produksi wajib diisi'
+    if (!form.tangki_tujuan) return 'Tangki tujuan wajib dipilih'
+    if (!form.batch.trim()) return 'Batch ID wajib diisi'
+
+    const adaBom = bomRows.value.some((r) => r.raw && Number(r.qty) > 0)
+    const adaWip = jenisProduksi.value === JENIS.BLENDING && wipRows.value.some((r) => r.batch && Number(r.qty) > 0)
+
+    if (jenisProduksi.value === JENIS.MIXING && !adaBom) {
+      return 'Minimal satu baris bahan baku (BOM) harus diisi'
+    }
+    if (jenisProduksi.value === JENIS.BLENDING && !adaBom && !adaWip) {
+      return 'Minimal satu sumber WIP atau bahan baku harus diisi'
+    }
+    for (const row of bomRows.value) {
+      if (row.raw && Number(row.qty) > row.saldo + 0.001) {
+        return `Saldo pool tidak cukup untuk "${row.raw}". Diminta ${row.qty} Kg, tersedia ${row.saldo.toFixed(3)} Kg`
+      }
+    }
+    if (jenisProduksi.value === JENIS.BLENDING) {
+      for (const row of wipRows.value) {
+        if (row.batch && Number(row.qty) > row.tersedia + 0.001) {
+          return `Saldo WIP tidak cukup untuk batch "${row.batch}"`
+        }
+      }
+    }
+    if (proyeksiYield.value <= 0) {
+      return 'Yield harus positif setelah dikurangi tekor/shrinkage'
+    }
+    return ''
+  }
+
+  // ============================================================
+  // PREVIEW SERVER & TRANSAKSI
+  // ============================================================
+  async function mintaPratinjau() {
+    errorMsg.value = validasiForm()
+    if (errorMsg.value) return null
+    try {
+      const res = await apiPratinjau(susunPayload())
+      pratinjau.value = res
+
+      if (res && res.valid === false) {
+        errorMsg.value = res.galat?.map(g => g.pesan).join(' | ') || 'Kalkulasi ditolak server.'
+      }
+      return res
+    } catch (e) {
+      errorMsg.value = e?.response?.data?.pesan || 'Gagal terhubung ke server untuk kalkulasi.'
+      return null
+    }
+  }
+
+  async function simpanDraft() {
+    errorMsg.value = validasiForm()
+    if (errorMsg.value) return false
+    submitting.value = true
+    try {
+      const payload = susunPayload()
+      if (editingBatchId.value) {
+        await apiBatch.ubah(editingBatchId.value, payload)
+      } else {
+        await apiBatch.buat(payload)
+      }
+      await muatDaftarBatch()
+      tutupForm()
+      return true
+    } catch (e) {
+      const data = e?.response?.data
+      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal menyimpan draft batch')
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  async function postingBatch(batchId) {
+    submitting.value = true
+    try {
+      await apiBatch.posting(batchId)
+      await Promise.all([muatDaftarBatch(), muatRawPool()])
+      return true
+    } catch (e) {
+      const data = e?.response?.data
+      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal posting batch. Periksa kembali saldo bahan baku.')
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  async function voidBatch(batchId, alasan) {
+    if (!alasan || !alasan.trim()) {
+      errorMsg.value = 'Alasan void wajib diisi'
+      return false
+    }
+    submitting.value = true
+    try {
+      await apiBatch.void(batchId, alasan.trim())
+      await Promise.all([muatDaftarBatch(), muatRawPool()])
+      return true
+    } catch (e) {
+      const data = e?.response?.data
+      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal membatalkan (void) batch')
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  async function hapusDraft(batchId) {
+    submitting.value = true
+    try {
+      await apiBatch.hapus(batchId)
+      await muatDaftarBatch()
+      return true
+    } catch (e) {
+      errorMsg.value = 'Gagal menghapus draft batch'
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  watch(
+    bomRows,
+    (rows) => rows.forEach((r) => (r.subtotal = (Number(r.qty) || 0) * (Number(r.harga) || 0))),
+    { deep: true }
+  )
+
+  onMounted(() => {
+    initHalaman()
+  })
+
+  return {
+    JENIS,
+    mode,
+    jenisProduksi,
+    editingBatchId,
+    loadingList,
+    loadingForm,
+    submitting,
+    errorMsg,
+    daftarTangki,
+    daftarRaw,
+    daftarBatch,
+    filter,
+    form,
+    bomRows,
+    wipRows,
+    pratinjau,
+
+    totalQtyBom,
+    totalNilaiBom,
+    totalQtyWip,
+    totalNilaiWip,
+    totalInputKg,
+    totalInputNilai,
+    proyeksiYield,
+    proyeksiHargaRata,
+
+    muatDaftarBatch,
+    bukaFormBaru,
+    bukaFormEdit,
+    tutupForm,
+    gantiJenisProduksi,
+    tambahTangkiBaru,
+    generateNomorBatch,
+    tambahBomRow,
+    hapusBomRow,
+    perbaruiTelemetriBom,
+    tambahWipRow,
+    hapusWipRow,
+    saatTangkiAsalDipilih,
+    saatBatchWipDipilih,
+    mintaPratinjau,
+    simpanDraft,
+    postingBatch,
+    voidBatch,
+    hapusDraft
+  }
 }

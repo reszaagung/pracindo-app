@@ -1,31 +1,37 @@
-// src/features/produksi/composables/useSumberOptions.js
-
 import { ref } from 'vue'
-import { apiBatch, apiRawUntukProduksi } from '../api'
+import { apiRawUntukProduksi, apiBatch } from '../api'
 
 export function useSumberOptions() {
-    const opsiRaw = ref([])
-    const opsiBatch = ref([])
-    const memuat = ref(false)
+  const opsiRaw = ref([])
+  const opsiBatch = ref([])
+  const memuatOpsi = ref(false)
 
-    async function muatOpsi(tangkiTujuanId = null) {
-        memuat.value = true
-        try {
-            const [rawRes, batchRes] = await Promise.all([
-                apiRawUntukProduksi.daftar(),
-                apiBatch.tersedia(tangkiTujuanId)
-            ])
-            const rawData = Array.isArray(rawRes) ? rawRes : (rawRes.rincian || rawRes.results || [])
-            const batchData = Array.isArray(batchRes) ? batchRes : (batchRes.results || [])
+  const extractArray = (res) => {
+    if (Array.isArray(res)) return res
+    if (Array.isArray(res?.rincian)) return res.rincian
+    if (Array.isArray(res?.results)) return res.results
+    if (Array.isArray(res?.data)) return res.data
+    if (Array.isArray(res?.data?.rincian)) return res.data.rincian
+    if (Array.isArray(res?.data?.results)) return res.data.results
+    return []
+  }
 
-            opsiRaw.value = rawData.filter(r => Number(r.qty_kg) > 0)
-            opsiBatch.value = batchData
-        } catch (e) {
-            console.error(e)
-        } finally {
-            memuat.value = false
-        }
+  const muatOpsi = async (tangkiId = null) => {
+    memuatOpsi.value = true
+    try {
+      const [resRaw, resBatch] = await Promise.all([
+        apiRawUntukProduksi.daftar(),
+        apiBatch.tersedia(tangkiId)
+      ])
+
+      opsiRaw.value = extractArray(resRaw)
+      opsiBatch.value = extractArray(resBatch)
+    } catch (e) {
+      console.error('Gagal memuat opsi bahan sumber:', e)
+    } finally {
+      memuatOpsi.value = false
     }
+  }
 
-    return { opsiRaw, opsiBatch, memuat, muatOpsi }
+  return { opsiRaw, opsiBatch, memuatOpsi, muatOpsi }
 }

@@ -139,8 +139,18 @@ def pratinjau_batch(request):
         return Response({"valid": False, "galat": errs})
     
     d = s.validated_data
-    pakai_raw = {r["raw"]: r["qty_kg"] for r in d.get("input_raw", []) if r.get("raw") and r.get("qty_kg", 0) > 0}
-    pakai_wip = {w["batch_sumber"]: w["qty_kg"] for w in d.get("input_wip", []) if w.get("batch_sumber") and w.get("qty_kg", 0) > 0}
+    
+    # Menerjemahkan format 'materials' dan 'wip_sources' ke dictionary untuk services
+    pakai_raw = {int(r["raw"]): r["qty_kg"] for r in d.get("materials", []) if r.get("raw") and r.get("qty_kg", 0) > 0}
+    
+    pakai_wip = {}
+    for w in d.get("wip_sources", []):
+        if w.get("batch") and w.get("qty_kg", 0) > 0:
+            try:
+                b_sumber = Batch.objects.get(nomor=w["batch"])
+                pakai_wip[b_sumber.id] = w["qty_kg"]
+            except Batch.DoesNotExist:
+                return Response({"valid": False, "galat": [{"pesan": f"Batch WIP {w['batch']} tidak ditemukan."}]})
     
     if not pakai_raw and not pakai_wip:
         return Response({"valid": False, "galat": [{"pesan": "Pilih minimal satu sumber dengan qty > 0."}]})

@@ -1,213 +1,424 @@
-<script setup>
-import { onMounted, ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { useInputProduksi } from '../composables/useInputProduksi'
-import { useSumberOptions } from '../composables/useSumberOptions'
-import { useTangki } from '../composables/useTangki'
-import BarisSumber from '../components/BarisSumber.vue'
-import PanelValuasi from '../components/PanelValuasi.vue'
-import DialogKonfirmasi from '@/components/DialogKonfirmasi.vue'
+<template>
+  <div class="input-produksi">
+    <header class="ip-header">
+      <h1>Modul Produksi (Mixing &amp; Blending)</h1>
+      <p v-if="mode === 'form'" class="ip-subtitle">
+        {{ editingBatchId ? 'Ubah Draft Batch' : 'Buat Batch Baru' }} —
+        {{ jenisProduksi === JENIS.MIXING ? 'Mixing' : 'Blending' }}
+      </p>
+    </header>
 
-const router = useRouter()
+    <p v-if="errorMsg" class="ip-alert ip-alert--error">{{ errorMsg }}</p>
+
+    <!-- ================= MODE: LIST ================= -->
+    <section v-if="mode === 'list'" class="ip-list">
+      <div class="ip-toolbar">
+        <div class="ip-filter">
+          <select v-model="filter.jenis" @change="muatDaftarBatch">
+            <option value="">Semua Jenis</option>
+            <option value="MIXING">Mixing</option>
+            <option value="BLENDING">Blending</option>
+          </select>
+          <select v-model="filter.status" @change="muatDaftarBatch">
+            <option value="">Semua Status</option>
+            <option value="DRAFT">Draft</option>
+            <option value="POSTED">Posted</option>
+            <option value="VOID">Void</option>
+          </select>
+          <input
+            v-model="filter.search"
+            type="text"
+            placeholder="Cari batch / nama hasil..."
+            @keyup.enter="muatDaftarBatch"
+          />
+          <button class="btn btn--ghost" @click="muatDaftarBatch">Cari</button>
+        </div>
+        <div class="ip-actions">
+          <button class="btn btn--primary" @click="bukaFormBaru(JENIS.MIXING)">+ Batch Mixing</button>
+          <button class="btn btn--secondary" @click="bukaFormBaru(JENIS.BLENDING)">+ Batch Blending</button>
+        </div>
+      </div>
+
+      <div class="ip-table-wrap">
+        <table class="ip-table">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Tanggal</th>
+              <th>Jenis</th>
+              <th>Tangki Tujuan</th>
+              <th>Nama Hasil</th>
+              <th>Yield (Kg)</th>
+              <th>Harga Rata</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="loadingList">
+              <td colspan="9" class="ip-empty">Memuat data...</td>
+            </tr>
+            <tr v-else-if="daftarBatch.length === 0">
+              <td colspan="9" class="ip-empty">Belum ada batch produksi.</td>
+            </tr>
+            <tr v-for="b in daftarBatch" :key="b.id">
+              <td class="mono">{{ b.batch }}</td>
+              <td>{{ formatTanggal(b.waktu || b.tanggal) }}</td>
+              <td>{{ b.jenis === 'BLENDING' ? 'Blending' : 'Mixing' }}</td>
+              <td>{{ b.tangki_tujuan_nama || b.tangki_tujuan }}</td>
+              <td>{{ b.nama_hasil }}</td>
+              <td class="num">{{ formatKg(b.qty_hasil) }}</td>
+              <td class="num">{{ formatRupiah(b.harga_per_kg) }}</td>
+              <td>
+                <span class="status" :class="`status--${(b.status || 'draft').toLowerCase()}`">
+                  {{ b.status || 'DRAFT' }}
+                </span>
+              </td>
+              <td class="ip-row-actions">
+                <button
+                  v-if="(b.status || 'DRAFT') === 'DRAFT'"
+                  class="btn btn--sm"
+                  @click="bukaFormEdit(b.id)"
+                >Ubah</button>
+                <button
+                  v-if="(b.status || 'DRAFT') === 'DRAFT'"
+                  class="btn btn--sm btn--success"
+                  :disabled="submitting"
+                  @click="konfirmasiPosting(b)"
+                >Posting</button>
+                <button
+                  v-if="(b.status || 'DRAFT') === 'DRAFT'"
+                  class="btn btn--sm btn--danger"
+                  :disabled="submitting"
+                  @click="konfirmasiHapus(b)"
+                >Hapus</button>
+                <button
+                  v-if="b.status === 'POSTED'"
+                  class="btn btn--sm btn--danger"
+                  :disabled="submitting"
+                  @click="bukaModalVoid(b)"
+                >Void</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= MODE: FORM ================= -->
+    <section v-else class="ip-form">
+      <div class="ip-tabs" v-if="!editingBatchId">
+        <button
+          class="ip-tab"
+          :class="{ 'ip-tab--active': jenisProduksi === JENIS.MIXING }"
+          @click="gantiJenisProduksi(JENIS.MIXING)"
+        >1. Mixing (Bahan Baku → Tangki)</button>
+        <button
+          class="ip-tab"
+          :class="{ 'ip-tab--active': jenisProduksi === JENIS.BLENDING }"
+          @click="gantiJenisProduksi(JENIS.BLENDING)"
+        >2. Blending (WIP Tangki + Bahan Baku → Tangki)</button>
+      </div>
+
+      <div v-if="loadingForm" class="ip-empty">Memuat data...</div>
+
+      <template v-else>
+        <fieldset class="ip-panel">
+          <legend>Telemetri Produksi</legend>
+          <div class="ip-grid ip-grid--4">
+            <label class="ip-field">
+              <span>Nama Hasil</span>
+              <input v-model="form.nama_hasil" type="text" placeholder="mis. Sabun Cair Lemon" />
+            </label>
+
+            <label class="ip-field">
+              <span>Tangki Tujuan</span>
+              <div class="ip-inline">
+                <select v-model="form.tangki_tujuan">
+                  <option value="" disabled>Pilih tangki</option>
+                  <option v-for="t in daftarTangki" :key="t.id" :value="t.id">
+                    {{ t.nama || t.kode }}
+                  </option>
+                </select>
+                <button type="button" class="btn btn--icon" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
+              </div>
+            </label>
+
+            <label class="ip-field">
+              <span>Batch ID</span>
+              <div class="ip-inline">
+                <input v-model="form.batch" type="text" placeholder="PRD-MIX-0001" />
+                <button type="button" class="btn btn--icon" @click="generateNomorBatch">Auto</button>
+              </div>
+            </label>
+
+            <label class="ip-field">
+              <span>Tekor / Susut (Kg)</span>
+              <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset v-if="jenisProduksi === JENIS.BLENDING" class="ip-panel">
+          <legend>Alokasi WIP Sumber (Fluida Existing)</legend>
+          <table class="ip-matrix">
+            <thead>
+              <tr>
+                <th>Tangki Sumber</th>
+                <th>Batch WIP</th>
+                <th>Qty Transfer (Kg)</th>
+                <th>Tersedia</th>
+                <th>Harga WIP</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in wipRows" :key="row._id">
+                <td>
+                  <select v-model="row.tangki_asal" @change="saatTangkiAsalDipilih(row)">
+                    <option value="" disabled>Pilih tangki</option>
+                    <option v-for="t in daftarTangki" :key="t.id" :value="t.id">{{ t.nama || t.kode }}</option>
+                  </select>
+                </td>
+                <td>
+                  <select v-model="row.batch" :disabled="!row.tangki_asal" @change="saatBatchWipDipilih(row)">
+                    <option value="" disabled>Pilih batch</option>
+                    <option v-for="b in row.opsiBatch" :key="b.batch" :value="b.batch">{{ b.batch }}</option>
+                  </select>
+                </td>
+                <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
+                <td class="num">{{ formatKg(row.tersedia) }}</td>
+                <td class="num">{{ formatRupiah(row.harga) }}</td>
+                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusWipRow(row._id)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <button type="button" class="btn btn--ghost" @click="tambahWipRow">+ Tambah Sumber WIP</button>
+        </fieldset>
+
+        <fieldset class="ip-panel">
+          <legend>{{ jenisProduksi === JENIS.BLENDING ? 'Bahan Baku Tambahan (BOM)' : 'Bill of Materials (BOM)' }}</legend>
+          <table class="ip-matrix">
+            <thead>
+              <tr>
+                <th>Bahan Baku</th>
+                <th>Qty Terpakai (Kg)</th>
+                <th>Saldo Pool</th>
+                <th>Harga (IDR/Kg)</th>
+                <th>Subtotal</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in bomRows" :key="row._id">
+                <td>
+                  <select v-model="row.raw" @change="perbaruiTelemetriBom(row)">
+                    <option value="" disabled>Pilih bahan baku</option>
+                    <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">{{ r.raw }}</option>
+                  </select>
+                </td>
+                <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
+                <td class="num" :class="{ 'num--warn': row.qty > row.saldo }">{{ formatKg(row.saldo) }}</td>
+                <td class="num">{{ formatRupiah(row.harga) }}</td>
+                <td class="num">{{ formatRupiah(row.subtotal) }}</td>
+                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusBomRow(row._id)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <button type="button" class="btn btn--ghost" @click="tambahBomRow">+ Tambah Baris BOM</button>
+        </fieldset>
+
+        <div class="ip-projection">
+          Proyeksi Yield: <strong>{{ formatKg(proyeksiYield) }} Kg</strong>
+          &nbsp;|&nbsp;
+          Estimasi Harga Pokok: <strong>{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
+        </div>
+
+        <div v-if="pratinjau" class="ip-preview">
+          <h3>Pratinjau Server</h3>
+          <pre>{{ pratinjau }}</pre>
+        </div>
+
+        <div class="ip-form-actions">
+          <button type="button" class="btn btn--ghost" @click="tutupForm" :disabled="submitting">Batal</button>
+          <button type="button" class="btn btn--secondary" @click="mintaPratinjau" :disabled="submitting">Pratinjau</button>
+          <button type="button" class="btn btn--primary" @click="simpanDraft" :disabled="submitting">
+            {{ submitting ? 'Menyimpan...' : (editingBatchId ? 'Simpan Perubahan' : 'Simpan Draft') }}
+          </button>
+        </div>
+      </template>
+    </section>
+
+    <!-- ================= MODAL VOID ================= -->
+    <div v-if="modalVoid.tampil" class="ip-modal-backdrop" @click.self="tutupModalVoid">
+      <div class="ip-modal">
+        <h3>Void Batch {{ modalVoid.batch }}</h3>
+        <label class="ip-field">
+          <span>Alasan Void</span>
+          <textarea v-model="modalVoid.alasan" rows="3" placeholder="Jelaskan alasan pembatalan batch..."></textarea>
+        </label>
+        <div class="ip-form-actions">
+          <button class="btn btn--ghost" @click="tutupModalVoid">Batal</button>
+          <button class="btn btn--danger" :disabled="submitting" @click="konfirmasiVoid">Konfirmasi Void</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { reactive } from 'vue'
+import { useInputProduksi } from './useInputProduksi'
+
 const {
-    form, jenis, menyimpan, galatServer,
-    galatBaris, valuasiBaris, bolehSimpan,
-    tambahBaris, hapusBaris, simpanDanPosting,
+  JENIS,
+  mode,
+  jenisProduksi,
+  editingBatchId,
+  loadingList,
+  loadingForm,
+  submitting,
+  errorMsg,
+  daftarTangki,
+  daftarRaw,
+  daftarBatch,
+  filter,
+  form,
+  bomRows,
+  wipRows,
+  pratinjau,
+
+  proyeksiYield,
+  proyeksiHargaRata,
+
+  muatDaftarBatch,
+  bukaFormBaru,
+  bukaFormEdit,
+  tutupForm,
+  gantiJenisProduksi,
+  tambahTangkiBaru,
+  generateNomorBatch,
+  tambahBomRow,
+  hapusBomRow,
+  perbaruiTelemetriBom,
+  tambahWipRow,
+  hapusWipRow,
+  saatTangkiAsalDipilih,
+  saatBatchWipDipilih,
+  mintaPratinjau,
+  simpanDraft,
+  postingBatch,
+  voidBatch,
+  hapusDraft
 } = useInputProduksi()
 
-const { tangkiList, muatTangki, buatTangki, memuatSimpan: memuatSimpanTangki } = useTangki()
-const { opsiRaw, opsiBatch, muatOpsi } = useSumberOptions()
-const konfirmasi = ref(false)
-
-const tampilModalTangki = ref(false)
-const formTangkiBaru = reactive({ kode: '', nama: '' })
-
-function cekTambahTangki() {
-    if (form.tangki === 'TAMBAH') {
-        form.tangki = null
-        formTangkiBaru.kode = ''
-        formTangkiBaru.nama = ''
-        tampilModalTangki.value = true
-    }
+function formatKg(v) {
+  return Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+function formatRupiah(v) {
+  return `Rp ${Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+function formatTanggal(v) {
+  if (!v) return '-'
+  const d = new Date(v)
+  return isNaN(d) ? v : d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-async function simpanTangkiBaru() {
-    if (!formTangkiBaru.kode || !formTangkiBaru.nama) {
-        alert('Kode dan Nama Tangki harus diisi!')
-        return
-    }
-    try {
-        const tangkiBaru = await buatTangki({
-            kode: formTangkiBaru.kode.toUpperCase(),
-            nama: formTangkiBaru.nama,
-            aktif: true
-        })
-        form.tangki = tangkiBaru.id
-        tampilModalTangki.value = false
-    } catch (e) {
-        alert('Gagal menyimpan tangki baru. Periksa koneksi internet Anda.')
-    }
+async function tambahTangkiBaruPrompt() {
+  const nama = window.prompt('Nama/kode tangki baru:')
+  if (!nama) return
+  const dibuat = await tambahTangkiBaru(nama)
+  if (dibuat) form.tangki_tujuan = dibuat.id
 }
 
-onMounted(() => {
-    muatTangki()
-    muatOpsi()
-})
+async function konfirmasiPosting(batch) {
+  if (!window.confirm(`Posting batch ${batch.batch}? Aksi ini akan memotong saldo pool bahan baku.`)) return
+  await postingBatch(batch.id)
+}
 
-async function jalankan() {
-    konfirmasi.value = false
-    try {
-        const batch = await simpanDanPosting()
-        router.push({ name: 'produksi-batch-detail', params: { id: batch.id } })
-    } catch (e) {
-        if (e.konflikSaldo) await muatOpsi()
-    }
+async function konfirmasiHapus(batch) {
+  if (!window.confirm(`Hapus draft batch ${batch.batch}?`)) return
+  await hapusDraft(batch.id)
+}
+
+const modalVoid = reactive({ tampil: false, id: null, batch: '', alasan: '' })
+function bukaModalVoid(batch) {
+  modalVoid.tampil = true
+  modalVoid.id = batch.id
+  modalVoid.batch = batch.batch
+  modalVoid.alasan = ''
+}
+function tutupModalVoid() {
+  modalVoid.tampil = false
+}
+async function konfirmasiVoid() {
+  const berhasil = await voidBatch(modalVoid.id, modalVoid.alasan)
+  if (berhasil) tutupModalVoid()
 }
 </script>
 
-<template>
-    <div class="batch-form w-full mx-auto pb-12 px-3 sm:px-4 space-y-6 md:space-y-8 mt-2 md:mt-4">
+<style scoped>
+.input-produksi { max-width: 1200px; margin: 0 auto; padding: 24px; font-family: 'Segoe UI', sans-serif; color: #1f2933; }
+.ip-header h1 { font-size: 20px; font-weight: 700; margin: 0; }
+.ip-subtitle { color: #52606d; margin: 4px 0 0; }
+.ip-alert { padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 14px; }
+.ip-alert--error { background: #fde8e8; color: #c81e1e; border: 1px solid #f8b4b4; }
 
-        <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end border-b border-slate-200 pb-4 gap-3">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Input Produksi</h1>
-                <p class="text-sm text-slate-500 mt-1">Jenis transaksi akan menyesuaikan secara otomatis.</p>
-            </div>
-            <div class="inline-flex items-center justify-center px-3 py-1 rounded-md text-xs font-bold tracking-wide uppercase shadow-sm border self-start sm:self-auto"
-                :class="jenis === 'BLENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'">
-                <i class="pi mr-2" :class="jenis === 'BLENDING' ? 'pi-sync' : 'pi-sitemap'"></i>
-                {{ jenis }}
-            </div>
-        </header>
+.ip-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.ip-filter { display: flex; gap: 8px; flex-wrap: wrap; }
+.ip-filter select, .ip-filter input { padding: 6px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
+.ip-actions { display: flex; gap: 8px; }
 
-        <section class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-slate-200">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label class="block">
-                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tangki Tujuan <span class="text-red-500">*</span></span>
-                    <select v-model="form.tangki" @change="cekTambahTangki"
-                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white">
-                        <option :value="null">-- Pilih Tangki --</option>
-                        <option v-for="t in tangkiList" :key="t.id" :value="t.id">{{ t.kode }} ({{ t.nama }})</option>
-                        <option disabled>──────────</option>
-                        <option value="TAMBAH" class="font-bold text-blue-600">+ Tambah Tangki Baru...</option>
-                    </select>
-                </label>
+.btn { padding: 7px 14px; border-radius: 6px; border: 1px solid transparent; font-size: 13px; cursor: pointer; background: #e4e7eb; color: #1f2933; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn--primary { background: #2563eb; color: #fff; }
+.btn--secondary { background: #7c3aed; color: #fff; }
+.btn--success { background: #16a34a; color: #fff; }
+.btn--danger { background: #dc2626; color: #fff; }
+.btn--ghost { background: transparent; border-color: #cbd2d9; }
+.btn--icon { padding: 6px 10px; }
+.btn--sm { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
 
-                <label class="block">
-                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Nama Hasil <span class="text-red-500">*</span></span>
-                    <input v-model="form.nama_hasil" type="text" maxlength="120"
-                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder:text-slate-300"
-                        placeholder="Contoh: SUGAR BROWN" />
-                </label>
+.ip-table-wrap { overflow-x: auto; border: 1px solid #e4e7eb; border-radius: 8px; }
+.ip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ip-table th, .ip-table td { padding: 10px 12px; border-bottom: 1px solid #e4e7eb; text-align: left; white-space: nowrap; }
+.ip-table th { background: #f5f7fa; font-weight: 600; }
+.ip-empty { text-align: center; color: #9aa5b1; padding: 24px; }
+.num { text-align: right; }
+.num--warn { color: #dc2626; font-weight: 600; }
+.mono { font-family: 'Consolas', monospace; }
 
-                <label class="block">
-                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Tekor / Susut (Kg)</span>
-                    <div class="relative">
-                        <input v-model="form.tekor_kg" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*"
-                            class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 pr-8 pl-3 text-right focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white" />
-                        <div class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
-                            <span class="text-xs font-medium text-slate-400">Kg</span>
-                        </div>
-                    </div>
-                </label>
+.status { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.status--draft { background: #fef3c7; color: #92400e; }
+.status--posted { background: #d1fae5; color: #065f46; }
+.status--void { background: #fee2e2; color: #991b1b; }
 
-                <label class="block">
-                    <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Catatan Tambahan</span>
-                    <input v-model="form.catatan" type="text"
-                        class="block w-full border-slate-300 rounded-md shadow-sm text-sm py-1.5 px-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder:text-slate-300"
-                        placeholder="Opsional..." />
-                </label>
-            </div>
-        </section>
+.ip-row-actions { display: flex; }
 
-        <section class="space-y-3">
-            <div class="flex justify-between items-center px-1 border-b border-slate-200 pb-2">
-                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <i class="pi pi-box text-blue-500 text-sm"></i> Bahan Sumber
-                </h2>
-                <button type="button" @click="tambahBaris"
-                    class="text-xs bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-md font-semibold transition-colors shadow-sm flex items-center gap-2">
-                    <i class="pi pi-plus text-[10px]"></i> <span class="hidden sm:inline">Tambah Sumber</span><span class="sm:hidden">Tambah</span>
-                </button>
-            </div>
+.ip-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.ip-tab { padding: 10px 16px; border: 1px solid #cbd2d9; background: #f5f7fa; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; }
+.ip-tab--active { background: #fff; border-bottom-color: #fff; font-weight: 700; color: #2563eb; }
 
-            <div class="space-y-2.5">
-                <BarisSumber v-for="(b, index) in form.baris" :key="b._id"
-                    v-model="form.baris[index]"
-                    :opsi-raw="opsiRaw" :opsi-batch="opsiBatch"
-                    :valuasi="valuasiBaris[b.sumber === 'RAW' ? `RAW:${b.raw}` : `WIP:${b.batch_sumber}`]"
-                    :galat="galatBaris[b._id]" :bisa-hapus="form.baris.length > 1"
-                    @hapus="hapusBaris(b._id)" />
-            </div>
-        </section>
+.ip-panel { border: 1px solid #e4e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.ip-panel legend { font-weight: 600; padding: 0 6px; }
 
-        <PanelValuasi :form="form" :opsi-raw="opsiRaw" :opsi-batch="opsiBatch" :tangki-list="tangkiList" />
+.ip-grid { display: grid; gap: 12px; }
+.ip-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.ip-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.ip-field input, .ip-field select, .ip-field textarea { padding: 7px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
+.ip-inline { display: flex; gap: 6px; }
+.ip-inline select { flex: 1; }
 
-        <div v-if="galatServer" class="p-4 rounded-lg border shadow-sm"
-            :class="galatServer.invariantMelenceng ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'">
-            <div class="flex items-start gap-3">
-                <div class="mt-0.5">
-                    <i class="pi" :class="galatServer.invariantMelenceng ? 'pi-times-circle text-red-600 text-xl' : 'pi-exclamation-triangle text-amber-600 text-xl'"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-sm mb-1" :class="galatServer.invariantMelenceng ? 'text-red-900' : 'text-amber-900'">
-                        <template v-if="galatServer.invariantMelenceng">Sistem Dihentikan (Pemeriksaan Gagal)</template>
-                        <template v-else-if="galatServer.konflikSaldo">Konflik Saldo Material</template>
-                        <template v-else>Pengajuan Ditolak</template>
-                    </h3>
-                    <p class="text-sm text-slate-700">{{ galatServer.pesan }}</p>
-                    <p v-if="galatServer.draftId" class="text-xs mt-2 italic text-slate-500">
-                        Isian tersimpan sebagai DRAFT #{{ galatServer.draftId }}.
-                    </p>
-                </div>
-            </div>
-        </div>
+.ip-matrix { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.ip-matrix th, .ip-matrix td { padding: 6px 8px; font-size: 13px; }
+.ip-matrix select, .ip-matrix input { width: 100%; padding: 6px 8px; border: 1px solid #cbd2d9; border-radius: 6px; }
 
-        <footer class="pt-4 flex justify-end">
-            <button :disabled="!bolehSimpan" @click="konfirmasi = true"
-                class="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm py-2 px-6 rounded-lg shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                <i v-if="menyimpan" class="pi pi-spinner pi-spin text-xs"></i>
-                <i v-else class="pi pi-send text-xs"></i>
-                <span v-if="menyimpan">Menyimpan...</span>
-                <span v-else>Simpan & Posting Data</span>
-            </button>
-        </footer>
+.ip-projection { font-weight: 600; background: #eff6ff; color: #1d4ed8; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+.ip-preview { background: #f8fafc; border: 1px dashed #cbd2d9; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px; overflow-x: auto; }
 
-        <DialogKonfirmasi v-if="konfirmasi" :judul="`Konfirmasi Posting ${jenis}`"
-            :pesan="`Anda akan mem-posting dokumen ${jenis} dengan hasil ${form.nama_hasil}. Setelah di-posting, saldo tangki akan bertambah dan uang tidak dapat dikembalikan secara otomatis. Lanjutkan?`"
-            @batal="konfirmasi = false" @setuju="jalankan" />
+.ip-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-        <div v-if="tampilModalTangki" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
-                <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-                    <i class="pi pi-database text-blue-600"></i>
-                    <h3 class="text-sm font-bold text-slate-800">Tambah Tangki Baru</h3>
-                </div>
-                <div class="p-5 space-y-4">
-                    <label class="block">
-                        <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Kode Tangki</span>
-                        <input v-model="formTangkiBaru.kode" type="text" placeholder="T-05"
-                            class="block w-full border-slate-300 rounded-md shadow-sm uppercase focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 px-3 bg-white" />
-                    </label>
-                    <label class="block">
-                        <span class="text-xs font-semibold text-slate-700 mb-1.5 block">Nama / Keterangan</span>
-                        <input v-model="formTangkiBaru.nama" type="text" placeholder="Tangki Blue Cw"
-                            class="block w-full border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 px-3 bg-white" />
-                    </label>
-                </div>
-                <div class="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
-                    <button type="button" @click="tampilModalTangki = false"
-                        class="px-4 py-1.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors">
-                        Batal
-                    </button>
-                    <button type="button" @click="simpanTangkiBaru" :disabled="memuatSimpanTangki"
-                        class="px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors flex items-center gap-2">
-                        <i v-if="memuatSimpanTangki" class="pi pi-spinner pi-spin"></i>
-                        <span v-if="memuatSimpanTangki">Memproses...</span>
-                        <span v-else>Simpan</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
+.ip-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.ip-modal { background: #fff; border-radius: 10px; padding: 20px; width: 400px; max-width: 90vw; }
+.ip-modal h3 { margin-top: 0; }
+</style>

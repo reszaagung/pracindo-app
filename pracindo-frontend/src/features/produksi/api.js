@@ -29,3 +29,18 @@ export const apiPratinjau = (payload) => http.post(`${P}/pratinjau/`, payload).t
 export const apiRawUntukProduksi = {
   daftar: () => http.get('v1/inventory/pool/').then((r) => r.data)
 }
+
+
+export const apiProduksi = {
+  getBatches: apiBatch.daftar,
+  getBatch: apiBatch.detail,
+  createBatch: apiBatch.buat,
+  postingBatch: apiBatch.posting,
+  voidBatch: apiBatch.void,
+
+  getTangkis: apiTangki.daftar,
+  getTangki: apiTangki.saldo,
+  getTangkiSaldo: apiTangki.saldo,
+
+  pratinjauBatch: apiPratinjau
+}

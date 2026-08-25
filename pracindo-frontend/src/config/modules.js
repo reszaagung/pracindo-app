@@ -1,4 +1,4 @@
-import { produksiModul } from '@/features/produksi/uiConfig'
+import { produksiModul } from '@/features/produksi/uiConfigProduksi'
 import { retailModul } from '@/features/retail/uiConfigRetail'
 
 export const MODUL = [
