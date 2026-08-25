@@ -110,7 +110,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { apiTangki } from '@/api/produksi'
+import { apiTangki } from '../api'
 
 const loading = ref(true)
 const errorMsg = ref('')

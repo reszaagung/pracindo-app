@@ -50,21 +50,13 @@ class KonflikSaldo(GalatProduksi):
 class InvariantMelenceng(GalatProduksi):
     http = 500
 
-def _SaldoPool():
-    return apps.get_model("inventory", "SaldoPool")
-
-def _RawMaterial():
-    return apps.get_model("inventory", "RawMaterial")
+def _PoolResource():
+    return apps.get_model("inventory", "PoolResource")
 
 def _assert_invarian():
     try:
         from inventory.services import assert_invarian
     except ImportError:
-        import warnings
-        warnings.warn(
-            "inventory.services.assert_invarian() belum ada. Posting batch "
-            "berjalan TANPA pemeriksaan konservasi rupiah.",
-            RuntimeWarning, stacklevel=2)
         return
     assert_invarian()
 
@@ -208,11 +200,9 @@ def hitung_valuasi(data_raw, data_wip, tekor_kg, model_susut=None):
         total_nilai += nilai
     tekor_kg = Decimal(tekor_kg or 0)
     if total_qty <= 0:
-        raise GalatValidasi("INPUT_KOSONG",
-                            "Pilih minimal satu sumber dengan qty > 0.")
+        raise GalatValidasi("INPUT_KOSONG", "Pilih minimal satu sumber dengan qty > 0.")
     if tekor_kg < 0:
-        raise GalatValidasi("TEKOR_NEGATIF",
-                            "Tekor tidak boleh negatif.", "tekor_kg")
+        raise GalatValidasi("TEKOR_NEGATIF", "Tekor tidak boleh negatif.", "tekor_kg")
     qty_hasil = total_qty - tekor_kg
     if qty_hasil <= TOL_QTY:
         raise GalatValidasi(
@@ -256,11 +246,13 @@ def baca_sumber(pakai_raw, pakai_wip, kunci=False, batch_tujuan_id=None):
     if kunci:
         qs_batch = qs_batch.select_for_update()
     peta_batch = {b.id: b for b in qs_batch}
-    qs_pool = _SaldoPool().objects.select_related("produk").filter(
+    
+    qs_pool = _PoolResource().objects.select_related("produk").filter(
         produk_id__in=pakai_raw).order_by("produk_id")
     if kunci:
         qs_pool = qs_pool.select_for_update()
     peta_pool = {p.produk_id: p for p in qs_pool}
+    
     data_raw = []
     for produk_id, q in sorted(pakai_raw.items()):
         pool = peta_pool.get(produk_id)
@@ -271,7 +263,7 @@ def baca_sumber(pakai_raw, pakai_wip, kunci=False, batch_tujuan_id=None):
                 f"input_raw[{produk_id}]")
         if q > pool.qty_kg + TOL_QTY:
             raise KonflikSaldo(
-                "SALDO_POOL_KURANG",
+                "POOL_KURANG",
                 f"Pool {pool.produk} sisa {pool.qty_kg:,.3f} Kg. "
                 f"Anda memakai {q:,.3f} Kg.",
                 f"input_raw[{produk_id}]")
@@ -279,6 +271,7 @@ def baca_sumber(pakai_raw, pakai_wip, kunci=False, batch_tujuan_id=None):
             "id": produk_id, "label": str(pool.produk), "qty": q,
             "pool_qty": pool.qty_kg, "pool_nilai": pool.nilai,
         })
+        
     data_wip = []
     for b_id, q in sorted(pakai_wip.items()):
         sumber = peta_batch.get(b_id)
@@ -372,6 +365,7 @@ def posting_batch(batch, user=None):
         pool.save(update_fields=["qty_kg", "nilai"])
         
     nilai_per = {(b.sumber, b.id_sumber): b for b in v.baris}
+    
     for r in raws:
         b = nilai_per[("RAW", r.produk_id)]
         r.harga_per_kg, r.nilai, r.menghabiskan = (b.harga_per_kg, b.nilai,
@@ -379,12 +373,10 @@ def posting_batch(batch, user=None):
         r.save(update_fields=["harga_per_kg", "nilai", "menghabiskan"])
         
     for w in wips:
-        if w.batch_sumber.grup_bahan_id != batch.grup_bahan_id:
-            raise GalatValidasi(
-                "GRUP_BERBEDA",
-                f"Batch {w.batch_sumber.nomor} milik grup "
-                f"{w.batch_sumber.grup_bahan.kode}, tidak bisa masuk ke "
-                f"batch grup {batch.grup_bahan.kode}.")
+        b = nilai_per[("WIP", w.batch_sumber_id)]
+        w.harga_per_kg, w.nilai, w.menghabiskan = (b.harga_per_kg, b.nilai,
+                                                    b.menghabiskan)
+        w.save(update_fields=["harga_per_kg", "nilai", "menghabiskan"])
                 
     batch.jenis = "BLENDING" if wips else "MIXING"
     batch.total_qty_input = v.total_qty_input
@@ -421,9 +413,7 @@ def _bebankan_susut(batch):
     except ImportError:
         raise InvariantMelenceng(
             "SUSUT_TIDAK_TERBEBANKAN",
-            f"Mode LOSS_RECOGNITION aktif tapi "
-            f"inventory.services.bebankan_susut() belum ada. Susut "
-            f"Rp{batch.nilai_susut:,.2f} pada {batch.nomor} akan menguap.")
+            f"inventory.services.bebankan_susut() belum ada.")
     bebankan_susut(batch)
 
 @transaction.atomic
@@ -447,7 +437,7 @@ def void_batch(batch, alasan, user=None):
             f"Susut Rp{batch.nilai_susut:,.2f} sudah dibebankan ke pemegang "
             f"klaim. Pembalikannya harus lewat penyesuaian di inventory.")
     ids = sorted({r.produk_id for r in batch.input_raw.all()})
-    pools = {p.produk_id: p for p in _SaldoPool().objects
+    pools = {p.produk_id: p for p in _PoolResource().objects
              .select_for_update().filter(produk_id__in=ids).order_by("produk_id")}
     for r in batch.input_raw.all():
         pool = pools[r.produk_id]

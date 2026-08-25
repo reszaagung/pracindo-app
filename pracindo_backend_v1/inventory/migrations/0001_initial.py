@@ -99,7 +99,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='SaldoPool',
+            name='RawMutasiEntity',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('dibuat_pada', models.DateTimeField(auto_now_add=True)),
@@ -109,7 +109,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 'verbose_name_plural': 'Saldo pool',
-                'db_table': 'inventory_saldo_pool',
+                'db_table': 'inventory_raw_mutasi_entity',
                 'ordering': ['grup_bahan', 'produk'],
             },
         ),

@@ -1,22 +1,6 @@
-"""
-Serializers Produksi — produksi/serializers.py
-
-KLIEN TIDAK PERNAH MENGIRIM HARGA
-
-    Payload hanya memuat pengenal dan qty. Harga dan nilai dihitung
-    server dari saldo saat posting. Menerima harga dari klien berarti
-    menerima harga yang sudah basi, atau yang dikarang -- dan dua tempat
-    yang menghitung hal sama akan berbeda; pertanyaannya hanya kapan.
-
-DUPLIKAT DITOLAK SEBELUM VALIDASI SALDO
-
-    Dua baris dengan sumber sama masing-masing lolos pemeriksaan
-    terhadap saldo PENUH, dan bersama-sama menarik dua kali lipat dari
-    yang ada. Constraint unik di DB adalah backstop-nya; ini pertahanan
-    pertamanya, dan yang memberi pesan yang bisa dibaca operator.
-"""
 from decimal import Decimal
 from django.utils import timezone
+from django.db import transaction
 from rest_framework import serializers
 from .models import (
     Batch, BatchInputRaw, StatusBatch, Tangki, TransferWip, nomor_baru
@@ -30,24 +14,25 @@ class TangkiSerializer(serializers.ModelSerializer):
         fields = ["id", "kode", "nama", "aktif"]
 
 class InputRawSerializer(serializers.Serializer):
-    raw = serializers.CharField(required=True)  # Menerima string kode/ID dari Vue
+    raw = serializers.CharField(required=True)
     qty_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=True, min_value=QTY_MIN)
 
     def to_internal_value(self, data):
-        # Mencegah error jika qty_kg kosong/null dari Vue
-        if 'qty_kg' not in data or not data['qty_kg']:
-            data['qty_kg'] = 0
-        return super().to_internal_value(data)
+        mutable_data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'qty_kg' not in mutable_data or not mutable_data['qty_kg']:
+            mutable_data['qty_kg'] = 0
+        return super().to_internal_value(mutable_data)
 
 class InputWipSerializer(serializers.Serializer):
-    batch = serializers.CharField(required=True) # Menangkap nomor batch string dari Vue
+    batch = serializers.CharField(required=True)
     qty_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=True, min_value=QTY_MIN)
     tangki_asal = serializers.IntegerField(required=False, allow_null=True)
 
     def to_internal_value(self, data):
-        if 'qty_kg' not in data or not data['qty_kg']:
-            data['qty_kg'] = 0
-        return super().to_internal_value(data)
+        mutable_data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'qty_kg' not in mutable_data or not mutable_data['qty_kg']:
+            mutable_data['qty_kg'] = 0
+        return super().to_internal_value(mutable_data)
 
 def _validasi_input(data):
     raws = data.get("materials") or []
@@ -62,6 +47,15 @@ def _validasi_input(data):
             "pesan": "Pilih minimal satu sumber bahan baku atau WIP dengan kuantitas lebih dari 0.",
         })
         
+    if valid_wips:
+        nomor_wip = [w["batch"] for w in valid_wips]
+        found_wip = set(Batch.objects.filter(nomor__in=nomor_wip).values_list("nomor", flat=True))
+        missing_wip = [n for n in nomor_wip if n not in found_wip]
+        if missing_wip:
+            raise serializers.ValidationError({
+                "wip_sources": f"Batch WIP {', '.join(missing_wip)} tidak ditemukan."
+            })
+            
     return {"materials": valid_raws, "wip_sources": valid_wips}
 
 class PratinjauRequestSerializer(serializers.Serializer):
@@ -72,7 +66,8 @@ class PratinjauRequestSerializer(serializers.Serializer):
     wip_sources = InputWipSerializer(many=True, required=False, default=list)
 
     def validate(self, data):
-        return _validasi_input(data)
+        data.update(_validasi_input(data))
+        return data
 
 class BatchCreateSerializer(serializers.Serializer):
     tangki_tujuan = serializers.PrimaryKeyRelatedField(
@@ -101,45 +96,40 @@ class BatchCreateSerializer(serializers.Serializer):
         req = self.context.get("request")
         user = getattr(req, "user", None)
         
-        # Menerima nomor batch dari Vue atau membuat baru jika kosong
         nomor_batch = validated.get("batch")
         if not nomor_batch:
             nomor_batch = nomor_baru(awalan, timezone.now().strftime("%Y%m"))
 
-        batch = Batch.objects.create(
-            nomor=nomor_batch,
-            jenis=jenis,
-            nama_hasil=validated["nama_hasil"],
-            tangki=validated["tangki_tujuan"],
-            tekor_kg=validated.get("tekor_kg") or Decimal("0.000"),
-            catatan=validated.get("catatan", ""),
-            status=StatusBatch.DRAFT,
-            created_by=user if getattr(user, "is_authenticated", False) else None,
-        )
+        with transaction.atomic():
+            batch = Batch.objects.create(
+                nomor=nomor_batch,
+                jenis=jenis,
+                nama_hasil=validated["nama_hasil"],
+                tangki=validated["tangki_tujuan"],
+                tekor_kg=validated.get("tekor_kg") or Decimal("0.000"),
+                catatan=validated.get("catatan", ""),
+                status=StatusBatch.DRAFT,
+                created_by=user if getattr(user, "is_authenticated", False) else None,
+            )
 
-        # Menyimpan baris material
-        if raws:
-            # Karena frontend mengirim string 'raw' (kode/ID), pastikan ini selaras dengan DB
-            # Asumsi: frontend mengirim ID integer yang di-cast sebagai string
-            BatchInputRaw.objects.bulk_create([
-                BatchInputRaw(batch=batch, produk_id=int(r["raw"]), qty_kg=r["qty_kg"])
-                for r in raws
-            ])
-            
-        # Menyimpan baris WIP dengan mencari ID Batch berdasarkan string nomor batch
-        if wips:
-            wip_objects = []
-            for w in wips:
-                try:
-                    batch_sumber = Batch.objects.get(nomor=w["batch"])
-                    wip_objects.append(TransferWip(
+            if raws:
+                BatchInputRaw.objects.bulk_create([
+                    BatchInputRaw(batch=batch, produk_id=int(r["raw"]), qty_kg=r["qty_kg"])
+                    for r in raws
+                ])
+                
+            if wips:
+                nomor_wip = [w["batch"] for w in wips]
+                b_sumber_map = {b.nomor: b for b in Batch.objects.filter(nomor__in=nomor_wip)}
+                
+                wip_objects = [
+                    TransferWip(
                         batch_tujuan=batch, 
-                        batch_sumber_id=batch_sumber.id,
+                        batch_sumber_id=b_sumber_map[w["batch"]].id,
                         qty_kg=w["qty_kg"]
-                    ))
-                except Batch.DoesNotExist:
-                    raise serializers.ValidationError({"wip_sources": f"Batch WIP {w['batch']} tidak ditemukan."})
-            TransferWip.objects.bulk_create(wip_objects)
+                    ) for w in wips
+                ]
+                TransferWip.objects.bulk_create(wip_objects)
 
         return batch
 

@@ -1,7 +1,6 @@
 // ============================================================
 // Konstanta & helper bersama untuk modul Produksi
-// (dipakai BatchList.vue, BatchDetail.vue, dan komponen lain
-// di bawah folder produksi supaya tidak duplikat)
+// (dipakai BatchList.vue, BatchDetail.vue, dan komponen lain)
 // ============================================================
 
 // ---- Kolom tabel Riwayat Batch ----
@@ -43,7 +42,7 @@ export const STATUS_BATCH_LABELS = {
   VOID: 'Void'
 }
 
-// ---- Warna badge status (samakan dengan BatchDetail.vue) ----
+// ---- Warna badge status ----
 export function getStatusBadgeClass(status) {
   switch (status) {
     case 'POSTED':
@@ -56,9 +55,7 @@ export function getStatusBadgeClass(status) {
   }
 }
 
-// ---- Formatter bersama (opsional — belum dipakai komponen existing,
-// tinggal ganti import kalau nanti mau hapus duplikasi formatKg/
-// formatRupiah/formatTanggal lokal di BatchList/BatchDetail/InputProduksi) ----
+// ---- Formatter bersama ----
 export function formatKg(v) {
   return Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
@@ -76,4 +73,18 @@ export function formatTanggal(v) {
     ' ' +
     d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   )
+}
+
+export const produksiModul = {
+    id: 'produksi',
+    nama: 'Produksi',
+    ringkas: 'Input produksi, pencampuran batch, dan monitor tangki',
+    ikon: 'produksi',
+    rute: '/produksi/batch',
+    siap: true,
+    menu: [
+        { label: 'Riwayat Batch', rute: '/produksi/batch' },
+        { label: 'Input Baru', rute: '/produksi/batch/buat' },
+        { label: 'Monitor Tangki', rute: '/produksi/tangki' }
+    ]
 }

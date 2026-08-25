@@ -16,7 +16,7 @@ export default [
       {
         path: 'batch/buat',
         name: 'produksi-batch-buat',
-        component: () => import('./views/BatchForm.vue')
+        component: () => import('./views/InputProduksi.vue')
       },
       {
         path: 'batch/:id',

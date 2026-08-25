@@ -1,16 +1,3 @@
-"""
-Endpoint Produksi — produksi/views.py
-
-PEMETAAN GALAT KE HTTP
-
-    GalatValidasi      422  payload tidak masuk akal
-    KonflikSaldo       409  payload masuk akal, kenyataan menolak
-    InvariantMelenceng 500  rupiah tercipta/menguap, transaksi di-rollback
-
-    Menangkap semuanya sebagai 409 -- seperti versi sebelumnya --
-    membuat frontend tidak bisa membedakan "perbaiki isian" dari
-    "hubungi admin".
-"""
 from dataclasses import asdict
 from decimal import Decimal
 from rest_framework import status, viewsets
@@ -140,7 +127,6 @@ def pratinjau_batch(request):
     
     d = s.validated_data
     
-    # Menerjemahkan format 'materials' dan 'wip_sources' ke dictionary untuk services
     pakai_raw = {int(r["raw"]): r["qty_kg"] for r in d.get("materials", []) if r.get("raw") and r.get("qty_kg", 0) > 0}
     
     pakai_wip = {}

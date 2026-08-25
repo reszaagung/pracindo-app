@@ -3,14 +3,13 @@
     <header class="ip-header">
       <h1>Modul Produksi (Mixing &amp; Blending)</h1>
       <p v-if="mode === 'form'" class="ip-subtitle">
-        {{ editingBatchId ? 'Ubah Draft Batch' : 'Buat Batch Baru' }} —
+        {{ editingBatchId ? 'Ubah Draft Batch' : 'Buat Batch Baru' }}
         {{ jenisProduksi === JENIS.MIXING ? 'Mixing' : 'Blending' }}
       </p>
     </header>
 
     <p v-if="errorMsg" class="ip-alert ip-alert--error">{{ errorMsg }}</p>
 
-    <!-- ================= MODE: LIST ================= -->
     <section v-if="mode === 'list'" class="ip-list">
       <div class="ip-toolbar">
         <div class="ip-filter">
@@ -105,23 +104,21 @@
       </div>
     </section>
 
-    <!-- ================= MODE: FORM ================= -->
     <section v-else class="ip-form">
       <div class="ip-tabs" v-if="!editingBatchId">
         <button
           class="ip-tab"
           :class="{ 'ip-tab--active': jenisProduksi === JENIS.MIXING }"
           @click="gantiJenisProduksi(JENIS.MIXING)"
-        >1. Mixing (Bahan Baku → Tangki)</button>
+        >1. Mixing (Bahan Baku &rarr; Tangki)</button>
         <button
           class="ip-tab"
           :class="{ 'ip-tab--active': jenisProduksi === JENIS.BLENDING }"
           @click="gantiJenisProduksi(JENIS.BLENDING)"
-        >2. Blending (WIP Tangki + Bahan Baku → Tangki)</button>
+        >2. Blending (WIP Tangki + Bahan Baku &rarr; Tangki)</button>
       </div>
 
       <div v-if="loadingForm" class="ip-empty">Memuat data...</div>
-
       <template v-else>
         <fieldset class="ip-panel">
           <legend>Telemetri Produksi</legend>
@@ -130,7 +127,6 @@
               <span>Nama Hasil</span>
               <input v-model="form.nama_hasil" type="text" placeholder="mis. Sabun Cair Lemon" />
             </label>
-
             <label class="ip-field">
               <span>Tangki Tujuan</span>
               <div class="ip-inline">
@@ -143,7 +139,6 @@
                 <button type="button" class="btn btn--icon" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
               </div>
             </label>
-
             <label class="ip-field">
               <span>Batch ID</span>
               <div class="ip-inline">
@@ -151,7 +146,6 @@
                 <button type="button" class="btn btn--icon" @click="generateNomorBatch">Auto</button>
               </div>
             </label>
-
             <label class="ip-field">
               <span>Tekor / Susut (Kg)</span>
               <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" />
@@ -189,7 +183,7 @@
                 <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
                 <td class="num">{{ formatKg(row.tersedia) }}</td>
                 <td class="num">{{ formatRupiah(row.harga) }}</td>
-                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusWipRow(row._id)">×</button></td>
+                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusWipRow(row._id)">&times;</button></td>
               </tr>
             </tbody>
           </table>
@@ -214,14 +208,16 @@
                 <td>
                   <select v-model="row.raw" @change="perbaruiTelemetriBom(row)">
                     <option value="" disabled>Pilih bahan baku</option>
-                    <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">{{ r.raw }}</option>
+                    <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">
+                      {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
+                    </option>
                   </select>
                 </td>
                 <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
                 <td class="num" :class="{ 'num--warn': row.qty > row.saldo }">{{ formatKg(row.saldo) }}</td>
                 <td class="num">{{ formatRupiah(row.harga) }}</td>
                 <td class="num">{{ formatRupiah(row.subtotal) }}</td>
-                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusBomRow(row._id)">×</button></td>
+                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusBomRow(row._id)">&times;</button></td>
               </tr>
             </tbody>
           </table>
@@ -249,7 +245,6 @@
       </template>
     </section>
 
-    <!-- ================= MODAL VOID ================= -->
     <div v-if="modalVoid.tampil" class="ip-modal-backdrop" @click.self="tutupModalVoid">
       <div class="ip-modal">
         <h3>Void Batch {{ modalVoid.batch }}</h3>
@@ -268,7 +263,7 @@
 
 <script setup>
 import { reactive } from 'vue'
-import { useInputProduksi } from './useInputProduksi'
+import { useInputProduksi } from '../composables/useInputProduksi'
 
 const {
   JENIS,
@@ -287,10 +282,8 @@ const {
   bomRows,
   wipRows,
   pratinjau,
-
   proyeksiYield,
   proyeksiHargaRata,
-
   muatDaftarBatch,
   bukaFormBaru,
   bukaFormEdit,
@@ -315,9 +308,11 @@ const {
 function formatKg(v) {
   return Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
+
 function formatRupiah(v) {
   return `Rp ${Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+
 function formatTanggal(v) {
   if (!v) return '-'
   const d = new Date(v)
@@ -342,15 +337,18 @@ async function konfirmasiHapus(batch) {
 }
 
 const modalVoid = reactive({ tampil: false, id: null, batch: '', alasan: '' })
+
 function bukaModalVoid(batch) {
   modalVoid.tampil = true
   modalVoid.id = batch.id
   modalVoid.batch = batch.batch
   modalVoid.alasan = ''
 }
+
 function tutupModalVoid() {
   modalVoid.tampil = false
 }
+
 async function konfirmasiVoid() {
   const berhasil = await voidBatch(modalVoid.id, modalVoid.alasan)
   if (berhasil) tutupModalVoid()
@@ -363,12 +361,10 @@ async function konfirmasiVoid() {
 .ip-subtitle { color: #52606d; margin: 4px 0 0; }
 .ip-alert { padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 14px; }
 .ip-alert--error { background: #fde8e8; color: #c81e1e; border: 1px solid #f8b4b4; }
-
 .ip-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
 .ip-filter { display: flex; gap: 8px; flex-wrap: wrap; }
 .ip-filter select, .ip-filter input { padding: 6px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
 .ip-actions { display: flex; gap: 8px; }
-
 .btn { padding: 7px 14px; border-radius: 6px; border: 1px solid transparent; font-size: 13px; cursor: pointer; background: #e4e7eb; color: #1f2933; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--primary { background: #2563eb; color: #fff; }
@@ -378,7 +374,6 @@ async function konfirmasiVoid() {
 .btn--ghost { background: transparent; border-color: #cbd2d9; }
 .btn--icon { padding: 6px 10px; }
 .btn--sm { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
-
 .ip-table-wrap { overflow-x: auto; border: 1px solid #e4e7eb; border-radius: 8px; }
 .ip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ip-table th, .ip-table td { padding: 10px 12px; border-bottom: 1px solid #e4e7eb; text-align: left; white-space: nowrap; }
@@ -387,37 +382,28 @@ async function konfirmasiVoid() {
 .num { text-align: right; }
 .num--warn { color: #dc2626; font-weight: 600; }
 .mono { font-family: 'Consolas', monospace; }
-
 .status { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .status--draft { background: #fef3c7; color: #92400e; }
 .status--posted { background: #d1fae5; color: #065f46; }
 .status--void { background: #fee2e2; color: #991b1b; }
-
 .ip-row-actions { display: flex; }
-
 .ip-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
 .ip-tab { padding: 10px 16px; border: 1px solid #cbd2d9; background: #f5f7fa; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; }
 .ip-tab--active { background: #fff; border-bottom-color: #fff; font-weight: 700; color: #2563eb; }
-
 .ip-panel { border: 1px solid #e4e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .ip-panel legend { font-weight: 600; padding: 0 6px; }
-
 .ip-grid { display: grid; gap: 12px; }
 .ip-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .ip-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .ip-field input, .ip-field select, .ip-field textarea { padding: 7px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
 .ip-inline { display: flex; gap: 6px; }
 .ip-inline select { flex: 1; }
-
 .ip-matrix { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
 .ip-matrix th, .ip-matrix td { padding: 6px 8px; font-size: 13px; }
 .ip-matrix select, .ip-matrix input { width: 100%; padding: 6px 8px; border: 1px solid #cbd2d9; border-radius: 6px; }
-
 .ip-projection { font-weight: 600; background: #eff6ff; color: #1d4ed8; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
 .ip-preview { background: #f8fafc; border: 1px dashed #cbd2d9; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px; overflow-x: auto; }
-
 .ip-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
-
 .ip-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .ip-modal { background: #fff; border-radius: 10px; padding: 20px; width: 400px; max-width: 90vw; }
 .ip-modal h3 { margin-top: 0; }

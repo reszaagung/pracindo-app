@@ -235,27 +235,24 @@
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiBatch } from '@/api/produksi'
+import { apiBatch } from '../api'
 import {
   BATCH_TABLE_COLUMNS,
   JENIS_BATCH_OPTIONS,
   STATUS_BATCH_OPTIONS,
   JENIS_BATCH_LABELS,
   getStatusBadgeClass
-} from '../produksiModul'
+} from '../uiConfigProduksi'
 
 const router = useRouter()
-
 const baris = ref([])
 const loading = ref(false)
 const memproses = ref(false)
 const errorMsg = ref('')
-
 const filter = reactive({ jenis: '', status: '', search: '' })
 const halaman = ref(1)
 const totalHalaman = ref(0)
 const adaHalamanBerikut = ref(false)
-
 let timerDebounce = null
 
 function alignClass(align) {
@@ -291,10 +288,8 @@ async function muatData() {
     if (filter.jenis) params.jenis = filter.jenis
     if (filter.status) params.status = filter.status
     if (filter.search) params.search = filter.search
-
     const res = await apiBatch.daftar(params)
 
-    // Mendukung dua bentuk respons: array polos, atau hasil pagination DRF ({results, count, next, previous})
     if (Array.isArray(res)) {
       baris.value = res
       totalHalaman.value = 0
@@ -302,7 +297,6 @@ async function muatData() {
     } else {
       baris.value = res?.results ?? []
       adaHalamanBerikut.value = Boolean(res?.next)
-      // Estimasi kasar jumlah halaman dari ukuran halaman saat ini.
       const pageSize = baris.value.length || 1
       totalHalaman.value = res?.count ? Math.ceil(res.count / pageSize) : 0
     }
@@ -350,7 +344,6 @@ function bukaModal(aksi, row) {
   modal.row = row
   modal.alasan = ''
   modalError.value = ''
-
   if (aksi === 'posting') {
     modal.judul = `Posting Batch ${row.batch}?`
     modal.pesan = 'Aksi ini akan memotong saldo pool bahan baku secara permanen dan tidak bisa diubah lagi.'
@@ -373,12 +366,10 @@ function tutupModal() {
 
 async function jalankanAksiModal() {
   if (!modal.row) return
-
   if (modal.aksi === 'void' && !modal.alasan.trim()) {
     modalError.value = 'Alasan void wajib diisi'
     return
   }
-
   memproses.value = true
   modalError.value = ''
   try {

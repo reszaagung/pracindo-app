@@ -1,5 +1,4 @@
 import { http } from '@/utils/http'
-
 const P = 'v1/produksi'
 
 export const apiTangki = {
@@ -30,17 +29,14 @@ export const apiRawUntukProduksi = {
   daftar: () => http.get('v1/inventory/pool/').then((r) => r.data)
 }
 
-
 export const apiProduksi = {
   getBatches: apiBatch.daftar,
   getBatch: apiBatch.detail,
   createBatch: apiBatch.buat,
   postingBatch: apiBatch.posting,
   voidBatch: apiBatch.void,
-
   getTangkis: apiTangki.daftar,
   getTangki: apiTangki.saldo,
   getTangkiSaldo: apiTangki.saldo,
-
   pratinjauBatch: apiPratinjau
 }

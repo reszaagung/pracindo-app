@@ -1,28 +1,19 @@
 from decimal import Decimal
-
 from rest_framework import serializers
-
 from .models import (
-    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas, SaldoPool,
-    StatusDokumen,
+    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas, RawMutasiEntity,
+    StatusDokumen, PoolResource
 )
 
-
-
 class EntitasRingkasSerializer(serializers.Serializer):
-    """Bacaan core.Entitas untuk selector. Bukan CRUD."""
     id = serializers.IntegerField(read_only=True)
     kode = serializers.CharField(read_only=True)
     nama = serializers.CharField(read_only=True)
-    grup_bahan = serializers.IntegerField(source="grup_bahan_id",
-                                          read_only=True)
-    grup_kode = serializers.CharField(source="grup_bahan.kode",
-                                      read_only=True)
+    grup_bahan = serializers.IntegerField(source="grup_bahan_id", read_only=True)
+    grup_kode = serializers.CharField(source="grup_bahan.kode", read_only=True)
     aktif = serializers.BooleanField(read_only=True)
 
-
 class ProdukRingkasSerializer(serializers.Serializer):
-    """Bacaan master.Produk untuk selector. Bukan CRUD."""
     id = serializers.IntegerField(read_only=True)
     kode = serializers.CharField(read_only=True)
     nama = serializers.CharField(read_only=True)
@@ -32,27 +23,32 @@ class KemasanSerializer(serializers.ModelSerializer):
         model = Kemasan
         fields = ["id", "nama", "bobot_kg", "aktif"]
 
-
-class SaldoPoolSerializer(serializers.ModelSerializer):
+class RawMutasiEntitySerializer(serializers.ModelSerializer):
     grup_kode = serializers.CharField(source="grup_bahan.kode", read_only=True)
     produk_kode = serializers.CharField(source="produk.kode", read_only=True)
     produk_nama = serializers.CharField(source="produk.nama", read_only=True)
-    harga_rata = serializers.DecimalField(max_digits=20, decimal_places=6,
-                                          read_only=True)
+    harga_rata = serializers.DecimalField(max_digits=20, decimal_places=6, read_only=True)
 
     class Meta:
-        model = SaldoPool
+        model = RawMutasiEntity
         fields = ["id", "grup_bahan", "grup_kode", "produk", "produk_kode",
-                  "produk_nama", "qty_kg", "nilai", "harga_rata",
-                  "diubah_pada"]
+                  "produk_nama", "qty_kg", "nilai", "harga_rata", "diubah_pada"]
         read_only_fields = fields
 
+class PoolResourceSerializer(serializers.ModelSerializer):
+    produk_kode = serializers.CharField(source="produk.kode", read_only=True)
+    produk_nama = serializers.CharField(source="produk.nama", read_only=True)
+    harga_rata = serializers.DecimalField(max_digits=20, decimal_places=6, read_only=True)
+
+    class Meta:
+        model = PoolResource
+        fields = ["id", "produk", "produk_kode", "produk_nama", "qty_kg", "nilai", "harga_rata", "diubah_pada"]
+        read_only_fields = fields
 
 class SaldoEntitasSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)
     entitas_nama = serializers.CharField(source="entitas.nama", read_only=True)
-    grup_kode = serializers.CharField(source="entitas.grup_bahan.kode",
-                                      read_only=True)
+    grup_kode = serializers.CharField(source="entitas.grup_bahan.kode", read_only=True)
     status = serializers.SerializerMethodField()
 
     class Meta:
@@ -88,37 +84,28 @@ class PembelianSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         inst = self.instance
-
         if inst and inst.status != StatusDokumen.DRAFT:
             raise serializers.ValidationError({
                 "kode": "DOKUMEN_TERKUNCI",
-                "pesan": f"Pembelian {inst.nomor} sudah {inst.status} dan "
-                         f"tidak bisa diubah.",
+                "pesan": f"Pembelian {inst.nomor} sudah {inst.status} dan tidak bisa diubah.",
             })
-
         qty = data.get("qty_kg", getattr(inst, "qty_kg", None))
         hrg = data.get("harga_per_kg", getattr(inst, "harga_per_kg", None))
         if qty is not None and qty <= 0:
-            raise serializers.ValidationError(
-                {"qty_kg": "Qty harus lebih dari 0."})
+            raise serializers.ValidationError({"qty_kg": "Qty harus lebih dari 0."})
         if hrg is not None and hrg < 0:
-            raise serializers.ValidationError(
-                {"harga_per_kg": "Harga tidak boleh negatif."})
-
+            raise serializers.ValidationError({"harga_per_kg": "Harga tidak boleh negatif."})
         ent = data.get("entitas") or getattr(inst, "entitas", None)
         if ent is not None and not ent.aktif:
             raise serializers.ValidationError({
-                "entitas": f"Entitas {ent.kode} nonaktif dan tidak bisa "
-                           f"menyetor.",
+                "entitas": f"Entitas {ent.kode} nonaktif dan tidak bisa menyetor.",
             })
         return data
-
 
 class PackingSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)
     batch_nomor = serializers.CharField(source="batch.nomor", read_only=True)
-    batch_hasil = serializers.CharField(source="batch.nama_hasil",
-                                        read_only=True)
+    batch_hasil = serializers.CharField(source="batch.nama_hasil", read_only=True)
     kemasan_nama = serializers.CharField(source="kemasan.nama", read_only=True)
 
     class Meta:
@@ -137,36 +124,25 @@ class PackingSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         inst = self.instance
-
         if inst and inst.status != StatusDokumen.DRAFT:
             raise serializers.ValidationError({
                 "kode": "DOKUMEN_TERKUNCI",
                 "pesan": f"Packing {inst.nomor} sudah {inst.status}.",
             })
-
         for f in ("qty_kg", "total_unit"):
             v = data.get(f, getattr(inst, f, None))
             if v is not None and v <= 0:
-                raise serializers.ValidationError(
-                    {f: f"{f} harus lebih dari 0."})
-
+                raise serializers.ValidationError({f: f"{f} harus lebih dari 0."})
         ent = data.get("entitas") or getattr(inst, "entitas", None)
         batch = data.get("batch") or getattr(inst, "batch", None)
         if ent is not None and not ent.aktif:
-            raise serializers.ValidationError(
-                {"entitas": f"Entitas {ent.kode} nonaktif."})
+            raise serializers.ValidationError({"entitas": f"Entitas {ent.kode} nonaktif."})
         if ent is not None and batch is not None:
             if batch.grup_bahan_id != ent.grup_bahan_id:
                 raise serializers.ValidationError({
-                    "batch": f"Batch {batch.nomor} milik grup "
-                             f"{batch.grup_bahan.kode}, sementara "
-                             f"{ent.kode} termasuk grup "
-                             f"{ent.grup_bahan.kode}.",
+                    "batch": f"Batch {batch.nomor} milik grup {batch.grup_bahan.kode}, sementara {ent.kode} termasuk grup {ent.grup_bahan.kode}.",
                 })
         return data
-
-
-
 
 class MutasiKlaimSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)
@@ -177,4 +153,4 @@ class MutasiKlaimSerializer(serializers.ModelSerializer):
         fields = ["id", "entitas", "entitas_kode", "grup_bahan", "grup_kode",
                   "tipe", "arah", "qty_kg", "nilai", "ref_type", "ref_id",
                   "keterangan", "waktu", "dibuat_pada", "dibuat_oleh"]
-        read_only_fields = fields      
+        read_only_fields = fields

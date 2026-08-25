@@ -85,14 +85,14 @@ class Migration(migrations.Migration):
             field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='saldo_klaim', to='core.entitas'),
         ),
         migrations.AddField(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             name='grup_bahan',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='saldo_pool', to='core.grupbahan'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='raw_mutasi_entity', to='core.grupbahan'),
         ),
         migrations.AddField(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             name='produk',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='saldo_pool', to='master.produk'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='raw_mutasi_entity', to='master.produk'),
         ),
         migrations.AddIndex(
             model_name='mutasiklaim',
@@ -155,19 +155,19 @@ class Migration(migrations.Migration):
             constraint=models.CheckConstraint(condition=models.Q(models.Q(('sumber', 'PENERIMAAN'), _negated=True), ('penerimaan_item__isnull', False), _connector='OR'), name='ck_beli_penerimaan_ada_jejak'),
         ),
         migrations.AddConstraint(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             constraint=models.UniqueConstraint(fields=('grup_bahan', 'produk'), name='inv_pool_unik_per_grup'),
         ),
         migrations.AddConstraint(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             constraint=models.CheckConstraint(condition=models.Q(('qty_kg__gte', 0)), name='inv_pool_qty_non_negatif'),
         ),
         migrations.AddConstraint(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             constraint=models.CheckConstraint(condition=models.Q(('nilai__gte', 0)), name='inv_pool_nilai_non_negatif'),
         ),
         migrations.AddConstraint(
-            model_name='saldopool',
+            model_name='RawMutasiEntity',
             constraint=models.CheckConstraint(condition=models.Q(models.Q(('qty_kg', 0), _negated=True), ('nilai', 0), _connector='OR'), name='inv_pool_kosong_tanpa_nilai'),
         ),
     ]
