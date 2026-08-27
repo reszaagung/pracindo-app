@@ -102,7 +102,7 @@ def _kunci_tangki(tangki_id):
         raise GalatProduksi(f"Tangki {t.kode} nonaktif.")
     return t
 
-
+@transaction.atomic
 def _nomor_batch(jenis, tanggal):
     """
     Penomoran lokal, bukan lewat core.CounterDokumen — Batch tidak punya

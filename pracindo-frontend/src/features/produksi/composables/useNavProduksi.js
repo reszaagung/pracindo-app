@@ -7,13 +7,6 @@ import { useRoute } from 'vue-router'
  */
 const MENU_PRODUKSI = [
   {
-    id: 'batch-list',
-    label: 'Riwayat Batch',
-    ikon: 'pi-history',
-    rute: '/produksi/batch',
-    activate: true
-  },
-  {
     id: 'batch-buat',
     label: 'Input Baru',
     ikon: 'pi-plus-circle',

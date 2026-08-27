@@ -8,7 +8,7 @@ from core.models import CounterDokumen, Entitas
 from master.models import Produk
 from . import serializers as ser
 from . import services
-from .models import Kemasan, MutasiKlaim, Packing, Pembelian, RawMutasiEntity, StatusDokumen, rp
+from .models import Kemasan, MutasiKlaim, Packing, Pembelian, PoolResource, StatusDokumen, rp
 from .permissions import AksesInventory, SupervisorInventory
 
 MODUL = "inventory"
@@ -183,19 +183,18 @@ def _int_atau_none(nilai):
 
 @api_view(["GET"])
 @permission_classes([AksesInventory])
-def raw_mutasi_list(request):
-    return Response(services.get_raw_mutasi_entity_all(_int_atau_none(request.query_params.get("grup"))))
+def pool_list(request):
+    """Menggantikan raw_mutasi_list lama, kini menarik dari PoolResource global."""
+    return Response(services.get_pool_resource_all())
 
 @api_view(["GET"])
 @permission_classes([AksesInventory])
 def pool_kartu_stok(request, produk_id):
-    grup = _int_atau_none(request.query_params.get("grup"))
-    if grup is None:
-        return Response({"kode": "GRUP_WAJIB", "detail": "Parameter `grup` wajib dan harus berupa angka."}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        return Response(services.get_kartu_stok(int(produk_id), grup))
-    except RawMutasiEntity.DoesNotExist:
-        return Response({"kode": "POOL_BELUM_ADA", "detail": f"Produk {produk_id} belum punya baris di grup {grup}."}, status=status.HTTP_404_NOT_FOUND)
+        # Parameter grup sudah tidak dibutuhkan di pool patungan
+        return Response(services.get_kartu_stok(int(produk_id)))
+    except PoolResource.DoesNotExist:
+        return Response({"kode": "POOL_BELUM_ADA", "detail": f"Produk {produk_id} belum punya baris di Pool."}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(["GET"])
 @permission_classes([AksesInventory])
@@ -239,7 +238,7 @@ def stok_list(request):
     lapis = (request.query_params.get("lapis") or "POOL").upper()
     grup = _int_atau_none(request.query_params.get("grup"))
     if lapis == "POOL":
-        d = services.get_raw_mutasi_entity_all(grup)
+        d = services.get_pool_resource_all()
         return Response({"lapis": "POOL", "rincian": d["rincian"], "total_nilai": d["total_nilai_pool"]})
     if lapis == "JADI":
         d = services.get_barang_jadi(grup)

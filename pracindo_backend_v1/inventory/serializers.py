@@ -1,7 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 from .models import (
-    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas, RawMutasiEntity,
+    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
     StatusDokumen, PoolResource
 )
 
@@ -22,18 +22,6 @@ class KemasanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Kemasan
         fields = ["id", "nama", "bobot_kg", "aktif"]
-
-class RawMutasiEntitySerializer(serializers.ModelSerializer):
-    grup_kode = serializers.CharField(source="grup_bahan.kode", read_only=True)
-    produk_kode = serializers.CharField(source="produk.kode", read_only=True)
-    produk_nama = serializers.CharField(source="produk.nama", read_only=True)
-    harga_rata = serializers.DecimalField(max_digits=20, decimal_places=6, read_only=True)
-
-    class Meta:
-        model = RawMutasiEntity
-        fields = ["id", "grup_bahan", "grup_kode", "produk", "produk_kode",
-                  "produk_nama", "qty_kg", "nilai", "harga_rata", "diubah_pada"]
-        read_only_fields = fields
 
 class PoolResourceSerializer(serializers.ModelSerializer):
     produk_kode = serializers.CharField(source="produk.kode", read_only=True)
@@ -137,11 +125,10 @@ class PackingSerializer(serializers.ModelSerializer):
         batch = data.get("batch") or getattr(inst, "batch", None)
         if ent is not None and not ent.aktif:
             raise serializers.ValidationError({"entitas": f"Entitas {ent.kode} nonaktif."})
-        if ent is not None and batch is not None:
-            if batch.grup_bahan_id != ent.grup_bahan_id:
-                raise serializers.ValidationError({
-                    "batch": f"Batch {batch.nomor} milik grup {batch.grup_bahan.kode}, sementara {ent.kode} termasuk grup {ent.grup_bahan.kode}.",
-                })
+        
+        # Validasi bahwa batch dan entitas memiliki grup yang sama dihapus 
+        # karena batch sekarang mengambil dari PoolResource (lintas grup).
+
         return data
 
 class MutasiKlaimSerializer(serializers.ModelSerializer):

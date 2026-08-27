@@ -67,7 +67,7 @@
               <td>{{ b.tangki_tujuan_nama || b.tangki_tujuan }}</td>
               <td>{{ b.nama_hasil }}</td>
               <td class="num">{{ formatKg(b.qty_hasil) }}</td>
-              <td class="num">{{ formatRupiah(b.harga_per_kg) }}</td>
+              <td class="num">{{ formatRupiah(b.harga_per_kg || b.harga_rata) }}</td>
               <td>
                 <span class="status" :class="`status--${(b.status || 'draft').toLowerCase()}`">
                   {{ b.status || 'DRAFT' }}
@@ -230,9 +230,8 @@
           Estimasi Harga Pokok: <strong>{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
         </div>
 
-        <div v-if="pratinjau" class="ip-preview">
-          <h3>Pratinjau Server</h3>
-          <pre>{{ pratinjau }}</pre>
+        <div class="mb-4">
+          <PratinjauValuasi v-if="pratinjau" :hasil="pratinjau" />
         </div>
 
         <div class="ip-form-actions">
@@ -240,6 +239,9 @@
           <button type="button" class="btn btn--secondary" @click="mintaPratinjau" :disabled="submitting">Pratinjau</button>
           <button type="button" class="btn btn--primary" @click="simpanDraft" :disabled="submitting">
             {{ submitting ? 'Menyimpan...' : (editingBatchId ? 'Simpan Perubahan' : 'Simpan Draft') }}
+          </button>
+          <button type="button" class="btn btn--success" @click="simpanDanPosting" :disabled="submitting">
+            Simpan &amp; Posting
           </button>
         </div>
       </template>
@@ -252,7 +254,7 @@
           <span>Alasan Void</span>
           <textarea v-model="modalVoid.alasan" rows="3" placeholder="Jelaskan alasan pembatalan batch..."></textarea>
         </label>
-        <div class="ip-form-actions">
+        <div class="ip-form-actions mt-4">
           <button class="btn btn--ghost" @click="tutupModalVoid">Batal</button>
           <button class="btn btn--danger" :disabled="submitting" @click="konfirmasiVoid">Konfirmasi Void</button>
         </div>
@@ -264,6 +266,7 @@
 <script setup>
 import { reactive } from 'vue'
 import { useInputProduksi } from '../composables/useInputProduksi'
+import PratinjauValuasi from '../components/PratinjauValuasi.vue'
 
 const {
   JENIS,
@@ -300,6 +303,7 @@ const {
   saatBatchWipDipilih,
   mintaPratinjau,
   simpanDraft,
+  simpanDanPosting,
   postingBatch,
   voidBatch,
   hapusDraft
@@ -356,55 +360,131 @@ async function konfirmasiVoid() {
 </script>
 
 <style scoped>
-.input-produksi { max-width: 1200px; margin: 0 auto; padding: 24px; font-family: 'Segoe UI', sans-serif; color: #1f2933; }
-.ip-header h1 { font-size: 20px; font-weight: 700; margin: 0; }
-.ip-subtitle { color: #52606d; margin: 4px 0 0; }
-.ip-alert { padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 14px; }
-.ip-alert--error { background: #fde8e8; color: #c81e1e; border: 1px solid #f8b4b4; }
-.ip-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-.ip-filter { display: flex; gap: 8px; flex-wrap: wrap; }
-.ip-filter select, .ip-filter input { padding: 6px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
-.ip-actions { display: flex; gap: 8px; }
-.btn { padding: 7px 14px; border-radius: 6px; border: 1px solid transparent; font-size: 13px; cursor: pointer; background: #e4e7eb; color: #1f2933; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn--primary { background: #2563eb; color: #fff; }
-.btn--secondary { background: #7c3aed; color: #fff; }
-.btn--success { background: #16a34a; color: #fff; }
-.btn--danger { background: #dc2626; color: #fff; }
-.btn--ghost { background: transparent; border-color: #cbd2d9; }
-.btn--icon { padding: 6px 10px; }
-.btn--sm { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
-.ip-table-wrap { overflow-x: auto; border: 1px solid #e4e7eb; border-radius: 8px; }
-.ip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ip-table th, .ip-table td { padding: 10px 12px; border-bottom: 1px solid #e4e7eb; text-align: left; white-space: nowrap; }
-.ip-table th { background: #f5f7fa; font-weight: 600; }
-.ip-empty { text-align: center; color: #9aa5b1; padding: 24px; }
-.num { text-align: right; }
-.num--warn { color: #dc2626; font-weight: 600; }
-.mono { font-family: 'Consolas', monospace; }
-.status { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-.status--draft { background: #fef3c7; color: #92400e; }
-.status--posted { background: #d1fae5; color: #065f46; }
-.status--void { background: #fee2e2; color: #991b1b; }
-.ip-row-actions { display: flex; }
-.ip-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-.ip-tab { padding: 10px 16px; border: 1px solid #cbd2d9; background: #f5f7fa; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; }
-.ip-tab--active { background: #fff; border-bottom-color: #fff; font-weight: 700; color: #2563eb; }
-.ip-panel { border: 1px solid #e4e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-.ip-panel legend { font-weight: 600; padding: 0 6px; }
-.ip-grid { display: grid; gap: 12px; }
+.input-produksi { max-width: 1280px; margin: 0 auto; padding: var(--space-lg); font-family: var(--font-sans); color: var(--text-primary); }
+
+.ip-header { margin-bottom: var(--space-md); }
+.ip-header h1 { font-size: clamp(1.4rem, 1.1rem + 1vw, 1.9rem); font-weight: 800; margin: 0; color: var(--text-primary); }
+.ip-subtitle { color: var(--text-secondary); margin: 4px 0 0; font-size: 0.9rem; }
+
+.ip-alert { padding: 0.8rem 1.1rem; border-radius: var(--radius-md); margin: var(--space-md) 0; font-size: 0.875rem; }
+.ip-alert--error { background: var(--danger-soft); color: #DC2626; }
+
+.ip-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-md); margin: var(--space-md) 0 var(--space-lg); }
+.ip-filter { display: flex; gap: var(--space-sm); flex-wrap: wrap; flex: 1; min-width: 0; }
+.ip-filter select, .ip-filter input {
+  padding: 0.6rem 0.9rem; border: 1.5px solid var(--border-color); background: var(--bg-input);
+  color: var(--text-primary); border-radius: var(--radius-md); font-size: 0.85rem; min-height: 42px; transition: all var(--transition);
+}
+.ip-filter select:focus, .ip-filter input:focus { outline: none; background: var(--bg-card); border-color: var(--primary); box-shadow: var(--ring-focus); }
+.ip-filter input::placeholder { color: var(--text-muted); }
+.ip-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+
+.btn {
+  padding: 0.6rem 1.15rem; border-radius: var(--radius-full); border: 1px solid var(--border-color);
+  font-size: 0.85rem; font-weight: 700; cursor: pointer; background: var(--bg-card); color: var(--text-primary);
+  transition: all var(--transition); white-space: nowrap;
+}
+.btn:hover { background: var(--bg-input); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn--primary { background: var(--primary); border: none; color: #fff; box-shadow: var(--shadow-btn); }
+.btn--primary:hover { background: var(--primary-dark); }
+
+.btn--secondary { background: var(--primary-soft); border-color: transparent; color: var(--primary-dark); }
+.btn--secondary:hover { background: var(--primary-light); }
+
+.btn--success { background: var(--success-soft); border-color: transparent; color: #15803D; }
+.btn--success:hover { background: #D3F3DD; }
+
+.btn--danger { background: var(--danger-soft); border-color: transparent; color: #DC2626; }
+.btn--danger:hover { background: #FBD5D5; }
+
+.btn--ghost { background: transparent; border-color: var(--border-color); color: var(--text-secondary); }
+.btn--ghost:hover { background: var(--bg-input); color: var(--text-primary); }
+
+.btn--icon { padding: 0.6rem 0.75rem; border-radius: var(--radius-md); }
+.btn--sm { padding: 0.35rem 0.7rem; font-size: 0.75rem; margin-right: 4px; border-radius: var(--radius-full); }
+
+.ip-table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card); }
+.ip-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.ip-table th, .ip-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
+.ip-table th { background: var(--bg-input); color: var(--text-secondary); font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.ip-table tbody tr { transition: background var(--transition); }
+.ip-table tbody tr:hover { background: var(--bg-input); }
+.ip-table tbody tr:last-child td { border-bottom: none; }
+.ip-empty { text-align: center; color: var(--text-muted); padding: var(--space-xl); }
+.num { text-align: right; font-family: var(--font-mono); }
+.num--warn { color: #DC2626; font-weight: 700; }
+.mono { font-family: var(--font-mono); }
+
+.status { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: var(--radius-full); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.status--draft { background: var(--warning-soft); color: #B45309; }
+.status--posted { background: var(--success-soft); color: #15803D; }
+.status--void { background: var(--danger-soft); color: #DC2626; }
+
+.ip-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.ip-tabs { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); overflow-x: auto; }
+.ip-tab {
+  padding: 0.7rem 1.1rem; border: 1.5px solid var(--border-color); background: var(--bg-card);
+  color: var(--text-secondary); border-radius: var(--radius-full); cursor: pointer;
+  font-size: 0.82rem; font-weight: 700; white-space: nowrap; transition: all var(--transition);
+}
+.ip-tab:hover { border-color: var(--border-strong); }
+.ip-tab--active { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--shadow-btn); }
+
+.ip-panel { border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-lg); margin-bottom: var(--space-lg); background: var(--bg-card); box-shadow: var(--shadow-card); }
+.ip-panel legend { font-weight: 800; padding: 0 8px; color: var(--text-primary); font-size: 0.88rem; }
+
+.ip-grid { display: grid; gap: var(--space-md); }
 .ip-grid--4 { grid-template-columns: repeat(4, 1fr); }
-.ip-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.ip-field input, .ip-field select, .ip-field textarea { padding: 7px 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 13px; }
+
+.ip-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.ip-field span { color: var(--text-secondary); font-weight: 600; }
+.ip-field input, .ip-field select, .ip-field textarea {
+  padding: 0.6rem 0.9rem; border: 1.5px solid var(--border-color); background: var(--bg-input);
+  color: var(--text-primary); border-radius: var(--radius-md); font-size: 0.85rem; transition: all var(--transition);
+}
+.ip-field input:focus, .ip-field select:focus, .ip-field textarea:focus { outline: none; background: var(--bg-card); border-color: var(--primary); box-shadow: var(--ring-focus); }
 .ip-inline { display: flex; gap: 6px; }
-.ip-inline select { flex: 1; }
-.ip-matrix { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-.ip-matrix th, .ip-matrix td { padding: 6px 8px; font-size: 13px; }
-.ip-matrix select, .ip-matrix input { width: 100%; padding: 6px 8px; border: 1px solid #cbd2d9; border-radius: 6px; }
-.ip-projection { font-weight: 600; background: #eff6ff; color: #1d4ed8; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
-.ip-preview { background: #f8fafc; border: 1px dashed #cbd2d9; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px; overflow-x: auto; }
-.ip-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.ip-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.ip-modal { background: #fff; border-radius: 10px; padding: 20px; width: 400px; max-width: 90vw; }
-.ip-modal h3 { margin-top: 0; }
+.ip-inline select { flex: 1; min-width: 0; }
+
+.ip-matrix { width: 100%; border-collapse: collapse; margin-bottom: var(--space-sm); }
+.ip-matrix th, .ip-matrix td { padding: 0.55rem 0.6rem; font-size: 0.82rem; }
+.ip-matrix th { color: var(--text-secondary); font-weight: 700; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.ip-matrix select, .ip-matrix input {
+  width: 100%; padding: 0.5rem 0.7rem; border: 1.5px solid var(--border-color);
+  background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); transition: all var(--transition);
+}
+.ip-matrix select:focus, .ip-matrix input:focus { outline: none; background: var(--bg-card); border-color: var(--primary); box-shadow: var(--ring-focus); }
+
+.ip-projection {
+  font-weight: 700; background: var(--primary-soft); border: 1px solid var(--primary-light);
+  color: var(--text-primary); padding: 0.85rem 1.1rem; border-radius: var(--radius-md); margin-bottom: var(--space-lg); font-size: 0.9rem;
+}
+.ip-projection strong { color: var(--primary-dark); font-family: var(--font-mono); }
+
+.ip-form-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); flex-wrap: wrap; }
+
+.ip-modal-backdrop { position: fixed; inset: 0; background: rgba(26,34,51,0.45); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: var(--space-md); }
+.ip-modal { background: var(--bg-card); border-radius: var(--radius-lg); padding: var(--space-lg); width: 420px; max-width: 100%; box-shadow: 0 20px 60px rgba(17,24,39,0.25); }
+.ip-modal h3 { margin-top: 0; color: var(--text-primary); }
+
+.mt-4 { margin-top: 1rem; }
+.mb-4 { margin-bottom: 1rem; }
+
+@media (max-width: 1024px) { .ip-grid--4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) {
+  .input-produksi { padding: var(--space-md); }
+  .ip-toolbar { flex-direction: column; align-items: stretch; }
+  .ip-filter { flex-direction: column; }
+  .ip-actions { flex-direction: column; }
+  .ip-actions .btn { width: 100%; }
+  .ip-grid--4 { grid-template-columns: 1fr; }
+  .ip-form-actions { flex-direction: column-reverse; }
+  .ip-form-actions .btn { width: 100%; }
+  .ip-modal { width: 100%; }
+}
+@media (max-width: 480px) { .ip-header h1 { font-size: 1.25rem; } }
 </style>

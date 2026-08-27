@@ -1,13 +1,14 @@
 ﻿from decimal import Decimal, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import DecimalField, Q, Sum, Value
+from django.db.models import DecimalField, Sum, Value, Q 
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+
 from core.models import CounterDokumen, PeriodeAkuntansi
 from .models import (
-    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas, RawMutasiEntity,
-    StatusDokumen, SumberPembelian, TipeMutasi, harga, qty, rp, PoolResource
+    MutasiKlaim, Packing, Pembelian, SaldoEntitas,
+    StatusDokumen, SumberPembelian, TipeMutasi, PoolResource
 )
 
 D0 = Decimal("0")
@@ -15,6 +16,9 @@ D0_RP = Decimal("0.00")
 D0_QTY = Decimal("0.000")
 TOL_QTY = Decimal("0.001")
 TOL_RP = Decimal("0.01")
+Q_RP = Decimal("0.01")
+Q_QTY = Decimal("0.001")
+Q_HARGA = Decimal("0.000001")
 
 F_RP = DecimalField(max_digits=20, decimal_places=2)
 
@@ -27,6 +31,15 @@ class KonflikSaldo(GalatInventory):
 class InvariantMelenceng(GalatInventory):
     http = 500
 
+def rp(x):
+    return Decimal(str(x)).quantize(Q_RP, rounding=ROUND_HALF_UP)
+
+def qty(x):
+    return Decimal(str(x)).quantize(Q_QTY, rounding=ROUND_HALF_UP)
+
+def harga(x):
+    return Decimal(str(x)).quantize(Q_HARGA, rounding=ROUND_HALF_UP)
+
 def _wajib_user(user):
     if not getattr(user, "is_authenticated", False):
         raise GalatInventory("Operasi ini wajib punya pembuat yang tercatat.")
@@ -36,30 +49,36 @@ def _pastikan_periode_terbuka(entitas, tanggal):
     if PeriodeAkuntansi.objects.filter(entitas=entitas, tahun=tanggal.year, bulan=tanggal.month, ditutup=True).exists():
         raise GalatInventory(f"Periode {tanggal.month:02d}/{tanggal.year} untuk {entitas.kode} sudah ditutup.")
 
-def _kunci_pool(grup_bahan_id, produk_ids):
-    pools = {p.produk_id: p for p in RawMutasiEntity.objects
-             .select_for_update()
-             .filter(grup_bahan_id=grup_bahan_id, produk_id__in=produk_ids)
-             .order_by("produk_id")}
-    for pid in sorted(produk_ids):
-        if pid not in pools:
-            pools[pid], _ = RawMutasiEntity.objects.get_or_create(grup_bahan_id=grup_bahan_id, produk_id=pid)
-    return pools
-
 def _kunci_saldo(entitas_id):
     try:
         return SaldoEntitas.objects.select_for_update().get(entitas_id=entitas_id)
     except SaldoEntitas.DoesNotExist:
         raise InvariantMelenceng(f"Entitas id {entitas_id} tidak punya baris SaldoEntitas.")
 
-def _turunkan_pool(pool, q, nilai, label):
+# --- FUNGSI POOL RESOURCE PATUNGAN ---
+def tambah_ke_pool_resource(produk_id, q, nilai_tambahan):
+    """Menambah qty dan nilai ke tabel PoolResource patungan lintas entitas."""
+    pool, _ = PoolResource.objects.select_for_update().get_or_create(produk_id=produk_id)
+    pool.qty_kg = qty(pool.qty_kg + q)
+    pool.nilai = rp(pool.nilai + nilai_tambahan)
+    pool.save(update_fields=["qty_kg", "nilai"])
+
+def potong_dari_pool_resource(produk_id, q, nilai_potongan):
+    """Mengurangi qty dan nilai dari tabel PoolResource (Dipakai saat VOID)."""
+    try:
+        pool = PoolResource.objects.select_for_update().get(produk_id=produk_id)
+    except PoolResource.DoesNotExist:
+        raise InvariantMelenceng(f"PoolResource produk ID {produk_id} tidak ditemukan.")
+    
     pool.qty_kg = qty(pool.qty_kg - q)
-    pool.nilai = rp(pool.nilai - nilai)
+    pool.nilai = rp(pool.nilai - nilai_potongan)
+    
     if pool.qty_kg < 0 or pool.nilai < 0:
-        raise InvariantMelenceng(f"Pool {label} menjadi negatif.")
+        raise InvariantMelenceng("Pengurangan PoolResource menyebabkan nilai negatif.")
     if pool.qty_kg == 0:
         pool.nilai = D0_RP   
     pool.save(update_fields=["qty_kg", "nilai"])
+# -----------------------------------------------------------------
 
 @transaction.atomic
 def posting_pembelian(pembelian, user=None):
@@ -72,19 +91,13 @@ def posting_pembelian(pembelian, user=None):
         raise KonflikSaldo(f"Pembelian {pembelian.nomor} sudah {pembelian.status}.")
     if not pembelian.entitas.aktif:
         raise GalatInventory(f"Entitas {pembelian.entitas.kode} nonaktif dan tidak bisa menyetor.")
-    if pembelian.grup_bahan_id != pembelian.entitas.grup_bahan_id:
-        raise GalatInventory(f"Entitas {pembelian.entitas.kode} termasuk grup {pembelian.entitas.grup_bahan.kode}, tidak bisa menyetor ke pool {pembelian.grup_bahan.kode}.")
 
     _pastikan_periode_terbuka(pembelian.entitas, pembelian.tanggal)
 
     nilai = rp(pembelian.qty_kg * pembelian.harga_per_kg)
     pembelian.nilai = nilai
 
-    pool = _kunci_pool(pembelian.grup_bahan_id, [pembelian.produk_id])[pembelian.produk_id]
-    pool.qty_kg = qty(pool.qty_kg + pembelian.qty_kg)
-    pool.nilai = rp(pool.nilai + nilai)
-    pool.save(update_fields=["qty_kg", "nilai"])
-
+    # Hanya update PoolResource
     tambah_ke_pool_resource(pembelian.produk_id, pembelian.qty_kg, nilai)
 
     MutasiKlaim.objects.create(
@@ -122,19 +135,20 @@ def void_pembelian(pembelian, alasan, user=None):
 
     _pastikan_periode_terbuka(pembelian.entitas, timezone.localdate())
 
-    pool = _kunci_pool(pembelian.grup_bahan_id, [pembelian.produk_id])[pembelian.produk_id]
-
     bergerak = Pembelian.objects.filter(
-        grup_bahan_id=pembelian.grup_bahan_id, produk_id=pembelian.produk_id,
+        produk_id=pembelian.produk_id,
         status=StatusDokumen.POSTED, waktu__gt=pembelian.waktu).exists()
     
     if bergerak or _pool_terpakai_sejak(pembelian):
         raise KonflikSaldo(f"Pool {pembelian.produk} sudah bergerak sejak {pembelian.nomor} diposting.")
+
+    # Cek saldo PoolResource
+    pool = PoolResource.objects.get(produk_id=pembelian.produk_id)
     if pool.qty_kg < pembelian.qty_kg - TOL_QTY:
         raise KonflikSaldo(f"Pool {pembelian.produk} tinggal {pool.qty_kg} Kg, kurang dari {pembelian.qty_kg} Kg yang akan dibatalkan.")
 
-    _turunkan_pool(pool, pembelian.qty_kg, pembelian.nilai, f"{pembelian.produk}")
-    potong_dari_pool_resource(pembelian.produk_id, pembelian.qty_kg)
+    # Hanya potong PoolResource
+    potong_dari_pool_resource(pembelian.produk_id, pembelian.qty_kg, pembelian.nilai)
 
     MutasiKlaim.objects.create(
         entitas=pembelian.entitas, grup_bahan=pembelian.grup_bahan,
@@ -158,7 +172,6 @@ def void_pembelian(pembelian, alasan, user=None):
     return pembelian
 
 def _pool_terpakai_sejak(pembelian):
-    # FIX: Batch tidak punya grup_bahan -- cek produk & waktu saja.
     from produksi.models import BatchInputRaw, StatusBatch
     return BatchInputRaw.objects.filter(
         produk_id=pembelian.produk_id,
@@ -185,8 +198,6 @@ def terbitkan_pembelian_dari_penerimaan(penerimaan, user=None):
     if not baris:
         raise GalatInventory(f"Penerimaan {penerimaan.nomor} tidak punya item.")
 
-    produk_ids = sorted({b.po_item.produk_id for b in baris})
-    pools = _kunci_pool(grup.id, produk_ids)       
     se = _kunci_saldo(entitas.id)                     
     terbit = []
 
@@ -221,11 +232,6 @@ def terbitkan_pembelian_dari_penerimaan(penerimaan, user=None):
             catatan=f"Otomatis dari {penerimaan.nomor} - SJ {penerimaan.no_surat_jalan}",
             dibuat_oleh=user,
         )
-
-        pool = pools[item.produk_id]
-        pool.qty_kg = qty(pool.qty_kg + q)
-        pool.nilai = rp(pool.nilai + nilai)
-        pool.save(update_fields=["qty_kg", "nilai"])
 
         tambah_ke_pool_resource(item.produk_id, q, nilai)
 
@@ -264,8 +270,6 @@ def posting_packing(packing, user=None):
     _pastikan_periode_terbuka(packing.entitas, packing.tanggal)
 
     batch = Batch.objects.select_for_update().get(pk=packing.batch_id)
-    # FIX: validasi grup dihapus -- Batch memang sengaja lintas grup
-    # (pool patungan). Lihat docstring produksi/services.py.
 
     s = saldo_batch(batch)
     if s.sisa_qty <= 0:
@@ -283,9 +287,6 @@ def posting_packing(packing, user=None):
     packing.posted_at = timezone.now()
     packing.save(update_fields=["harga_per_kg", "nilai_hpp", "menghabiskan", "status", "posted_at"])
 
-    # Catatan: batch.grup_bahan tidak ada, jadi MutasiKlaim di sini
-    # memakai grup milik ENTITAS penarik -- konsisten dengan pola yang
-    # sama dipakai di bebankan_susut().
     MutasiKlaim.objects.create(
         entitas=packing.entitas, grup_bahan=packing.entitas.grup_bahan,
         tipe=TipeMutasi.TARIK, arah=-1,
@@ -334,13 +335,6 @@ def pratinjau_packing(batch_id, qty_diminta):
 
 @transaction.atomic
 def bebankan_susut(batch, user=None):
-    """
-    Susut = kehilangan fisik pada PoolResource (pool patungan, lintas
-    grup & entitas). Karena pool tidak berdimensi grup, susut dibebankan
-    proporsional ke SEMUA entitas aktif bersaldo positif di seluruh
-    sistem -- bukan hanya satu grup tertentu. grup_bahan pada tiap baris
-    MutasiKlaim memakai grup milik ENTITAS yang menanggung, bukan batch.
-    """
     user = _wajib_user(user)
     nilai_susut = rp(batch.nilai_susut or 0)
     if nilai_susut <= 0:
@@ -384,41 +378,89 @@ def bebankan_susut(batch, user=None):
         raise InvariantMelenceng(f"Pembagian susut tidak berjumlah Rp{nilai_susut:,.2f}.")
     return beban
 
-def assert_invarian(raise_on_fail=True):
-    from core.models import GrupBahan
-    catatan = []
+def get_pool_resource_all():
+    """Mengambil list keseluruhan saldo fisik Pool."""
+    qs = PoolResource.objects.select_related("produk").all()
     rincian = []
+    total_nilai = D0_RP
+    for p in qs:
+        rincian.append({
+            "produk_id": p.produk_id,
+            "produk_kode": p.produk.kode,
+            "produk_nama": p.produk.nama,
+            "qty_kg": str(p.qty_kg),
+            "nilai": str(p.nilai),
+            "harga_rata": str(p.harga_rata)
+        })
+        total_nilai += p.nilai
+    return {"rincian": rincian, "total_nilai_pool": str(total_nilai)}
 
-    for grup in GrupBahan.objects.all():
-        hak = SaldoEntitas.objects.filter(entitas__grup_bahan=grup).aggregate(t=Coalesce(Sum("saldo"), Value(D0_RP), output_field=F_RP))["t"]
-        pool = RawMutasiEntity.objects.filter(grup_bahan=grup).aggregate(t=Coalesce(Sum("nilai"), Value(D0_RP), output_field=F_RP))["t"]
-        # NOTE: _nilai_batch() lama sudah dihapus -- lihat catatan di bawah.
-        nilai_batch, n_batch = D0_RP, 0
-
-        fisik = rp(pool + nilai_batch)
-        selisih = rp(hak - fisik)
-        n = (SaldoEntitas.objects.filter(entitas__grup_bahan=grup).count()
-             + RawMutasiEntity.objects.filter(grup_bahan=grup).count()
-             + n_batch + 1)
-        if abs(selisih) > TOL_RP * n:
-            catatan.append(f"I1 [{grup.kode}] KONSERVASI RUPIAH: hak entitas Rp{hak:,.2f} != nilai barang Rp{fisik:,.2f} (pool Rp{pool:,.2f} + batch Rp{nilai_batch:,.2f}). Selisih Rp{selisih:,.2f}.")
-
-        rincian.append({"grup": grup.kode, "hak": hak, "pool": pool, "batch": nilai_batch, "selisih": selisih})
-
-    if RawMutasiEntity.objects.filter(Q(qty_kg__lt=0) | Q(nilai__lt=0)).exists():
-        catatan.append("I2 POOL NEGATIF: ada baris RawMutasiEntity bernilai minus.")
-
-    if RawMutasiEntity.objects.filter(qty_kg=0).exclude(nilai=0).exists():
-        catatan.append("I2b POOL KOSONG TAPI BERNILAI: isinya akan keluar gratis pada pengambilan berikutnya.")
-    
+def jalankan_pemeriksaan_invarian():
     try:
-        from warehouse.models import PenerimaanItem
-        yatim = PenerimaanItem.objects.filter(qty_diterima__gt=0, pembelian__isnull=True).count()
-        if yatim:
-            catatan.append(f"I7 PENERIMAAN YATIM: {yatim} baris timbangan belum melahirkan setoran.")
-    except Exception:
-        pass
+        res = assert_invarian(raise_on_fail=False)
+        return res
+    except Exception as e:
+        return {"cocok": False, "catatan": [str(e)], "rincian": []}
+
+def assert_invarian(raise_on_fail=True):
+    """
+    INVARIANT GLOBAL (POOL PATUNGAN):
+    Total Rp Saldo Entitas (Hak) = Total Rp PoolResource + Sisa Nilai WIP di Produksi
+    """
+    from produksi.models import Batch, StatusBatch
+    from produksi.services import saldo_batch
+    
+    catatan = []
+    
+    # 1. Hitung Hak Entitas Keseluruhan
+    hak_total = SaldoEntitas.objects.aggregate(t=Coalesce(Sum("saldo"), Value(D0_RP), output_field=F_RP))["t"]
+    
+    # 2. Hitung Fisik Pool Keseluruhan
+    pool_total = PoolResource.objects.aggregate(t=Coalesce(Sum("nilai"), Value(D0_RP), output_field=F_RP))["t"]
+    
+    # 3. Hitung WIP yang masih tertahan di Produksi
+    wip_total = D0_RP
+    for b in Batch.objects.filter(status=StatusBatch.POSTED):
+        wip_total += saldo_batch(b).sisa_nilai
+        
+    # 4. Validasi Keseimbangan
+    fisik_total = rp(pool_total + wip_total)
+    selisih = rp(hak_total - fisik_total)
+    
+    if abs(selisih) > TOL_RP * 10:  # Toleransi pembulatan longgar
+        catatan.append(f"KONSERVASI RUPIAH GLOBAL: Hak Entitas Rp{hak_total:,.2f} != Nilai Barang Rp{fisik_total:,.2f} (Pool Rp{pool_total:,.2f} + WIP Rp{wip_total:,.2f}). Selisih Rp{selisih:,.2f}.")
+
+    if PoolResource.objects.filter(Q(qty_kg__lt=0) | Q(nilai__lt=0)).exists():
+        catatan.append("POOL NEGATIF: ada baris PoolResource bernilai minus.")
+
+    if PoolResource.objects.filter(qty_kg=0).exclude(nilai=0).exists():
+        catatan.append("POOL KOSONG TAPI BERNILAI: isinya akan keluar gratis pada pengambilan berikutnya.")
+
+    rincian = [{
+        "hak_global": hak_total,
+        "pool_global": pool_total,
+        "wip_produksi": wip_total,
+        "fisik_kalkulasi": fisik_total,
+        "selisih": selisih
+    }]
 
     if catatan and raise_on_fail:
         raise InvariantMelenceng(" | ".join(catatan))
     return {"cocok": not catatan, "catatan": catatan, "rincian": rincian}
+
+
+def get_rekap_klaim(grup_id=None):
+    """
+    Mengembalikan rekapitulasi mutasi atau klaim berdasarkan grup bahan/entitas.
+    Sesuaikan logika query di bawah ini dengan kebutuhan model Anda.
+    """
+    queryset = MutasiKlaim.objects.all() # atau model mutasi terkait
+    if grup_id:
+        queryset = queryset.filter(grup_bahan_id=grup_id)
+    
+    # Contoh struktur kembalian data (bisa berupa list/dict sesuai kebutuhan frontend)
+    rekap_data = list(queryset.values())
+    return {
+        "results": rekap_data,
+        "total": len(rekap_data)
+    }

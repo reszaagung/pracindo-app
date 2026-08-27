@@ -36,32 +36,12 @@ class SumberPembelian(models.TextChoices):
     MANUAL     = "MANUAL",     "Input manual (saldo awal / koreksi)"
 
 
-class RawMutasiEntity(TimeStampedModel):
-    grup_bahan = models.ForeignKey("core.GrupBahan", on_delete=models.PROTECT, related_name="raw_mutasi_entity")
-    produk     = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="raw_mutasi_entity")
-    qty_kg     = models.DecimalField(max_digits=18, decimal_places=3, default=D0)
-    nilai      = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
-
-    class Meta:
-        db_table = "inventory_raw_mutasi_entity"
-        ordering = ["grup_bahan", "produk"]
-        verbose_name_plural = "Raw Mutasi Entity"
-        constraints = [
-            UniqueConstraint(fields=["grup_bahan", "produk"], name="raw_mutasi_unik_per_grup"),
-            CheckConstraint(condition=Q(qty_kg__gte=0), name="raw_mutasi_qty_non_negatif"),
-            CheckConstraint(condition=Q(nilai__gte=0), name="raw_mutasi_nilai_non_negatif"),
-            CheckConstraint(condition=~Q(qty_kg=0) | Q(nilai=0), name="raw_mutasi_kosong_tanpa_nilai"),
-        ]
-
-    def __str__(self):
-        return f"{self.grup_bahan.kode}/{self.produk}: {self.qty_kg}"
-
-    @property
-    def harga_rata(self):
-        return harga(self.nilai / self.qty_kg) if self.qty_kg > 0 else D0
-
-
 class PoolResource(TimeStampedModel):
+    """
+    Stok Fisik Raw Material (Pool Patungan).
+    Tidak memiliki relasi ke entitas atau grup bahan. 
+    Semua stok fisik untuk satu produk menyatu di sini.
+    """
     produk = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="pool_resource")
     qty_kg = models.DecimalField(max_digits=18, decimal_places=3, default=D0)
     nilai  = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
@@ -221,6 +201,9 @@ class MutasiKlaim(models.Model):
 
 
 class SaldoEntitas(TimeStampedModel):
+    """
+    Pencatatan finansial hak/klaim per entitas terhadap total aset pool.
+    """
     entitas     = models.OneToOneField("core.Entitas", on_delete=models.CASCADE, related_name="saldo_klaim")
     total_setor = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
     total_tarik = models.DecimalField(max_digits=20, decimal_places=2, default=D0)

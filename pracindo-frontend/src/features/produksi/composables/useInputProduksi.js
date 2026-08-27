@@ -359,6 +359,36 @@ export function useInputProduksi() {
     }
   }
 
+  async function simpanDanPosting() {
+    errorMsg.value = validasiForm()
+    if (errorMsg.value) return false
+    submitting.value = true
+    try {
+      const payload = susunPayload()
+      let targetBatchId = editingBatchId.value
+      if (targetBatchId) {
+        await apiBatch.ubah(targetBatchId, payload)
+      } else {
+        const res = await apiBatch.buat(payload)
+        targetBatchId = res?.id ?? res?.data?.id ?? res
+      }
+      if (targetBatchId) {
+        await apiBatch.posting(targetBatchId)
+      } else {
+        throw new Error('ID Batch tidak ditemukan dari respons server.')
+      }
+      await Promise.all([muatDaftarBatch(), muatRawPool()])
+      tutupForm()
+      return true
+    } catch (e) {
+      const data = e?.response?.data
+      errorMsg.value = data?.detail || data?.pesan || e.message || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal memposting batch secara langsung')
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
   async function postingBatch(batchId) {
     submitting.value = true
     try {
@@ -458,6 +488,7 @@ export function useInputProduksi() {
     saatBatchWipDipilih,
     mintaPratinjau,
     simpanDraft,
+    simpanDanPosting,
     postingBatch,
     voidBatch,
     hapusDraft

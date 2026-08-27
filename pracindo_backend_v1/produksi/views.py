@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from decimal import Decimal
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -6,11 +5,12 @@ from rest_framework.response import Response
 
 from . import serializers as ser
 from . import services
-from .models import Batch, StatusBatch, Tangki, nomor_baru
+from .models import Batch, StatusBatch, Tangki, TipeProses
 from .permissions import ModulProduksi, OperatorSesi
 
 def _galat_response(e):
-    return Response({"detail": e.pesan, **e.as_dict()}, status=e.http)
+    pesan = getattr(e, "message", None) or (e.messages[0] if getattr(e, "messages", None) else str(e))
+    return Response({"detail": pesan, "kode": e.__class__.__name__, "pesan": pesan}, status=getattr(e, "http", 400))
 
 class TangkiViewSet(viewsets.ModelViewSet):
     queryset = Tangki.objects.all().order_by("kode")
@@ -25,8 +25,38 @@ class TangkiViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def saldo(self, request, pk=None):
-        return Response(services.saldo_tangki(self.get_object()))
+        tangki = self.get_object()
+        try:
+            from decimal import Decimal
+            
+            # Ambil semua batch posted di tangki ini
+            batches = Batch.objects.filter(tangki=tangki, status=StatusBatch.POSTED)
+            
+            total_qty = Decimal('0')
+            total_nilai = Decimal('0')
+            
+            for b in batches:
+                # Ambil langsung dari field database model Batch Anda
+                qty = getattr(b, 'qty_hasil', Decimal('0'))
+                
+                # Cek berbagai kemungkinan nama field harga di model Anda
+                harga = getattr(b, 'harga_per_kg', None)
+                if harga is None:
+                    harga = getattr(b, 'harga_rata', Decimal('0'))
+                
+                total_qty += Decimal(str(qty))
+                total_nilai += (Decimal(str(qty)) * Decimal(str(harga)))
+                
+            harga_rata = (total_nilai / total_qty) if total_qty > 0 else Decimal('0')
 
+            return Response({
+                "sisa_qty": str(total_qty),
+                "sisa_nilai": str(total_nilai),
+                "harga_per_kg": str(harga_rata)
+            })
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
+            
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.select_related("tangki").order_by("-waktu", "-id")
     permission_classes = [ModulProduksi]
@@ -54,7 +84,7 @@ class BatchViewSet(viewsets.ModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        s = self.get_serializer(data=request.data)
+        s = self.get_serializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
         batch = s.save()
         return Response(ser.BatchSerializer(batch).data,
@@ -69,42 +99,42 @@ class BatchViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="post")
     def posting(self, request, pk=None):
+        batch = self.get_object()
         try:
-            batch = services.posting_batch(self.get_object(),
-                                           user=request.user)
+            if batch.jenis == TipeProses.MIXING:
+                batch = services.posting_mixing(batch, user=request.user)
+            else:
+                batch = services.posting_blending(batch, user=request.user)
         except services.GalatProduksi as e:
             return _galat_response(e)
         return Response(ser.BatchSerializer(batch).data)
 
     @action(detail=True, methods=["post"])
     def void(self, request, pk=None):
-        try:
-            batch = services.void_batch(
-                self.get_object(),
-                request.data.get("alasan", ""), user=request.user)
-        except services.GalatProduksi as e:
-            return _galat_response(e)
-        return Response(ser.BatchSerializer(batch).data)
+        # Fitur VOID bisa Anda tambahkan di services.py jika diperlukan nantinya
+        return Response(
+            {"detail": "Fitur VOID Batch belum diimplementasikan di layanan baru."}, 
+            status=status.HTTP_501_NOT_IMPLEMENTED
+        )
 
     @action(detail=True, methods=["get"])
     def saldo(self, request, pk=None):
-        return Response(services.saldo_batch(self.get_object()).as_dict())
-
-    @action(detail=True, methods=["get"])
-    def komposisi(self, request, pk=None):
-        return Response(services.komposisi_json(self.get_object()))
-
-    @action(detail=False, methods=["get"])
-    def tersedia(self, request):
-        return Response(services.get_batch_tersedia(
-            request.query_params.get("tangki")))
+        # Mengubah namedtuple saldo_batch menjadi dict manual
+        res = services.saldo_batch(self.get_object())
+        return Response({
+            "sisa_qty": str(res.sisa_qty),
+            "sisa_nilai": str(res.sisa_nilai),
+            "harga_per_kg": str(res.harga_per_kg)
+        })
 
     @action(detail=False, methods=["get"], url_path="nomor-baru")
     def nomor_baru_(self, request):
         from django.utils import timezone
-        awalan = "BD" if request.query_params.get("jenis") == "BLENDING" else "MX"
-        return Response({"nomor": nomor_baru(
-            awalan, timezone.now().strftime("%Y%m"))})
+        jenis = request.query_params.get("jenis")
+        tipe = TipeProses.BLENDING if jenis == "BLENDING" else TipeProses.MIXING
+        nomor = services._nomor_batch(tipe, timezone.localdate())
+        return Response({"nomor": nomor})
+
 
 @api_view(["POST"])
 @permission_classes([ModulProduksi])
@@ -124,30 +154,32 @@ def pratinjau_batch(request):
             else:
                 errs.append({"field": field if field != "non_field_errors" else "", "pesan": str(messages)})
         return Response({"valid": False, "galat": errs})
-    
+        
     d = s.validated_data
     
-    pakai_raw = {int(r["raw"]): r["qty_kg"] for r in d.get("materials", []) if r.get("raw") and r.get("qty_kg", 0) > 0}
+    # Format baris input sesuai ekspektasi _normalisasi_baris_mixing / blending di services.py
+    pakai_raw = [{"produk_id": int(r["raw"]), "qty_kg": r["qty_kg"]} for r in d.get("materials", []) if r.get("raw") and r.get("qty_kg", 0) > 0]
     
-    pakai_wip = {}
+    pakai_wip = []
     for w in d.get("wip_sources", []):
         if w.get("batch") and w.get("qty_kg", 0) > 0:
             try:
                 b_sumber = Batch.objects.get(nomor=w["batch"])
-                pakai_wip[b_sumber.id] = w["qty_kg"]
+                pakai_wip.append({"batch_sumber_id": b_sumber.id, "qty_kg": w["qty_kg"]})
             except Batch.DoesNotExist:
                 return Response({"valid": False, "galat": [{"pesan": f"Batch WIP {w['batch']} tidak ditemukan."}]})
-    
+                
     if not pakai_raw and not pakai_wip:
         return Response({"valid": False, "galat": [{"pesan": "Pilih minimal satu sumber dengan qty > 0."}]})
 
+    susut = d.get("susut_kg", Decimal("0"))
+
     try:
-        v, galat = services.pratinjau(pakai_raw, pakai_wip, d.get("tekor_kg", Decimal("0")))
-        if galat is not None:
-            return Response({"valid": False, "galat": [galat.as_dict()]})
-        return Response({
-            "valid": True,
-            **asdict(v)
-        })
+        if pakai_wip:
+            res = services.pratinjau_blending(pakai_wip, susut_kg=susut)
+        else:
+            res = services.pratinjau_mixing(pakai_raw, susut_kg=susut)
+            
+        return Response(res)
     except Exception as e:
         return Response({"valid": False, "galat": [{"pesan": str(e)}]})

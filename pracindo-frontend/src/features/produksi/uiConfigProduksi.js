@@ -25,9 +25,7 @@ export const JENIS_BATCH_OPTIONS = [
 
 export const STATUS_BATCH_OPTIONS = [
   { value: '', label: 'Semua Status' },
-  { value: 'DRAFT', label: 'Draft' },
   { value: 'POSTED', label: 'Posted' },
-  { value: 'VOID', label: 'Void' }
 ]
 
 // ---- Label tampilan ----
@@ -37,9 +35,7 @@ export const JENIS_BATCH_LABELS = {
 }
 
 export const STATUS_BATCH_LABELS = {
-  DRAFT: 'Draft',
   POSTED: 'Posted',
-  VOID: 'Void'
 }
 
 // ---- Warna badge status ----

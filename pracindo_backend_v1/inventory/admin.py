@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas, RawMutasiEntity,
+    Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
     StatusDokumen, SumberPembelian, PoolResource
 )
 
@@ -25,26 +25,13 @@ class KunciSetelahPosting:
     def has_delete_permission(self, request, obj=None):
         return obj is None or obj.status == StatusDokumen.DRAFT
 
+
 @admin.register(Kemasan)
 class KemasanAdmin(admin.ModelAdmin):
     list_display = ("nama", "bobot_kg", "aktif")
     list_filter = ("aktif",)
     search_fields = ("nama",)
 
-@admin.register(RawMutasiEntity)
-class RawMutasiEntityAdmin(TanpaTulis, admin.ModelAdmin):
-    list_display = ("grup_bahan", "produk", "qty_kg", "nilai", "harga_rata", "kosong_bernilai", "diubah_pada")
-    list_filter = ("grup_bahan",)
-    search_fields = ("produk__kode", "produk__nama")
-    list_select_related = ("grup_bahan", "produk")
-
-    @admin.display(description="Harga / Kg")
-    def harga_rata(self, obj):
-        return f"Rp {obj.harga_rata:,.2f}"
-
-    @admin.display(boolean=True, description="Kosong tapi bernilai")
-    def kosong_bernilai(self, obj):
-        return obj.qty_kg == 0 and obj.nilai != 0
 
 @admin.register(PoolResource)
 class PoolResourceAdmin(TanpaTulis, admin.ModelAdmin):
@@ -59,6 +46,7 @@ class PoolResourceAdmin(TanpaTulis, admin.ModelAdmin):
     @admin.display(boolean=True, description="Kosong tapi bernilai")
     def kosong_bernilai(self, obj):
         return obj.qty_kg == 0 and obj.nilai != 0
+
 
 @admin.register(SaldoEntitas)
 class SaldoEntitasAdmin(TanpaTulis, admin.ModelAdmin):
@@ -77,6 +65,7 @@ class SaldoEntitasAdmin(TanpaTulis, admin.ModelAdmin):
             return "IMPAS"
         return "KLAIM" if obj.saldo > 0 else "HUTANG"
 
+
 @admin.register(Pembelian)
 class PembelianAdmin(KunciSetelahPosting, admin.ModelAdmin):
     list_display = ("nomor", "tanggal", "no_po", "entitas", "grup_bahan", "produk", "qty_kg", "harga_per_kg", "nilai", "sumber", "status")
@@ -92,6 +81,7 @@ class PembelianAdmin(KunciSetelahPosting, admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+
 @admin.register(Packing)
 class PackingAdmin(KunciSetelahPosting, admin.ModelAdmin):
     list_display = ("nomor", "tanggal", "entitas", "batch", "kemasan", "total_unit", "qty_kg", "harga_per_kg", "nilai_hpp", "menghabiskan", "status")
@@ -100,6 +90,7 @@ class PackingAdmin(KunciSetelahPosting, admin.ModelAdmin):
     date_hierarchy = "tanggal"
     list_select_related = ("entitas", "batch", "kemasan")
     readonly_dasar = ("nomor", "harga_per_kg", "nilai_hpp", "menghabiskan", "status", "dibuat_oleh", "dibuat_pada", "posted_at")
+
 
 @admin.register(MutasiKlaim)
 class MutasiKlaimAdmin(TanpaTulis, admin.ModelAdmin):

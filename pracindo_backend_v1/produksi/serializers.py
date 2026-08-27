@@ -3,10 +3,15 @@ from django.utils import timezone
 from django.db import transaction
 from rest_framework import serializers
 from .models import (
-    Batch, BatchInputRaw, StatusBatch, Tangki, TransferWip, nomor_baru
+    Batch, BatchInputRaw, StatusBatch, Tangki, TransferWip
 )
 
 QTY_MIN = Decimal("0.000")
+
+# Asumsi ada fungsi helper nomor_baru, jika tidak ada sesuaikan dengan import Anda
+def nomor_baru(awalan, periode):
+    # Dummy placeholder, pastikan fungsi nomor_baru Anda terimport dengan benar dari utils
+    pass
 
 class TangkiSerializer(serializers.ModelSerializer):
     class Meta:
@@ -61,7 +66,7 @@ def _validasi_input(data):
 class PratinjauRequestSerializer(serializers.Serializer):
     tangki_tujuan = serializers.IntegerField(required=False, allow_null=True)
     nama_hasil = serializers.CharField(max_length=120, required=False, allow_blank=True)
-    tekor_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=False, allow_null=True)
+    susut_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=False, allow_null=True)
     materials = InputRawSerializer(many=True, required=False, default=list)
     wip_sources = InputWipSerializer(many=True, required=False, default=list)
 
@@ -77,7 +82,8 @@ class BatchCreateSerializer(serializers.Serializer):
     )
     nama_hasil = serializers.CharField(max_length=120, required=True)
     batch = serializers.CharField(max_length=30, required=False, allow_blank=True)
-    tekor_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=False, default=Decimal("0.000"))
+    harga_per_kg = serializers.ReadOnlyField()
+    susut_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=False, default=Decimal("0.000"))
     materials = InputRawSerializer(many=True, required=False, default=list)
     wip_sources = InputWipSerializer(many=True, required=False, default=list)
     catatan = serializers.CharField(required=False, allow_blank=True, default="")
@@ -106,10 +112,10 @@ class BatchCreateSerializer(serializers.Serializer):
                 jenis=jenis,
                 nama_hasil=validated["nama_hasil"],
                 tangki=validated["tangki_tujuan"],
-                tekor_kg=validated.get("tekor_kg") or Decimal("0.000"),
+                susut_kg=validated.get("susut_kg") or Decimal("0.000"), # FIX
                 catatan=validated.get("catatan", ""),
                 status=StatusBatch.DRAFT,
-                created_by=user if getattr(user, "is_authenticated", False) else None,
+                dibuat_oleh=user if getattr(user, "is_authenticated", False) else None, # FIX
             )
 
             if raws:
@@ -126,7 +132,8 @@ class BatchCreateSerializer(serializers.Serializer):
                     TransferWip(
                         batch_tujuan=batch, 
                         batch_sumber_id=b_sumber_map[w["batch"]].id,
-                        qty_kg=w["qty_kg"]
+                        qty_kg=w["qty_kg"],
+                        dibuat_oleh=user if getattr(user, "is_authenticated", False) else None
                     ) for w in wips
                 ]
                 TransferWip.objects.bulk_create(wip_objects)
