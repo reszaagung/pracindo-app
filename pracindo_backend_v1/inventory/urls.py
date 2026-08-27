@@ -17,6 +17,7 @@ urlpatterns = [
     
     # Path pool_list disesuaikan dari views.py terbaru
     path("pool/", views.pool_list, name="pool"),
+    path("pool/kemasan/", views.pool_kemasan_list, name="pool-kemasan"),
     path("pool/<int:produk_id>/kartu/", views.pool_kartu_stok, name="pool-kartu"),
     
     path("mutasi/", views.mutasi_list, name="mutasi"),

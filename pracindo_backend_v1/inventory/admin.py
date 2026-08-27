@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
-    StatusDokumen, SumberPembelian, PoolResource
+    StatusDokumen, SumberPembelian, PoolResource, PoolKemasan
 )
 
 class TanpaTulis:
@@ -46,6 +46,21 @@ class PoolResourceAdmin(TanpaTulis, admin.ModelAdmin):
     @admin.display(boolean=True, description="Kosong tapi bernilai")
     def kosong_bernilai(self, obj):
         return obj.qty_kg == 0 and obj.nilai != 0
+
+
+@admin.register(PoolKemasan)
+class PoolKemasanAdmin(TanpaTulis, admin.ModelAdmin):
+    list_display = ("produk", "qty_unit", "nilai", "harga_satuan_label", "kosong_bernilai", "diubah_pada")
+    search_fields = ("produk__kode", "produk__nama")
+    list_select_related = ("produk",)
+
+    @admin.display(description="Harga / Unit")
+    def harga_satuan_label(self, obj):
+        return f"Rp {obj.harga_satuan:,.2f}"
+
+    @admin.display(boolean=True, description="Kosong tapi bernilai")
+    def kosong_bernilai(self, obj):
+        return obj.qty_unit == 0 and obj.nilai != 0
 
 
 @admin.register(SaldoEntitas)

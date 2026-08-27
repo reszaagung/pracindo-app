@@ -7,9 +7,10 @@ import PrimeVue from 'primevue/config'
 import Aura from '@primevue/themes/aura'
 import 'primeicons/primeicons.css'
 import ToastService from 'primevue/toastservice'
-import Tooltip from 'primevue/tooltip' // <-- 1. Import Tooltip dari PrimeVue
+import Tooltip from 'primevue/tooltip'
 import './assets/styles/tech-theme.css'
 import '@/assets/tema.css'
+import { assertBreakpointSync } from '@/utils/assertBreakpointSync'
 
 const app = createApp(App)
 
@@ -33,3 +34,5 @@ app.use(PrimeVue, {
 app.directive('tooltip', Tooltip)
 
 app.mount('#app')
+
+assertBreakpointSync() 

@@ -1,19 +1,18 @@
 /**
  * composables/useLayout.js
  * =========================
- * Versi lama sudah bagus — `ref` di luar fungsi (state dibagi semua
- * komponen), listener resize benar. Tiga penyesuaian kecil:
+ * State sidebar & deteksi mobile, dibagi ke seluruh komponen (module-level
+ * ref, bukan dibuat ulang tiap useLayout() dipanggil).
  *
- * 1. removeEventListener saat modul di-dispose (HMR): tanpa ini, setiap
- *    hot-reload menambah listener baru yang tidak pernah dilepas.
- * 2. Debounce resize — resize event menembak puluhan kali per detik.
- * 3. Titik putus dijadikan konstanta yang diekspor, supaya CSS media query
- *    dan JS tidak berbeda diam-diam.
+ * TITIK_PUTUS diimpor dari constants/layout.js (bukan didefinisikan di
+ * sini) supaya tailwind.config.js bisa mengimpor angka yang SAMA persis
+ * untuk breakpoint CSS -- lihat contoh sinkronisasinya di bawah file ini.
  */
 
 import { ref } from 'vue'
+import { TITIK_PUTUS } from '@/constants/layout'
 
-export const TITIK_PUTUS = 1024
+export { TITIK_PUTUS }
 
 const sidebarAktif = ref(false)
 const isMobile = ref(false)
@@ -22,6 +21,11 @@ const perbarui = () => {
   const mobileSebelumnya = isMobile.value
   isMobile.value = window.innerWidth < TITIK_PUTUS
 
+  // Sengaja menimpa pilihan manual user saat melewati breakpoint --
+  // ini keputusan UX default (buka otomatis di desktop, tutup otomatis
+  // di mobile), bukan bug. Kalau nanti perlu menghormati pilihan manual
+  // user lintas-breakpoint, tambahkan flag `dipilihManual` terpisah di
+  // sini -- jangan diam-diam diubah tanpa keputusan eksplisit.
   if (mobileSebelumnya && !isMobile.value) {
     sidebarAktif.value = true
   }
@@ -40,7 +44,6 @@ if (typeof window !== 'undefined') {
     timer = setTimeout(perbarui, 120)
   }
   window.addEventListener('resize', onResize)
-
 
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {

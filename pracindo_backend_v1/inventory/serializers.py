@@ -2,7 +2,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from .models import (
     Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
-    StatusDokumen, PoolResource
+    StatusDokumen, PoolResource, PoolKemasan
 )
 
 class EntitasRingkasSerializer(serializers.Serializer):
@@ -141,3 +141,14 @@ class MutasiKlaimSerializer(serializers.ModelSerializer):
                   "tipe", "arah", "qty_kg", "nilai", "ref_type", "ref_id",
                   "keterangan", "waktu", "dibuat_pada", "dibuat_oleh"]
         read_only_fields = fields
+        
+class PoolKemasanSerializer(serializers.ModelSerializer):
+    produk_kode = serializers.CharField(source="produk.kode", read_only=True)
+    produk_nama = serializers.CharField(source="produk.nama", read_only=True)
+    harga_satuan = serializers.DecimalField(max_digits=20, decimal_places=6, read_only=True)
+
+    class Meta:
+        model = PoolKemasan
+        fields = ["id", "produk", "produk_kode", "produk_nama", "qty_unit", "nilai", "harga_satuan", "diubah_pada"]
+        read_only_fields = fields
+

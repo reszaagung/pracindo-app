@@ -79,14 +79,15 @@ export function usePurchaseOrder() {
         }
     }
 
-    const muatPreviewNomor = async (entitasId, tanggal) => {
+    // Ditambahkan parameter `jenis` (default: 'BAHAN_BAKU')
+    const muatPreviewNomor = async (entitasId, tanggal, jenis = 'BAHAN_BAKU') => {
         if (!entitasId || !tanggal) {
             previewNomor.value = 'Pilih entitas & tanggal'
             return
         }
         try {
             const { data } = await api.get('akunting/purchase-order/preview-nomor/', {
-                params: { entitas: entitasId, tanggal }
+                params: { entitas: entitasId, tanggal, jenis }
             })
             previewNomor.value = data.nomor || 'TIDAK TERSEDIA'
         } catch {
@@ -114,7 +115,8 @@ export function usePurchaseOrder() {
         }
     }
 
-    const buatProdukBaru = async (nama) => {
+    // Ditambahkan parameter `jenis` untuk menentukan Prefix dan Satuan Default
+    const buatProdukBaru = async (nama, jenis = 'BAHAN_BAKU') => {
         const namaProduk = nama.trim()
         if (!namaProduk) throw new Error('Nama produk wajib diisi.')
 
@@ -123,13 +125,20 @@ export function usePurchaseOrder() {
             listSatuan.value = data.results || data || []
         }
 
-        const satuanKg = listSatuan.value.find(s => s.kode?.toLowerCase() === 'kg') || listSatuan.value[0]
-        if (!satuanKg) throw new Error('Belum ada data satuan pada master.')
+        let satuanDefault = null
+        if (jenis === 'KEMASAN') {
+            satuanDefault = listSatuan.value.find(s => ['pcs', 'unit', 'pack'].includes(s.kode?.toLowerCase())) || listSatuan.value[0]
+        } else {
+            satuanDefault = listSatuan.value.find(s => s.kode?.toLowerCase() === 'kg') || listSatuan.value[0]
+        }
 
-        const kode = generateKode('RM')
+        if (!satuanDefault) throw new Error('Belum ada data satuan pada master.')
+
+        const prefix = jenis === 'KEMASAN' ? 'PK' : 'RM'
+        const kode = generateKode(prefix)
         try {
             const { data } = await api.post('master/produk/', {
-                kode, nama: namaProduk, jenis: 'BAHAN_BAKU', satuan: satuanKg.id
+                kode, nama: namaProduk, jenis: jenis, satuan: satuanDefault.id
             })
             return {
                 id: data.id, kode: data.kode, nama: data.nama,
@@ -140,6 +149,7 @@ export function usePurchaseOrder() {
         }
     }
 
+    // Dimodifikasi agar membaca field kategori_po dan mem-parsing harga
     const simpanPO = async (form, isKirim = false) => {
         if (periodeDitutup.value) {
             pesanError.value = 'Tidak dapat menyimpan PO karena periode telah ditutup.'
@@ -154,8 +164,9 @@ export function usePurchaseOrder() {
                 .map(i => ({
                     produk_id: i.produk_id,
                     qty_pesan: String(i.qty_pesan),
-                    harga_per_kg: String(i.harga_per_kg || 0),
-                    satuan: i.satuan || 'kg',
+                    // Mendukung field harga_per_kg maupun harga_per_unit dari frontend
+                    harga_per_kg: String(i.harga_per_kg ?? i.harga_per_unit ?? 0),
+                    satuan: i.satuan || (form.kategori_po === 'KEMASAN' ? 'pcs' : 'kg'),
                 }))
 
             if (!payloadItems.length) {
@@ -171,13 +182,13 @@ export function usePurchaseOrder() {
                 catatan: form.catatan,
                 pakai_ppn: form.pakai_ppn,
                 ppn_persen: form.ppn_persen || 11.00,
+                kategori_po: form.kategori_po || 'BAHAN_BAKU', // Sisipkan kategori PO
                 items: payloadItems
             }
 
             const res = await api.post('akunting/purchase-order/', payload)
             const idPO = res.data.id
 
-            // Jika isKirim true, langsung ajukan ke Manajer (DRAFT -> PENDING)
             if (isKirim && idPO) {
                 await api.post(`akunting/purchase-order/${idPO}/ajukan/`)
             }
@@ -279,6 +290,6 @@ export function usePurchaseOrder() {
         pesanError, previewNomor, muatDataMaster, muatPreviewNomor,
         buatProdukBaru, simpanPO,
         periodeDitutup, cekStatusPeriode,
-        ajukanPO, setujuiPO, tolakPO, kirimPO, batalkanPO // Export fungsi baru
+        ajukanPO, setujuiPO, tolakPO, kirimPO, batalkanPO
     }
 }

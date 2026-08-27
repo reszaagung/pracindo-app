@@ -218,3 +218,32 @@ class SaldoEntitas(TimeStampedModel):
 
     def __str__(self):
         return f"{self.entitas.kode}: {self.saldo}"
+
+class PoolKemasan(TimeStampedModel):
+    """
+    Stok Fisik Kemasan (Pool Patungan).
+    Menyimpan stok fisik packaging (botol, jerigen, kardus, dll) lintas entitas.
+    Semua stok fisik untuk satu produk kemasan menyatu di sini.
+    """
+    produk = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="pool_kemasan")
+    qty_unit = models.IntegerField(default=0)
+    nilai = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
+
+    class Meta:
+        db_table = "inventory_pool_kemasan"
+        ordering = ["produk"]
+        verbose_name_plural = "Pool Kemasan"
+        constraints = [
+            UniqueConstraint(fields=["produk"], name="inv_pool_kms_unik_per_produk"),
+            CheckConstraint(condition=Q(qty_unit__gte=0), name="inv_pool_kms_qty_non_negatif"),
+            CheckConstraint(condition=Q(nilai__gte=0), name="inv_pool_kms_nilai_non_negatif"),
+            CheckConstraint(condition=~Q(qty_unit=0) | Q(nilai=0), name="inv_pool_kms_kosong_tanpa_nilai"),
+        ]
+
+    def __str__(self):
+        return f"{self.produk.kode} - {self.produk.nama}: {self.qty_unit} Unit"
+
+    @property
+    def harga_satuan(self):
+        # qty_unit di-cast ke Decimal agar presisi pembagiannya aman
+        return harga(self.nilai / Decimal(self.qty_unit)) if self.qty_unit > 0 else D0

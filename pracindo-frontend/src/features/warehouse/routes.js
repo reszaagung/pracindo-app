@@ -35,7 +35,8 @@ export default [
       {
         path: 'packing',
         name: 'warehouse-packing',
-        component: () => import('@/features/warehouse/views/InputPackingForm.vue')
+        // --- DIUBAH MENJADI LIST AGAR BISA MEMUAT TABEL & FORM SEKALIGUS ---
+        component: () => import('@/features/warehouse/views/InputPackingList.vue')
       },
       {
         path: 'packaging/log',

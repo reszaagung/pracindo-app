@@ -1,6 +1,6 @@
 // src/features/warehouse/composables/usePacking.js
 import { ref } from 'vue'
-import api from '@/utils/api'
+import { warehouseApi } from '../api' // Memanggil dari api.js lokal modul warehouse
 import { bacaError } from '@/utils/error'
 
 export function usePacking() {
@@ -21,15 +21,16 @@ export function usePacking() {
         pesan: ''
     })
 
+    // --- INI ADALAH VERSI FINAL muatMasterData ---
     const muatMasterData = async () => {
         sedangProses.value = true
         galat.value = ''
         try {
-            // Memanggil endpoint API Backend secara bersamaan
+            // Memanggil endpoint API dari warehouseApi secara bersamaan
             const [resEntitas, resKemasan, resBatch] = await Promise.all([
-                api.get('inventory/entitas/', { params: { aktif: true } }),
-                api.get('inventory/kemasan/', { params: { aktif: true } }),
-                api.get('produksi/batch/tersedia/')
+                warehouseApi.getEntitasAktif(),
+                warehouseApi.getKemasanAktif(),
+                warehouseApi.getBatchTersedia()
             ])
 
             daftarEntitas.value = resEntitas.data?.results || resEntitas.data || []
@@ -48,10 +49,8 @@ export function usePacking() {
             return
         }
         try {
-            // Endpoint kalkulator HPP tanpa mengubah database
-            const { data } = await api.get('inventory/packing/pratinjau/', {
-                params: { batch: batchId, qty: qtyKg }
-            })
+            // Menggunakan fungsi dari warehouseApi
+            const { data } = await warehouseApi.getPratinjauPacking(batchId, qtyKg)
             pratinjau.value = data
         } catch (err) {
             pratinjau.value = {
@@ -69,12 +68,12 @@ export function usePacking() {
         sedangProses.value = true
         galat.value = ''
         try {
-            // FASE 1: Buat Dokumen (DRAFT)
-            const resDraft = await api.post('inventory/packing/', payload)
+            // FASE 1: Buat Dokumen (DRAFT) via warehouseApi
+            const resDraft = await warehouseApi.simpanDraftPacking(payload)
             const draftId = resDraft.data.id
 
-            // FASE 2: Posting & Absorpsi COGS (POSTED)
-            const resPost = await api.post(`inventory/packing/${draftId}/post/`)
+            // FASE 2: Posting & Absorpsi COGS (POSTED) via warehouseApi
+            const resPost = await warehouseApi.postingPacking(draftId)
             return { success: true, data: resPost.data }
         } catch (err) {
             galat.value = bacaError(err, 'Gagal mengeksekusi klaim dan absorpsi COGS.')

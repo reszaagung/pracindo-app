@@ -1,15 +1,18 @@
 <template>
     <div class="flex flex-col w-full relative">
         <!-- Header -->
-        <div class="mb-4 flex justify-between items-center gap-4 border-b border-slate-100 pb-4">
-            <span class="bg-slate-200 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wide">
-                DRAFT
-            </span>
+        <div class="mb-6 flex justify-between items-center gap-4 border-b border-slate-100 pb-4">
+            <div class="flex items-center gap-3">
+                <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-3 py-1.5 rounded-full tracking-wide uppercase">
+                    PO KEMASAN (DRAFT)
+                </span>
+                <h2 class="text-lg font-bold text-slate-800">Buat Purchase Order Kemasan</h2>
+            </div>
 
             <div class="flex items-center gap-2">
                 <button type="button" @click="showModalProduct = true"
                     class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
-                    <i class="pi pi-box"></i> Produk Baru
+                    <i class="pi pi-box"></i> Kemasan Baru
                 </button>
 
                 <button type="button" @click="showModalSupplier = true"
@@ -17,24 +20,6 @@
                     <i class="pi pi-users"></i> Suplier Baru
                 </button>
             </div>
-        </div>
-
-        <!-- Toggle Jenis PO (Bahan Baku / Kemasan) -->
-        <div class="flex items-center gap-2 p-1 mb-6 bg-slate-50 border border-slate-200 rounded-xl w-max">
-            <button type="button" @click="jenisPo = 'BAHAN_BAKU'"
-                :class="['px-6 py-2.5 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2',
-                    jenisPo === 'BAHAN_BAKU'
-                        ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/60'
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50']">
-                <i class="pi pi-box"></i> Bahan Baku
-            </button>
-            <button type="button" @click="jenisPo = 'KEMASAN'"
-                :class="['px-6 py-2.5 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2',
-                    jenisPo === 'KEMASAN'
-                        ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50']">
-                <i class="pi pi-shopping-bag"></i> Kemasan
-            </button>
         </div>
 
         <div v-if="pesanError"
@@ -66,12 +51,12 @@
                 <div class="flex flex-col gap-2">
                     <label class="text-xs md:text-sm font-bold text-slate-700">Tanggal PO</label>
                     <input v-model="draf.tanggal" type="date" required
-                        class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-800" />
+                        class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-slate-800" />
                 </div>
                 <div class="flex flex-col gap-2">
                     <label class="text-xs md:text-sm font-bold text-slate-700">Supplier Tujuan</label>
                     <select v-model.number="draf.suplier_id" required
-                        class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-800 appearance-none">
+                        class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-slate-800 appearance-none">
                         <option value="" disabled>-- Pilih Supplier --</option>
                         <option v-for="sup in listSupplier" :key="sup.id" :value="sup.id">
                             {{ sup.nama }}{{ sup.kota ? ` — ${sup.kota}` : '' }}
@@ -80,15 +65,11 @@
                 </div>
             </div>
 
-            <!-- Tabel Detail Item Pesanan (Dinamis berdasarkan jenisPo) -->
             <div class="w-full mb-8">
                 <div class="flex justify-between items-center mb-4 pb-2 mt-2">
-                    <h3 class="text-sm font-bold text-slate-800">
-                        Detail Item Pesanan
-                        <span class="text-slate-400 ml-2 font-normal">({{ jenisPo === 'BAHAN_BAKU' ? 'Bahan Baku' : 'Kemasan' }})</span>
-                    </h3>
+                    <h3 class="text-sm font-bold text-slate-800">Detail Kemasan</h3>
                     <button type="button" @click="tambahItem"
-                        class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                        class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
                         <i class="pi pi-plus"></i> Tambah Item
                     </button>
                 </div>
@@ -97,15 +78,9 @@
                     <table class="w-full text-left text-sm min-w-[800px]">
                         <thead class="text-slate-500 bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th class="py-3 px-4 font-semibold rounded-tl-xl w-[40%]">
-                                    {{ jenisPo === 'BAHAN_BAKU' ? 'Produk (Bahan Baku)' : 'Produk (Kemasan)' }}
-                                </th>
-                                <th class="py-3 px-4 font-semibold w-[15%] text-right">
-                                    {{ jenisPo === 'BAHAN_BAKU' ? 'Qty (Kg)' : 'Qty (Unit/Pcs)' }}
-                                </th>
-                                <th class="py-3 px-4 font-semibold w-[20%] text-right">
-                                    {{ jenisPo === 'BAHAN_BAKU' ? 'Harga per Kg' : 'Harga per Unit' }}
-                                </th>
+                                <th class="py-3 px-4 font-semibold rounded-tl-xl w-[40%]">Produk (Kemasan)</th>
+                                <th class="py-3 px-4 font-semibold w-[15%] text-right">Qty (Pcs/Unit)</th>
+                                <th class="py-3 px-4 font-semibold w-[20%] text-right">Harga per Unit</th>
                                 <th class="py-3 px-4 font-semibold w-[20%] text-right">Subtotal</th>
                                 <th class="py-3 px-4 font-semibold text-center rounded-tr-xl w-[5%]">Aksi</th>
                             </tr>
@@ -117,7 +92,7 @@
                                 <td class="py-3 px-4 align-top">
                                     <Dropdown v-model="item.produk" :options="produkBerdasarkanSuplier" optionLabel="label"
                                         appendTo="body"
-                                        :placeholder="draf.suplier_id ? 'Pilih atau cari produk...' : 'Pilih supplier dulu'"
+                                        :placeholder="draf.suplier_id ? 'Pilih kemasan...' : 'Pilih supplier dulu'"
                                         class="w-full" :disabled="!draf.suplier_id" filter :loading="loadingProduk"
                                         :pt="{
                                             root: { class: 'w-full h-[42px] bg-slate-50 border border-slate-200 rounded-lg flex items-center' }
@@ -126,16 +101,16 @@
                                 </td>
 
                                 <td class="py-3 px-4 align-top">
-                                    <input v-model.number="item.qty" type="number" min="0" step="0.01" required
-                                        class="w-full h-[42px] px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                                    <input v-model.number="item.qty" type="number" min="0" step="1" required
+                                        class="w-full h-[42px] px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-blue-500 text-slate-800"
                                         placeholder="0" />
                                 </td>
 
                                 <td class="py-3 px-4 align-top">
                                     <div class="relative h-[42px]">
                                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">Rp</span>
-                                        <input v-model.number="item.harga_per_kg" type="number" min="0" step="1"
-                                            class="w-full h-full pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                                        <input v-model.number="item.harga_per_unit" type="number" min="0" step="1"
+                                            class="w-full h-full pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-blue-500 text-slate-800"
                                             placeholder="0" />
                                     </div>
                                 </td>
@@ -159,12 +134,11 @@
                 </div>
             </div>
 
-            <!-- Footer / Total Kalkulasi -->
             <div class="flex flex-col md:flex-row justify-between items-start bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100">
                 <div class="flex flex-col gap-2 w-full md:w-auto mb-6 md:mb-0">
                     <div class="flex items-center gap-2">
                         <input type="checkbox" id="pakaiPpn" :true-value="11" :false-value="0" v-model="draf.ppn_persen"
-                            class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer">
+                            class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer">
                         <label for="pakaiPpn" class="text-sm font-bold text-slate-700 cursor-pointer select-none">
                             Kenakan PPN 11% (Suplier PKP)
                         </label>
@@ -178,8 +152,8 @@
                     </div>
 
                     <div v-if="draf.ppn_persen > 0" class="flex justify-between items-center text-sm">
-                        <span class="font-semibold text-emerald-600">PPN (11%)</span>
-                        <span class="font-bold text-emerald-700">Rp {{ (ppnNominal).toLocaleString('id-ID') }}</span>
+                        <span class="font-semibold text-blue-600">PPN (11%)</span>
+                        <span class="font-bold text-blue-700">Rp {{ (ppnNominal).toLocaleString('id-ID') }}</span>
                     </div>
 
                     <div class="flex justify-between items-end mt-2 pt-2 border-t border-slate-200">
@@ -193,9 +167,9 @@
                             Batal
                         </button>
                         <button type="submit" :disabled="sedangProses || periodeDitutup"
-                            class="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex justify-center items-center gap-2 cursor-pointer disabled:cursor-not-allowed">
+                            class="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-[0_4px_15px_rgba(37,99,235,0.3)] transition-all flex justify-center items-center gap-2 cursor-pointer disabled:cursor-not-allowed">
                             <i class="pi" :class="sedangProses ? 'pi-spin pi-spinner' : 'pi-check-circle'"></i>
-                            Simpan
+                            Simpan PO
                         </button>
                     </div>
                 </div>
@@ -212,7 +186,7 @@ import { reactive, computed, ref, watch, onMounted } from 'vue'
 import Dropdown from 'primevue/dropdown'
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
-import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
+import { useFormPurchasePackageing } from '@/features/accounting/composables/useFormPurchasePackageing'
 import api from '@/utils/api'
 
 const emit = defineEmits(['close', 'saved'])
@@ -220,28 +194,24 @@ const emit = defineEmits(['close', 'saved'])
 const {
     listEntitas, listSupplier, sedangProses, pesanError, previewNomor,
     periodeDitutup, muatDataMaster, muatPreviewNomor, simpanPO, cekStatusPeriode
-} = usePurchaseOrder()
+} = useFormPurchasePackageing()
 
 const showModalSupplier = ref(false)
 const showModalProduct = ref(false)
 const produkBerdasarkanSuplier = ref([])
 const loadingProduk = ref(false)
 
-// State baru untuk menentukan form (Bahan Baku / Kemasan)
-const jenisPo = ref('BAHAN_BAKU')
-
 const hariIni = () => {
     const t = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
     return t.toISOString().slice(0, 10)
 }
 
-const itemKosong = () => ({ produk: null, qty: null, harga_per_kg: null })
+const itemKosong = () => ({ produk: null, qty: null, harga_per_unit: null })
 
 const draf = reactive({
     entitas_id: '',
     suplier_id: '',
     tanggal: hariIni(),
-    tanggal_kirim_diminta: '',
     catatan: '',
     ppn_persen: 0,
     items: [itemKosong()],
@@ -299,7 +269,7 @@ const tarikProdukDariAPI = async (idSuplier) => {
         const response = await api.get('master/produk/', {
             params: {
                 suplier: idSuplier,
-                jenis: jenisPo.value, // Menggunakan jenis yang dipilih dari state toggle
+                jenis: 'KEMASAN', // Spesifik untuk produk kemasan
                 aktif: true,
                 ringkas: 1
             }
@@ -307,19 +277,11 @@ const tarikProdukDariAPI = async (idSuplier) => {
         const hasil = response.data.results || response.data || []
         produkBerdasarkanSuplier.value = hasil.map(p => ({ ...p, label: `${p.kode} - ${p.nama}` }))
     } catch (err) {
-        console.error("Gagal menarik produk berdasarkan suplier:", err)
+        console.error("Gagal menarik produk kemasan berdasarkan suplier:", err)
     } finally {
         loadingProduk.value = false
     }
 }
-
-// Reset baris item & tarik ulang produk setiap jenis PO diubah
-watch(() => jenisPo.value, async () => {
-    draf.items = [itemKosong()]
-    if (draf.suplier_id) {
-        await tarikProdukDariAPI(draf.suplier_id)
-    }
-})
 
 watch(() => draf.suplier_id, async (newVal, oldVal) => {
     if (oldVal && newVal !== oldVal) {
@@ -328,7 +290,7 @@ watch(() => draf.suplier_id, async (newVal, oldVal) => {
     await tarikProdukDariAPI(newVal)
 }, { immediate: true })
 
-const subtotal = (item) => (Number(item.qty) || 0) * (Number(item.harga_per_kg) || 0)
+const subtotal = (item) => (Number(item.qty) || 0) * (Number(item.harga_per_unit) || 0)
 const subtotalSemua = computed(() => draf.items.reduce((s, i) => s + subtotal(i), 0))
 const ppnNominal = computed(() => subtotalSemua.value * (draf.ppn_persen / 100))
 const grandTotal = computed(() => subtotalSemua.value + ppnNominal.value)
@@ -344,8 +306,8 @@ const kirim = async () => {
     pesanError.value = ''
     const kosong = draf.items.some(i => !i.produk?.id || !(Number(i.qty) > 0))
     if (kosong) {
-        alert('❌ Gagal: Setiap item butuh produk dan Qty minimal 1.')
-        pesanError.value = 'Setiap item butuh produk (yang valid) dan Qty minimal 1.'
+        alert('❌ Gagal: Setiap item butuh produk kemasan dan Qty minimal 1.')
+        pesanError.value = 'Setiap item butuh produk kemasan (yang valid) dan Qty minimal 1.'
         return
     }
 
@@ -353,17 +315,17 @@ const kirim = async () => {
         entitas_id: draf.entitas_id,
         suplier_id: draf.suplier_id,
         tanggal: draf.tanggal,
-        tanggal_kirim_diminta: draf.tanggal_kirim_diminta || null,
         catatan: draf.catatan,
         pakai_ppn: draf.ppn_persen > 0,
         ppn_persen: draf.ppn_persen || 0,
-        kategori_po: jenisPo.value, // Sisipkan jenis PO (Bahan/Kemasan) agar tercatat ke Backend
+        kategori_po: 'KEMASAN',
         items: draf.items.map(i => {
             const idSatuan = i.produk.satuan?.id || i.produk.satuan_id || i.produk.satuan;
             return {
                 produk_id: i.produk.id,
                 qty_pesan: Number(i.qty) || 0,
-                harga_per_kg: Number(i.harga_per_kg) || 0, // Backend logic tetap menerima field harga_per_kg, abaikan penamaannya
+                // Kolom tetap disesuaikan dengan DB, misal jika DB menggunakan harga_per_kg/unit
+                harga_per_kg: Number(i.harga_per_unit) || 0,
                 satuan: idSatuan
             }
         }),
@@ -372,7 +334,7 @@ const kirim = async () => {
     const hasil = await simpanPO(payload, true)
 
     if (hasil.success) {
-        alert("✅ Berhasil! Purchase Order baru telah tersimpan.")
+        alert("✅ Berhasil! Purchase Order Kemasan baru telah tersimpan.")
         emit('saved', hasil.data)
     } else {
         alert("❌ Gagal menyimpan PO:\n" + hasil.message)
