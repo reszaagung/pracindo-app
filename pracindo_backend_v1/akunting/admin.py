@@ -3,7 +3,8 @@ from django.contrib import admin
 from .models import (
     Akun, FakturPembelian, JurnalDetail, JurnalUmum, KartuHutang,
     PurchaseOrder, PurchaseOrderItem, SaldoAkunBulanan, UangMukaSuplier,
-    FakturPenjualan, KartuPiutang 
+    FakturPenjualan, KartuPiutang ,PembelianKemasan, 
+    PurchaseOrderKemasanItem
 )
 
 # ---------------- Bagan akun ----------------
@@ -183,3 +184,53 @@ class FakturPenjualanAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+class PurchaseOrderKemasanItemInline(admin.TabularInline):
+    model = PurchaseOrderKemasanItem
+    extra = 0 # Mencegah crash form kosong seperti bug fix Anda sebelumnya
+    readonly_fields = ('qty_diterima', 'amount', 'sisa_qty')
+    
+    # Pastikan model 'Kemasan' di inventory/admin.py memiliki `search_fields`
+    autocomplete_fields = ('kemasan',) 
+
+    @admin.display(description='Sisa (Pcs/Unit)')
+    def sisa_qty(self, obj):
+        return obj.sisa_qty if obj.pk else '-'
+
+class PurchaseOrderKemasanItemInline(admin.TabularInline):
+    model = PurchaseOrderKemasanItem
+    extra = 0 
+    readonly_fields = ('qty_diterima', 'amount', 'sisa_qty')
+    autocomplete_fields = ('kemasan',) 
+
+    @admin.display(description='Sisa (Pcs/Unit)')
+    def sisa_qty(self, obj):
+        return obj.sisa_qty if obj.pk else '-'
+
+# KOREKSI: Gunakan PembelianKemasan
+@admin.register(PembelianKemasan)
+class PembelianKemasanAdmin(admin.ModelAdmin):
+    # KOREKSI: Menghilangkan 'suplier' dan 'subtotal' karena belum ada di model
+    list_display = ('no_po', 'tanggal', 'entitas', 'status', 'dibuat_oleh') 
+    list_filter = ('entitas', 'status', 'tanggal')
+    search_fields = ('no_po',)
+    list_select_related = ('entitas', 'dibuat_oleh')
+    readonly_fields = ('no_po', 'dibuat_oleh', 'dibuat_pada')
+    inlines = [PurchaseOrderKemasanItemInline]
+    
+    def save_model(self, request, obj, form, change):
+        if getattr(obj, 'dibuat_oleh', None) is None:
+            obj.dibuat_oleh = request.user
+        super().save_model(request, obj, form, change)
+        
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+@admin.register(PurchaseOrderKemasanItem)
+class PurchaseOrderKemasanItemAdmin(admin.ModelAdmin):
+    list_display = ('purchase_order', 'kemasan', 'qty_pesan',
+                    'qty_diterima', 'harga_per_pcs', 'amount')
+    search_fields = ('kemasan__nama', 'purchase_order__no_po')
+    list_select_related = ('purchase_order', 'kemasan')
+    readonly_fields = ('qty_diterima', 'amount')

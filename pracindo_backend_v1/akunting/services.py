@@ -826,3 +826,97 @@ def terima_pembayaran_piutang(*, faktur_id, nominal, tanggal, user, referensi, i
     )
 
     return mutasi
+
+# =========================================================
+# PURCHASE ORDER KEMASAN (Aset Fisik)
+# =========================================================
+
+def preview_nomor_po_kemasan(entitas, tanggal):
+    """
+    Preview nomor untuk PO Kemasan. 
+    Menggunakan prefix 'PO-KMS' agar terpisah dari PO bahan baku.
+    """
+    return CounterDokumen.preview(entitas, 'PO-KMS', tanggal)
+
+
+@transaction.atomic
+def ajukan_po_kemasan(*, po_id, user):
+    """DRAFT -> PENDING (Diajukan ke Manajer)"""
+    from .models import PembelianKemasan, StatusPO
+
+    po = PembelianKemasan.objects.select_for_update().get(pk=po_id)
+    if po.status != StatusPO.DRAFT:
+        raise ValidationError(f'PO Kemasan sudah {po.get_status_display()}, tidak bisa diajukan.')
+    if not po.items.exists():
+        raise ValidationError('PO Kemasan tanpa item tidak bisa diajukan.')
+
+    po.status = StatusPO.PENDING
+    po.save(update_fields=['status'])
+    return po
+
+
+@transaction.atomic
+def setujui_po_kemasan(*, po_id, user):
+    """PENDING -> APPROVED (Gudang sudah bisa melihat dokumen ini)"""
+    from .models import PembelianKemasan, StatusPO
+
+    po = PembelianKemasan.objects.select_for_update().get(pk=po_id)
+    if po.status != StatusPO.PENDING:
+        raise ValidationError(f'PO Kemasan harus berstatus PENDING. Status saat ini: {po.get_status_display()}.')
+
+    po.status = StatusPO.APPROVED
+    po.save(update_fields=['status'])
+    return po
+
+
+@transaction.atomic
+def tolak_po_kemasan(*, po_id, user, alasan=''):
+    """Tolak persetujuan internal"""
+    from .models import PembelianKemasan, StatusPO
+
+    po = PembelianKemasan.objects.select_for_update().get(pk=po_id)
+    if po.status not in [StatusPO.PENDING, StatusPO.APPROVED, StatusPO.TERKIRIM]:
+        raise ValidationError('Status saat ini tidak bisa ditolak.')
+
+    po.status = StatusPO.DITOLAK
+    if alasan:
+        po.catatan = f"{po.catatan}\n[DITOLAK {timezone.now():%Y-%m-%d} oleh {user}] {alasan}".strip()
+    po.save(update_fields=['status', 'catatan'])
+    return po
+
+
+@transaction.atomic
+def kirim_po_kemasan(*, po_id, user):
+    """APPROVED -> TERKIRIM. Setelah ini PO resmi dikirim ke Suplier."""
+    from .models import PembelianKemasan, StatusPO
+
+    po = PembelianKemasan.objects.select_for_update().get(pk=po_id)
+    if po.status != StatusPO.APPROVED:
+        raise ValidationError(f'PO Kemasan harus di-Approve sebelum dikirim. Status saat ini: {po.get_status_display()}.')
+    if not po.items.exists():
+        raise ValidationError('PO Kemasan tanpa item tidak bisa dikirim.')
+
+    po.status = StatusPO.TERKIRIM
+    po.save(update_fields=['status'])
+    return po
+
+
+@transaction.atomic
+def batalkan_po_kemasan(*, po_id, user, alasan=''):
+    """
+    Membatalkan PO Kemasan. 
+    """
+    from .models import PembelianKemasan, StatusPO
+
+    po = PembelianKemasan.objects.select_for_update().get(pk=po_id)
+    if po.status == StatusPO.BATAL:
+        raise ValidationError('PO Kemasan ini sudah dibatalkan sebelumnya.')
+    
+        
+    if not alasan.strip():
+        raise ValidationError('Alasan pembatalan wajib diisi.')
+
+    po.status = StatusPO.BATAL
+    po.catatan = f'{po.catatan}\n[BATAL {timezone.now():%Y-%m-%d} oleh {user}] {alasan}'.strip()
+    po.save(update_fields=['status', 'catatan'])
+    return po

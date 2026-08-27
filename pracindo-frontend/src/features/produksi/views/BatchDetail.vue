@@ -4,9 +4,9 @@
       <div class="flex items-center gap-3">
         <button
           @click="router.back()"
-          class="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
+          class="w-9 h-9 flex-shrink-0 bg-slate-900 rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-transform"
         >
-          <i class="pi pi-arrow-left"></i>
+          <i class="pi pi-arrow-left text-white text-sm"></i>
         </button>
         <div>
           <h1 class="text-xl md:text-2xl font-bold text-slate-800">Detail Batch</h1>
@@ -79,7 +79,9 @@
             </div>
             <div class="flex justify-between pb-1">
               <span class="text-slate-500">Harga Pokok (HPP)</span>
-              <span class="font-semibold text-slate-800">{{ formatRupiah(batch.harga_hasil_per_kg || batch.harga_per_kg) }} / Kg</span>
+              <span class="font-semibold text-slate-800">
+                {{ formatRupiah(hitungHpp(batch)) }} / Kg
+              </span>
             </div>
           </div>
         </div>
@@ -183,6 +185,14 @@ function formatTanggal(v) {
   const d = new Date(v)
   if (isNaN(d)) return v
   return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
+
+function hitungHpp(b) {
+  if (!b) return 0
+  const nilai = Number(b.nilai_hasil) || 0
+  const qty = Number(b.qty_hasil) || 0
+  if (qty > 0) return nilai / qty
+  return Number(b.harga_hasil_per_kg || b.harga_per_kg || b.harga_rata) || 0
 }
 
 async function muatDetail() {

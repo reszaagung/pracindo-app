@@ -320,15 +320,12 @@ const kirim = async () => {
         ppn_persen: draf.ppn_persen || 0,
         kategori_po: 'KEMASAN',
         items: draf.items.map(i => {
-            const idSatuan = i.produk.satuan?.id || i.produk.satuan_id || i.produk.satuan;
-            return {
-                produk_id: i.produk.id,
-                qty_pesan: Number(i.qty) || 0,
-                // Kolom tetap disesuaikan dengan DB, misal jika DB menggunakan harga_per_kg/unit
-                harga_per_kg: Number(i.harga_per_unit) || 0,
-                satuan: idSatuan
-            }
-        }),
+                    return {
+                        kemasan_id: i.produk.id,           // Sebelumnya: produk_id
+                        qty_pesan: Number(i.qty) || 0,
+                        harga_per_pcs: Number(i.harga_per_unit) || 0 // Sebelumnya: harga_per_kg
+                    }
+                }),
     }
 
     const hasil = await simpanPO(payload, true)

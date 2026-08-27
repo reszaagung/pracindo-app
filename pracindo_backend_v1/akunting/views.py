@@ -17,9 +17,9 @@ import django_filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models.pengeluaran import PengeluaranKas
+from rest_framework.permissions import IsAuthenticated # Pastikan ini di-import
 
-# Tambahkan di deretan import .serializers Anda:
+from .models.pengeluaran import PengeluaranKas
 from .serializers import PengeluaranKasSerializer
 from staff_user.models import Role
 from staff_user.permissions import AksesModul, PunyaRole
@@ -28,6 +28,9 @@ from . import services
 from .models import (
     Akun, FakturPembelian, FakturPenjualan, JurnalUmum, PurchaseOrder,
     PurchaseOrderItem, UangMukaSuplier,
+    
+    # --- TAMBAHAN KEMASAN ---
+    PembelianKemasan
 )
 from .serializers import (
     AkunSerializer, BatalPOSerializer, BayarSerializer,
@@ -37,6 +40,9 @@ from .serializers import (
     TerbitkanFakturJualSerializer, TerbitkanFakturSerializer,
     TerimaPiutangSerializer, UangMukaSerializer, UbahItemPOSerializer,
     BuatPOSerializer,
+    
+    # --- TAMBAHAN KEMASAN ---
+    PurchaseOrderKemasanSerializer
 )
 
 def batasi_entitas(qs, request, field="entitas"):
@@ -573,3 +579,28 @@ class PengeluaranKasViewSet(viewsets.ModelViewSet):
             return Response({'status': 'Pengeluaran berhasil diposting dan jurnal tercetak.'})
         except DjangoValidationError as e:
             return Response({'detail': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+class PurchaseOrderKemasanViewSet(viewsets.ModelViewSet):
+    """
+    Endpoint API untuk Transaksi Pembelian Kemasan.
+    Terpisah dari bahan baku agar satuan Pcs/Unit tidak merusak HPP curah.
+    """
+    queryset = PembelianKemasan.objects.all().order_by('-tanggal', '-id')
+    serializer_class = PurchaseOrderKemasanSerializer
+    permission_classes = [IsAuthenticated] # Bisa disesuaikan jika Anda memakai AksesModul
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Simpan dengan merekam siapa user yang login (dibuat_oleh)
+        self.perform_create(serializer)
+        
+        return Response({
+            "success": True,
+            "message": "Purchase Order Kemasan berhasil dibuat.",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def perform_create(self, serializer):
+        serializer.save(dibuat_oleh=self.request.user)

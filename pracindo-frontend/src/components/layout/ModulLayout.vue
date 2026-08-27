@@ -6,10 +6,16 @@
 
   Modul ditentukan dari route.meta.modul, lalu menu sidebar dibaca dari
   config/modules.js. Menambah menu = sunting config, bukan komponen ini.
+
+  BREAKPOINT: satu-satunya sumber kebenaran adalah TITIK_PUTUS di
+  constant/layout.js, dibaca lewat isMobile dari useLayout(). Tidak ada
+  @media di sini -- versi lama punya @media (max-width: 900px) yang
+  menyimpang dari TITIK_PUTUS (1024px), menciptakan rentang 900-1024px
+  di mana JS dan CSS saling bertentangan soal "apakah ini mobile".
 -->
 <template>
-    <div class="rangka">
-        <nav class="side" :class="{ 'side--buka': sidebarAktif }">
+    <div class="rangka" :class="{ 'rangka--mobile': isMobile }">
+        <nav class="side" :class="{ 'side--buka': sidebarAktif, 'side--mobile': isMobile }">
             <router-link to="/" class="side__balik">
                 <BaseIcon nama="balik" :ukuran="15" />
                 Semua modul
@@ -30,8 +36,10 @@
             </div>
         </nav>
 
+        <div v-if="isMobile && sidebarAktif" class="overlay" @click="tutupDiMobile" />
+
         <main class="isi">
-            <button class="buka-side" @click="toggleSidebar" aria-label="Buka menu">
+            <button v-if="isMobile" class="buka-side" @click="toggleSidebar" aria-label="Buka menu">
                 <span></span><span></span><span></span>
             </button>
 
@@ -53,7 +61,7 @@ import WorkOrderPanel from '@/features/work-order/views/WorkOrderBoard.vue'
 
 const route = useRoute()
 const { kartu: kartuAuth } = useAuth()
-const { sidebarAktif, toggleSidebar, tutupDiMobile } = useLayout()
+const { sidebarAktif, isMobile, toggleSidebar, tutupDiMobile } = useLayout()
 
 const kartu = computed(() => kartuAuth.value ?? { nama: '—', role_display: '—' })
 const modul = computed(() => cariModul(route.meta?.modul))
@@ -83,6 +91,10 @@ watch(() => route.fullPath, tutupDiMobile)
     min-height: 100vh;
 }
 
+.rangka--mobile {
+    grid-template-columns: 1fr;
+}
+
 .side {
     background: var(--panel);
     border-right: 1px solid var(--garis);
@@ -92,6 +104,20 @@ watch(() => route.fullPath, tutupDiMobile)
     height: 100vh;
     display: flex;
     flex-direction: column;
+}
+
+.side--mobile {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 224px;
+    z-index: 20;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: var(--bayang-angkat);
+}
+
+.side--mobile.side--buka {
+    transform: none;
 }
 
 .side__balik {
@@ -157,13 +183,20 @@ watch(() => route.fullPath, tutupDiMobile)
     color: var(--redup-2);
 }
 
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 15;
+}
+
 .isi {
     padding: 1.75rem clamp(1rem, 3vw, 2.25rem) 3rem;
     min-width: 0;
 }
 
 .buka-side {
-    display: none;
+    display: flex;
     flex-direction: column;
     gap: 4px;
     background: var(--panel);
@@ -179,29 +212,5 @@ watch(() => route.fullPath, tutupDiMobile)
     height: 2px;
     background: var(--teks);
     display: block;
-}
-
-@media (max-width: 900px) {
-    .rangka {
-        grid-template-columns: 1fr;
-    }
-
-    .side {
-        position: fixed;
-        inset: 0 auto 0 0;
-        width: 224px;
-        z-index: 20;
-        transform: translateX(-100%);
-        transition: transform .22s ease;
-        box-shadow: var(--bayang-angkat);
-    }
-
-    .side--buka {
-        transform: none;
-    }
-
-    .buka-side {
-        display: flex;
-    }
 }
 </style>

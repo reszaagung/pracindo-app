@@ -299,3 +299,42 @@ class PurchaseOrderItem(models.Model):
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'amount'}
             
         super().save(*args, **kwargs)
+
+
+class PembelianKemasan(DiauditModel):
+    nomor         = models.CharField(max_length=48, unique=True, editable=False)
+    no_po         = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    entitas       = models.ForeignKey("core.Entitas", on_delete=models.PROTECT)
+    kemasan       = models.ForeignKey('inventory.Kemasan', on_delete=models.PROTECT)
+    qty_pcs       = models.IntegerField() # Satuannya Unit/Pcs
+    harga_per_pcs = models.DecimalField(max_digits=20, decimal_places=2)
+    nilai         = models.DecimalField(max_digits=20, decimal_places=2)
+    tanggal       = models.DateField(db_index=True)
+    status        = models.CharField(max_length=10, choices=StatusPO.choices, default=StatusPO.DRAFT)
+    
+    class Meta:
+        db_table = "inventory_pembelian_kemasan"
+
+
+class PurchaseOrderKemasanItem(models.Model):
+    purchase_order = models.ForeignKey('PembelianKemasan', on_delete=models.CASCADE, related_name='items')
+    kemasan        = models.ForeignKey('inventory.Kemasan', on_delete=models.PROTECT)
+    qty_pesan      = models.IntegerField() # Satuannya Pcs/Unit (Integer)
+    qty_diterima   = models.IntegerField(default=0)
+    harga_per_pcs  = models.DecimalField(max_digits=20, decimal_places=2)
+    amount         = models.DecimalField(max_digits=20, decimal_places=2, default=0, editable=False)
+
+    class Meta:
+        db_table = "inventory_pembelian_kemasan_item"
+
+    def save(self, *args, **kwargs):
+        if self.qty_pesan and self.harga_per_pcs:
+            self.amount = self.qty_pesan * self.harga_per_pcs
+        super().save(*args, **kwargs)
+
+    @property
+    def sisa_qty(self):
+        return self.qty_pesan - self.qty_diterima
+
+    def __str__(self):
+        return f"Item PO Kemasan: {self.qty_pesan} pcs"

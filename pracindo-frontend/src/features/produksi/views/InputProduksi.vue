@@ -125,7 +125,7 @@
           <div class="ip-grid ip-grid--4">
             <label class="ip-field">
               <span>Nama Hasil</span>
-              <input v-model="form.nama_hasil" type="text" placeholder="mis. Sabun Cair Lemon" />
+              <input v-model="form.nama_hasil" type="text" placeholder="mis. SUPER WHITE SPESIAL" />
             </label>
             <label class="ip-field">
               <span>Tangki Tujuan</span>
@@ -155,73 +155,115 @@
 
         <fieldset v-if="jenisProduksi === JENIS.BLENDING" class="ip-panel">
           <legend>Alokasi WIP Sumber (Fluida Existing)</legend>
-          <table class="ip-matrix">
-            <thead>
-              <tr>
-                <th>Tangki Sumber</th>
-                <th>Batch WIP</th>
-                <th>Qty Transfer (Kg)</th>
-                <th>Tersedia</th>
-                <th>Harga WIP</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in wipRows" :key="row._id">
-                <td>
+
+          <div class="ip-resp-table">
+            <!-- Header Desktop -->
+            <div class="ip-resp-thead grid-wip">
+              <div>Tangki Sumber</div>
+              <div>Batch WIP</div>
+              <div>Qty Transfer (Kg)</div>
+              <div class="text-right">Tersedia</div>
+              <div class="text-right">Harga WIP</div>
+              <div></div>
+            </div>
+
+            <!-- Body Rows -->
+            <div class="ip-resp-tbody">
+              <div class="ip-resp-tr grid-wip" v-for="row in wipRows" :key="row._id">
+                <div class="ip-resp-td">
+                  <label class="ip-resp-label">Tangki Sumber</label>
                   <select v-model="row.tangki_asal" @change="saatTangkiAsalDipilih(row)">
                     <option value="" disabled>Pilih tangki</option>
                     <option v-for="t in daftarTangki" :key="t.id" :value="t.id">{{ t.nama || t.kode }}</option>
                   </select>
-                </td>
-                <td>
+                </div>
+
+                <div class="ip-resp-td">
+                  <label class="ip-resp-label">Batch WIP</label>
                   <select v-model="row.batch" :disabled="!row.tangki_asal" @change="saatBatchWipDipilih(row)">
                     <option value="" disabled>Pilih batch</option>
                     <option v-for="b in row.opsiBatch" :key="b.batch" :value="b.batch">{{ b.batch }}</option>
                   </select>
-                </td>
-                <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
-                <td class="num">{{ formatKg(row.tersedia) }}</td>
-                <td class="num">{{ formatRupiah(row.harga) }}</td>
-                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusWipRow(row._id)">&times;</button></td>
-              </tr>
-            </tbody>
-          </table>
-          <button type="button" class="btn btn--ghost" @click="tambahWipRow">+ Tambah Sumber WIP</button>
+                </div>
+
+                <div class="ip-resp-td">
+                  <label class="ip-resp-label">Qty Transfer (Kg)</label>
+                  <input v-model.number="row.qty" type="number" step="0.001" min="0" />
+                </div>
+
+                <div class="ip-resp-td md-align-right justify-center">
+                  <label class="ip-resp-label">Tersedia</label>
+                  <span class="num">{{ formatKg(row.tersedia) }}</span>
+                </div>
+
+                <div class="ip-resp-td md-align-right justify-center">
+                  <label class="ip-resp-label">Harga WIP</label>
+                  <span class="num">{{ formatRupiah(row.harga) }}</span>
+                </div>
+
+                <div class="ip-resp-td justify-center">
+                  <button type="button" class="btn btn--sm btn--danger w-full-hp" @click="hapusWipRow(row._id)">Hapus</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn btn--ghost mt-4" @click="tambahWipRow">+ Tambah Sumber WIP</button>
         </fieldset>
 
         <fieldset class="ip-panel">
           <legend>{{ jenisProduksi === JENIS.BLENDING ? 'Bahan Baku Tambahan (BOM)' : 'Bill of Materials (BOM)' }}</legend>
-          <table class="ip-matrix">
-            <thead>
-              <tr>
-                <th>Bahan Baku</th>
-                <th>Qty Terpakai (Kg)</th>
-                <th>Saldo Pool</th>
-                <th>Harga (IDR/Kg)</th>
-                <th>Subtotal</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in bomRows" :key="row._id">
-                <td>
+
+          <div class="ip-resp-table">
+            <div class="ip-resp-thead grid-bom">
+              <div>Bahan Baku</div>
+              <div>Qty Terpakai (Kg)</div>
+              <div class="text-right">Saldo Pool</div>
+              <div class="text-right">Harga (IDR/Kg)</div>
+              <div class="text-right">Subtotal</div>
+              <div></div>
+            </div>
+
+            <div class="ip-resp-tbody">
+              <div class="ip-resp-tr grid-bom" v-for="row in bomRows" :key="row._id">
+                <div class="ip-resp-td">
+                  <label class="ip-resp-label">Bahan Baku</label>
                   <select v-model="row.raw" @change="perbaruiTelemetriBom(row)">
                     <option value="" disabled>Pilih bahan baku</option>
                     <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">
                       {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
                     </option>
                   </select>
-                </td>
-                <td><input v-model.number="row.qty" type="number" step="0.001" min="0" /></td>
-                <td class="num" :class="{ 'num--warn': row.qty > row.saldo }">{{ formatKg(row.saldo) }}</td>
-                <td class="num">{{ formatRupiah(row.harga) }}</td>
-                <td class="num">{{ formatRupiah(row.subtotal) }}</td>
-                <td><button type="button" class="btn btn--sm btn--danger" @click="hapusBomRow(row._id)">&times;</button></td>
-              </tr>
-            </tbody>
-          </table>
-          <button type="button" class="btn btn--ghost" @click="tambahBomRow">+ Tambah Baris BOM</button>
+                </div>
+
+                <div class="ip-resp-td">
+                  <label class="ip-resp-label">Qty Terpakai (Kg)</label>
+                  <input v-model.number="row.qty" type="number" step="0.001" min="0" />
+                </div>
+
+                <div class="ip-resp-td md-align-right justify-center">
+                  <label class="ip-resp-label">Saldo Pool</label>
+                  <span class="num" :class="{ 'num--warn': row.qty > row.saldo }">{{ formatKg(row.saldo) }}</span>
+                </div>
+
+                <div class="ip-resp-td md-align-right justify-center">
+                  <label class="ip-resp-label">Harga (IDR/Kg)</label>
+                  <span class="num">{{ formatRupiah(row.harga) }}</span>
+                </div>
+
+                <div class="ip-resp-td md-align-right justify-center">
+                  <label class="ip-resp-label">Subtotal</label>
+                  <span class="num">{{ formatRupiah(row.subtotal) }}</span>
+                </div>
+
+                <div class="ip-resp-td justify-center">
+                  <button type="button" class="btn btn--sm btn--danger w-full-hp" @click="hapusBomRow(row._id)">Hapus</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn btn--ghost mt-4" @click="tambahBomRow">+ Tambah Baris BOM</button>
         </fieldset>
 
         <div class="ip-projection">
@@ -450,15 +492,6 @@ async function konfirmasiVoid() {
 .ip-inline { display: flex; gap: 6px; }
 .ip-inline select { flex: 1; min-width: 0; }
 
-.ip-matrix { width: 100%; border-collapse: collapse; margin-bottom: var(--space-sm); }
-.ip-matrix th, .ip-matrix td { padding: 0.55rem 0.6rem; font-size: 0.82rem; }
-.ip-matrix th { color: var(--text-secondary); font-weight: 700; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.ip-matrix select, .ip-matrix input {
-  width: 100%; padding: 0.5rem 0.7rem; border: 1.5px solid var(--border-color);
-  background: var(--bg-input); color: var(--text-primary); border-radius: var(--radius-sm); transition: all var(--transition);
-}
-.ip-matrix select:focus, .ip-matrix input:focus { outline: none; background: var(--bg-card); border-color: var(--primary); box-shadow: var(--ring-focus); }
-
 .ip-projection {
   font-weight: 700; background: var(--primary-soft); border: 1px solid var(--primary-light);
   color: var(--text-primary); padding: 0.85rem 1.1rem; border-radius: var(--radius-md); margin-bottom: var(--space-lg); font-size: 0.9rem;
@@ -473,6 +506,62 @@ async function konfirmasiVoid() {
 
 .mt-4 { margin-top: 1rem; }
 .mb-4 { margin-bottom: 1rem; }
+
+/* --- GAYA TABEL RESPONSIF (KARTU DI HP, TABEL DI DESKTOP) --- */
+.ip-resp-table { display: flex; flex-direction: column; gap: 1rem; }
+.ip-resp-thead { display: none; }
+
+.ip-resp-tr {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  background: var(--bg-input);
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+}
+.ip-resp-td { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.ip-resp-label { font-size: 0.72rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+.ip-resp-td select, .ip-resp-td input { width: 100%; padding: 0.6rem 0.9rem; border: 1.5px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); border-radius: var(--radius-md); font-size: 0.85rem; }
+.ip-resp-td select:focus, .ip-resp-td input:focus { outline: none; border-color: var(--primary); box-shadow: var(--ring-focus); }
+.w-full-hp { width: 100%; padding: 0.6rem; margin-top: 0.5rem; }
+.text-right { text-align: left; }
+
+@media (min-width: 768px) {
+  .ip-resp-table { gap: 0; }
+
+  .ip-resp-thead {
+    display: grid;
+    padding: 0.75rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border-color);
+  }
+
+  .ip-resp-tr {
+    display: grid;
+    background: transparent;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 0;
+    align-items: center;
+    gap: 1rem;
+  }
+  .ip-resp-tr:hover { background: var(--bg-input); }
+
+  .ip-resp-label { display: none; }
+
+  .w-full-hp { width: auto; margin-top: 0; }
+  .text-right { text-align: right; }
+  .md-align-right { align-items: flex-end; }
+
+  .grid-wip { grid-template-columns: 2fr 2fr 1.5fr 1fr 1fr 60px; gap: 1rem; }
+  .grid-bom { grid-template-columns: 2.5fr 1.5fr 1fr 1.5fr 1.5fr 60px; gap: 1rem; }
+}
 
 @media (max-width: 1024px) { .ip-grid--4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) {

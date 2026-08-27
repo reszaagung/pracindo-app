@@ -82,7 +82,7 @@ class BatchCreateSerializer(serializers.Serializer):
     )
     nama_hasil = serializers.CharField(max_length=120, required=True)
     batch = serializers.CharField(max_length=30, required=False, allow_blank=True)
-    harga_per_kg = serializers.ReadOnlyField()
+    harga_per_kg = serializers.SerializerMethodField()
     susut_kg = serializers.DecimalField(max_digits=18, decimal_places=3, required=False, default=Decimal("0.000"))
     materials = InputRawSerializer(many=True, required=False, default=list)
     wip_sources = InputWipSerializer(many=True, required=False, default=list)

@@ -12,11 +12,14 @@ CATATAN PENTING
     field-nya tidak pernah ada, tidak ada jalur kebocoran.
 """
 from rest_framework import serializers
+from django.db import transaction
 
 from .models import (
     Akun, FakturPembelian, FakturPenjualan, JurnalDetail, JurnalUmum,
     KartuHutang, PurchaseOrder, PurchaseOrderItem, UangMukaSuplier,
+    PembelianKemasan, PurchaseOrderKemasanItem
 )
+from .models.pengeluaran import PengeluaranKas
 
 
 # =========================================================
@@ -111,37 +114,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
-    # subtotal, ppn_nominal, dan grand_total adalah @property di model,
-    # dihitung dari item -- bukan kolom database.
-    #
-    # ModelSerializer hanya memetakan field database secara otomatis.
-    # Properti yang disebut di Meta.fields tanpa deklarasi ini DIBUANG
-    # dari respons tanpa satu pun galat, dan di layar hasilnya Rp 0 --
-    # terlihat seperti data kosong, bukan seperti field yang hilang.
-    #
-    # PurchaseOrderSerializer sudah melakukannya sejak awal; serializer
-    # list dibuat belakangan dan langkah ini terlewat.
-    subtotal = serializers.DecimalField(max_digits=18, decimal_places=2,
-                                        read_only=True)
-    ppn_nominal = serializers.DecimalField(max_digits=18, decimal_places=2,
-                                           read_only=True)
-    grand_total = serializers.DecimalField(max_digits=18, decimal_places=2,
-                                           read_only=True)
-    # subtotal, ppn_nominal, dan grand_total adalah @property di model,
-    # dihitung dari item -- bukan kolom database.
-    #
-    # ModelSerializer hanya memetakan field database secara otomatis.
-    # Properti yang disebut di Meta.fields tanpa deklarasi ini DIBUANG
-    # dari respons tanpa satu pun galat, dan di layar hasilnya Rp 0 yang
-    # terlihat seperti data kosong, bukan seperti field yang hilang.
     subtotal = serializers.DecimalField(max_digits=20, decimal_places=2,
                                         read_only=True)
     ppn_nominal = serializers.DecimalField(max_digits=20, decimal_places=2,
                                            read_only=True)
     grand_total = serializers.DecimalField(max_digits=20, decimal_places=2,
                                            read_only=True)
-    """Tanpa nested item, untuk halaman daftar. Total lewat annotate."""
-
+    
     entitas_kode = serializers.CharField(source='entitas.kode', read_only=True)
     suplier_nama = serializers.CharField(source='suplier.nama', read_only=True)
     
@@ -226,8 +205,6 @@ class FakturListSerializer(serializers.ModelSerializer):
 
 
 class TerbitkanFakturSerializer(serializers.Serializer):
-    """Payload untuk POST faktur/dari-penerimaan/{id}/"""
-
     nomor_faktur   = serializers.CharField(max_length=64)
     tanggal_faktur = serializers.DateField()
     total_tagihan  = serializers.DecimalField(max_digits=18, decimal_places=2)
@@ -257,7 +234,9 @@ class UangMukaSerializer(serializers.ModelSerializer):
         read_only_fields = ['sisa', 'dibuat_pada', 'diubah_pada']     
 
 
-
+# =========================================================
+# PIUTANG PENJUALAN
+# =========================================================
 
 class FakturPenjualanSerializer(serializers.ModelSerializer):
     pelanggan_nama = serializers.CharField(source='pelanggan.nama', read_only=True)
@@ -272,11 +251,13 @@ class FakturPenjualanSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['no_internal', 'tanggal_jatuh_tempo', 'total_dibayar', 'sisa_piutang', 'status']
 
+
 class TerbitkanFakturJualSerializer(serializers.Serializer):
     nomor_faktur = serializers.CharField(max_length=64)
     tanggal_faktur = serializers.DateField()
     termin_hari = serializers.IntegerField(required=False, allow_null=True)
     catatan = serializers.CharField(required=False, allow_blank=True, default='')
+
 
 class TerimaPiutangSerializer(serializers.Serializer):
     faktur_id = serializers.IntegerField()
@@ -284,9 +265,10 @@ class TerimaPiutangSerializer(serializers.Serializer):
     tanggal = serializers.DateField()
     referensi = serializers.CharField(required=False, allow_blank=True, default='')
 
-   
 
-from .models.pengeluaran import PengeluaranKas
+# =========================================================
+# PENGELUARAN KAS
+# =========================================================
 
 class PengeluaranKasSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source='entitas.kode', read_only=True)
@@ -297,3 +279,55 @@ class PengeluaranKasSerializer(serializers.ModelSerializer):
         model = PengeluaranKas
         fields = '__all__'
         read_only_fields = ['nomor_bukti', 'status', 'dibuat_oleh', 'dibuat_pada', 'diubah_pada']
+
+
+# =========================================================
+# PEMBELIAN KEMASAN (Aset Fisik)
+# =========================================================
+
+class PurchaseOrderKemasanItemSerializer(serializers.ModelSerializer):
+    kemasan_id = serializers.IntegerField(source='kemasan.id')
+    
+    class Meta:
+        model = PurchaseOrderKemasanItem
+        fields = ['kemasan_id', 'qty_pesan', 'harga_per_pcs']
+
+
+class PurchaseOrderKemasanSerializer(serializers.ModelSerializer):
+    items = PurchaseOrderKemasanItemSerializer(many=True, write_only=True)
+    dibuat_oleh_nama = serializers.CharField(source='dibuat_oleh.username', read_only=True)
+
+    class Meta:
+        model = PembelianKemasan
+        # Field difilter hanya yang valid dengan model `PembelianKemasan` saat ini
+        fields = [
+            'id', 'no_po', 'tanggal', 'entitas', 'status', 'items', 'dibuat_oleh_nama'
+        ]
+        read_only_fields = ['id', 'no_po', 'status']
+
+    @transaction.atomic
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        
+        # Ekstrak data dari item pertama untuk menambal field wajib di tabel header (PembelianKemasan)
+        # Ini mencegah error Not Null / Integrity Error saat di-save
+        first_item = items_data[0]
+        
+        po_kemasan = PembelianKemasan.objects.create(
+            kemasan_id=first_item['kemasan']['id'],
+            qty_pcs=first_item['qty_pesan'],
+            harga_per_pcs=first_item['harga_per_pcs'],
+            nilai=first_item['qty_pesan'] * first_item['harga_per_pcs'],
+            **validated_data
+        )
+        
+        # Simpan Detail Item (Looping)
+        for item in items_data:
+            PurchaseOrderKemasanItem.objects.create(
+                purchase_order=po_kemasan,
+                kemasan_id=item['kemasan']['id'],
+                qty_pesan=item['qty_pesan'],
+                harga_per_pcs=item['harga_per_pcs']
+            )
+            
+        return po_kemasan

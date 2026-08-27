@@ -22,20 +22,29 @@ export default [
         path: '',
         redirect: '/warehouse/input/receipt'
       },
+      // 1. UBAH KE KOMPONEN WRAPPER (ReceiptIndex)
       {
         path: 'receipt',
-        name: 'warehouse-receipt-list',
-        component: () => import('@/features/warehouse/views/GoodsReceiptList.vue')
+        name: 'warehouse-receipt-index',
+        component: () => import('@/features/warehouse/views/ReceiptIndex.vue')
       },
+      // 2. DETAIL BAHAN BAKU
       {
         path: 'receipt/:id',
         name: 'warehouse-receipt-detail',
-        component: () => import('@/features/warehouse/views/GoodsReceiptDetail.vue')
+        component: () => import('@/features/warehouse/views/GoodsReceiptDetail.vue'),
+        props: true // Memungkinkan pengiriman ID sebagai props ke dalam komponen Vue
+      },
+      // 3. TAMBAHAN: DETAIL KEMASAN
+      {
+        path: 'package-receipt/:id',
+        name: 'warehouse-package-receipt-detail',
+        component: () => import('@/features/warehouse/views/PackageReceiptDetail.vue'),
+        props: true
       },
       {
         path: 'packing',
         name: 'warehouse-packing',
-        // --- DIUBAH MENJADI LIST AGAR BISA MEMUAT TABEL & FORM SEKALIGUS ---
         component: () => import('@/features/warehouse/views/InputPackingList.vue')
       },
       {

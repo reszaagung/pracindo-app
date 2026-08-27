@@ -26,7 +26,8 @@ export function useFormPurchasePackageing() {
     const muatPreviewNomor = async (entitasId, tanggal) => {
         if (!entitasId || !tanggal) return
         try {
-            const res = await api.get('accounting/po/preview-nomor/', {
+            // Arahkan ke endpoint khusus kemasan agar format penomorannya tidak tertukar
+            const res = await api.get('accounting/po-kemasan/preview-nomor/', {
                 params: { entitas_id: entitasId, tanggal, jenis: 'KEMASAN' }
             })
             previewNomor.value = res.data?.nomor || 'Draft PO (Kemasan)'
@@ -52,7 +53,8 @@ export function useFormPurchasePackageing() {
     const simpanPO = async (payload, isDraft = true) => {
         sedangProses.value = true
         try {
-            const endpoint = 'accounting/po/'
+            // KUNCI: Endpoint sekarang menembak ke jalur yang sudah diisolasi di backend
+            const endpoint = 'accounting/po-kemasan/'
             const response = await api.post(endpoint, payload)
             return { success: true, data: response.data }
         } catch (error) {

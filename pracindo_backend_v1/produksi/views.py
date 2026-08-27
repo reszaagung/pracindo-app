@@ -52,7 +52,7 @@ class TangkiViewSet(viewsets.ModelViewSet):
             return Response({
                 "sisa_qty": str(total_qty),
                 "sisa_nilai": str(total_nilai),
-                "harga_per_kg": str(harga_rata)
+                "harga_per_kg": str(harga_rata) if harga_rata is not None else "0"
             })
         except Exception as e:
             return Response({"detail": str(e)}, status=400)
@@ -111,7 +111,6 @@ class BatchViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def void(self, request, pk=None):
-        # Fitur VOID bisa Anda tambahkan di services.py jika diperlukan nantinya
         return Response(
             {"detail": "Fitur VOID Batch belum diimplementasikan di layanan baru."}, 
             status=status.HTTP_501_NOT_IMPLEMENTED
@@ -119,7 +118,6 @@ class BatchViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def saldo(self, request, pk=None):
-        # Mengubah namedtuple saldo_batch menjadi dict manual
         res = services.saldo_batch(self.get_object())
         return Response({
             "sisa_qty": str(res.sisa_qty),
@@ -157,7 +155,6 @@ def pratinjau_batch(request):
         
     d = s.validated_data
     
-    # Format baris input sesuai ekspektasi _normalisasi_baris_mixing / blending di services.py
     pakai_raw = [{"produk_id": int(r["raw"]), "qty_kg": r["qty_kg"]} for r in d.get("materials", []) if r.get("raw") and r.get("qty_kg", 0) > 0]
     
     pakai_wip = []

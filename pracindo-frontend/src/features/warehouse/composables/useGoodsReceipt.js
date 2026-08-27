@@ -37,6 +37,13 @@ export function useGoodsReceipt() {
     }
 
     const muatRingkasan = async (id) => {
+        // PERLINDUNGAN: Cegah request jika ID kosong atau bernilai 'undefined'
+        if (!id || id === 'undefined' || id === 'null') {
+            console.warn('muatRingkasan dibatalkan: ID tidak valid atau undefined.')
+            ringkasan.value = null
+            return
+        }
+
         sedangProses.value = true
         galat.value = ''
         try {
