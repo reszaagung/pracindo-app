@@ -55,19 +55,19 @@
           <template v-else-if="t.saldo">
             <div class="mb-4">
               <p class="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wide">Total Volume Tersedia</p>
-              <p class="text-2xl font-bold" :class="Number(t.saldo.qty) > 0 ? 'text-emerald-600' : 'text-slate-400'">
-                {{ formatKg(t.saldo.qty) }} <span class="text-sm font-medium">Kg</span>
+              <p class="text-2xl font-bold" :class="Number(t.saldo.sisa_qty) > 0 ? 'text-emerald-600' : 'text-slate-400'">
+                {{ formatKg(t.saldo.sisa_qty) }} <span class="text-sm font-medium">Kg</span>
               </p>
             </div>
             <div class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
               <div>
                 <p class="text-[11px] text-slate-500 font-semibold uppercase">Total Nilai</p>
-                <p class="text-sm font-bold text-slate-800 mt-0.5">{{ formatRupiah(t.saldo.nilai) }}</p>
+                <p class="text-sm font-bold text-slate-800 mt-0.5">{{ formatRupiah(t.saldo.sisa_nilai) }}</p>
               </div>
               <div>
-                <p class="text-[11px] text-slate-500 font-semibold uppercase">Harga Rata-rata</p>
+                <p class="text-[11px] text-slate-500 font-semibold uppercase">Nom/Kg</p>
                 <p class="text-sm font-bold text-slate-800 mt-0.5 flex items-center gap-1">
-                  {{ formatRupiah(t.saldo.harga_rata) }}
+                  {{ formatRupiah(t.saldo.harga_per_kg) }}
                   <i v-if="t.saldo.harga_beragam" class="pi pi-exclamation-triangle text-amber-500 text-[10px]" title="Harga bahan penyusun bervariasi"></i>
                 </p>
               </div>
@@ -98,7 +98,7 @@
           </div>
         </div>
 
-        <div v-else-if="t.saldo && Number(t.saldo.qty) === 0" class="bg-slate-50 border-t border-slate-100 p-4 text-center">
+        <div v-else-if="t.saldo && Number(t.saldo.sisa_qty) === 0" class="bg-slate-50 border-t border-slate-100 p-4 text-center">
           <p class="text-xs text-slate-500 font-medium flex items-center justify-center gap-1">
             <i class="pi pi-info-circle"></i> Tangki Kosong
           </p>
@@ -109,13 +109,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { apiTangki } from '../api'
+import { useTangkiList } from '../composables/useTangkiList' // Sesuaikan path jika berbeda
 
-const loading = ref(true)
-const errorMsg = ref('')
-const tangkis = ref([])
+// Ekstrak state dan fungsi dari composable
+const { loading, errorMsg, tangkis, muatData } = useTangkiList()
 
+// Fungsi formatter (khusus UI) tetap dibiarkan di komponen
 function formatKg(v) {
   return Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
@@ -123,43 +122,6 @@ function formatKg(v) {
 function formatRupiah(v) {
   return `Rp ${Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
-
-async function muatData() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const res = await apiTangki.daftar()
-    const dataTangki = Array.isArray(res) ? res : (res?.results || [])
-
-    tangkis.value = dataTangki.map(t => ({
-      ...t,
-      loadingSaldo: true,
-      saldo: null
-    }))
-
-    await Promise.all(
-      tangkis.value.map(async (t) => {
-        try {
-          if (t.aktif) {
-            t.saldo = await apiTangki.saldo(t.id)
-          }
-        } catch (e) {
-          console.error(`Gagal memuat saldo tangki ${t.kode}`, e)
-        } finally {
-          t.loadingSaldo = false
-        }
-      })
-    )
-  } catch (e) {
-    errorMsg.value = 'Gagal memuat data tangki. Periksa koneksi Anda.'
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  muatData()
-})
 </script>
 
 <style scoped>

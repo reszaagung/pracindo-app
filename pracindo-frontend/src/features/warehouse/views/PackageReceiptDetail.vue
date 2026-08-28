@@ -6,12 +6,18 @@
             <span>{{ galat }}</span>
         </div>
 
-        <template v-if="ringkasan">
+        <!-- Loading State -->
+        <div v-if="sedangProses && !ringkasan" class="flex flex-col items-center justify-center py-12 text-slate-400">
+            <i class="pi pi-spin pi-spinner text-3xl mb-3"></i>
+            <p class="text-sm">Memuat detail penerimaan kemasan...</p>
+        </div>
+
+        <template v-else-if="ringkasan">
             <!-- Header -->
             <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <p class="text-xs text-slate-400 mb-1">
-                        <router-link to="/warehouse/package-receipt" class="hover:text-slate-700 transition-colors">Penerimaan Kemasan</router-link>
+                        <router-link to="/warehouse/input/receipt?tab=kemasan" class="hover:text-slate-700 transition-colors">Penerimaan Kemasan</router-link>
                         <span class="mx-1">/</span>
                         <span class="text-slate-600 font-semibold">{{ ringkasan.nomor }}</span>
                     </p>
@@ -92,37 +98,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
+import { usePackageReceipt } from '../composables/usePackageReceipt' // Sambungkan ke composable
+import { angka } from '@/utils/format' // Gunakan utils format bawaan Anda
 
 const props = defineProps({
     id: { type: [String, Number], required: true }
 })
 
-const galat = ref('')
-const ringkasan = ref(null)
-
-const angka = (num) => {
-    if (num == null) return '-'
-    return num.toLocaleString('id-ID')
-}
+const { ringkasan, sedangProses, galat, muatRingkasan } = usePackageReceipt()
 
 onMounted(() => {
-    // Simulasi Fetch Data dari Backend
-    ringkasan.value = {
-        nomor: 'GRN/KMS/2026/VIII/098',
-        tanggal: '26 Agu 2026',
-        suplier: 'PT KARDUS MAKMUR',
-        po: 'PO/KMS/2026/VIII/002',
-        ada_selisih: true,
-        item: [
-            { nama: 'KARDUS KARTON A4', diterima: 1480, ditolak: 5, selisih: -15 },
-            { nama: 'LAKBAN COKLAT 50M', diterima: 200, ditolak: 0, selisih: 0 }
-        ],
-        selisih: [
-            { nomor: 'LS-KMS-2026-001', jenis: 'Barang Kurang Kirim', qty: 15, status: 'DIBUKA', resolusi: null },
-            { nomor: 'LS-KMS-2026-002', jenis: 'Barang Rusak/Ditolak', qty: 5, status: 'DIBUKA', resolusi: null }
-        ]
-    }
+    muatRingkasan(props.id) // Tarik data sungguhan dari API
 })
 </script>
 

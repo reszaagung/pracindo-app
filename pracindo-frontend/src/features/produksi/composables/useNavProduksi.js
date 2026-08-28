@@ -13,6 +13,14 @@ const MENU_PRODUKSI = [
     rute: '/produksi/batch/buat',
     activate: true
   },
+  // PERBAIKAN: Menambahkan menu Riwayat Batch yang sebelumnya hilang
+  {
+    id: 'batch-riwayat',
+    label: 'Riwayat Batch',
+    ikon: 'pi-history',
+    rute: '/produksi/batch',
+    activate: true
+  },
   {
     id: 'tangki-list',
     label: 'Monitor Tangki',

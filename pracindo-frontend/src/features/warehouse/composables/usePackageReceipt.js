@@ -10,12 +10,14 @@ export function usePackageReceipt() {
     const sedangProses = ref(false)
     const galat = ref('')
 
-    // 1. Memuat daftar PO khusus kemasan yang siap masuk gudang
+    // 1. Memuat daftar PO Kemasan (Memakai endpoint utama + filter)
     const muatPOKemasan = async (params = {}) => {
         sedangProses.value = true
         galat.value = ''
         try {
-            const { data } = await api.get('warehouse/po-kemasan-siap-terima/', { params })
+            const { data } = await api.get('warehouse/po-siap-terima/', {
+                params: { kategori: 'kemasan', ...params }
+            })
             daftarPOKemasan.value = data.results || data || []
         } catch (err) {
             galat.value = bacaError(err, 'Gagal memuat PO Kemasan siap terima.')
@@ -24,12 +26,14 @@ export function usePackageReceipt() {
         }
     }
 
-    // 2. Memuat riwayat daftar penerimaan kemasan
+    // 2. Memuat riwayat daftar penerimaan kemasan (Memakai endpoint utama + filter)
     const muatPenerimaan = async (params = {}) => {
         sedangProses.value = true
         galat.value = ''
         try {
-            const { data } = await api.get('warehouse/penerimaan-kemasan/', { params })
+            const { data } = await api.get('warehouse/penerimaan/', {
+                params: { kategori: 'kemasan', ...params }
+            })
             daftarPenerimaan.value = data.results || data || []
         } catch (err) {
             galat.value = bacaError(err, 'Gagal memuat daftar penerimaan kemasan.')
@@ -40,17 +44,14 @@ export function usePackageReceipt() {
 
     // 3. Memuat detail/ringkasan satu dokumen penerimaan kemasan
     const muatRingkasan = async (id) => {
-        // PERLINDUNGAN: Cegah request API jika ID tidak valid/undefined (menghindari Error 500)
         if (!id || id === 'undefined' || id === 'null') {
-            console.warn('muatRingkasan dibatalkan: ID kemasan tidak valid atau kosong.')
             ringkasan.value = null
             return
         }
-
         sedangProses.value = true
         galat.value = ''
         try {
-            const { data } = await api.get(`warehouse/penerimaan-kemasan/${id}/ringkasan/`)
+            const { data } = await api.get(`warehouse/penerimaan/${id}/ringkasan/`)
             ringkasan.value = data
         } catch (err) {
             galat.value = bacaError(err, 'Gagal memuat detail ringkasan kemasan.')
@@ -59,12 +60,12 @@ export function usePackageReceipt() {
         }
     }
 
-    // 4. Menyimpan data penerimaan (langsung simpan walau ada selisih)
+    // 4. Menyimpan data penerimaan
     const simpanPenerimaan = async (payload) => {
         sedangProses.value = true
         galat.value = ''
         try {
-            const response = await api.post('warehouse/penerimaan-kemasan/', payload)
+            const response = await api.post('warehouse/penerimaan/', payload)
             return { success: true, data: response.data }
         } catch (err) {
             galat.value = bacaError(err, 'Gagal menyimpan penerimaan kemasan.')

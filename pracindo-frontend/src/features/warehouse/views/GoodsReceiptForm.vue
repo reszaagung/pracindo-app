@@ -355,7 +355,6 @@ const kirim = async () => {
     }
 }
 
-// INI KUNCI PENTING: Memuat API backend saat form ditampilkan
 onMounted(() => {
     setNavInfo('Penerimaan Barang Baru', 'Warehouse > Penerimaan > Entry')
     muatPOSiapTerima()

@@ -52,7 +52,6 @@ export function useBlendingForm() {
     }
   }
 
-  // PERBAIKAN A: Langsung memanggil apiTangki.saldo sesuai struktur backend
   async function muatBatchTersediaUntukTangki(tangkiId) {
     if (!tangkiId) return []
     try {
@@ -84,8 +83,6 @@ export function useBlendingForm() {
     errorMsg.value = ''
     try {
       await Promise.all([muatTangki(), muatRawPool()])
-
-      // PERBAIKAN B: Cukup memanggil apiBatch.detail saja, tidak perlu apiBatch.komposisi ganda
       const detail = await apiBatch.detail(batchId)
 
       form.nama_hasil = detail.nama_hasil || ''
@@ -133,7 +130,6 @@ export function useBlendingForm() {
   }
 
   function saatBatchWipDipilih(row) {
-    // Sesuaikan sisa_qty / saldo_qty dengan nama field JSON response backend Anda
     const opsi = row.opsiBatch.find((b) => b.batch === row.batch)
     row.tersedia = opsi ? Number(opsi.sisa_qty ?? opsi.saldo_qty ?? 0) : 0
     row.harga = opsi ? Number(opsi.harga_per_kg ?? 0) : 0
@@ -242,26 +238,7 @@ export function useBlendingForm() {
     }
   }
 
-  async function simpanDraft(batchId = null) {
-    errorMsg.value = validasiForm()
-    if (errorMsg.value) return false
-    submitting.value = true
-    try {
-      const payload = susunPayload()
-      if (batchId) {
-        await apiBatch.ubah(batchId, payload)
-      } else {
-        await apiBatch.buat(payload)
-      }
-      return true
-    } catch (e) {
-      const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || 'Gagal menyimpan draft batch'
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
+  // FUNGSI SIMPAN DRAFT DIHAPUS
 
   async function simpanDanPosting(batchId = null) {
     errorMsg.value = validasiForm()
@@ -276,11 +253,12 @@ export function useBlendingForm() {
         const res = await apiBatch.buat(payload)
         targetId = res?.id ?? res?.data?.id ?? res
       }
+      // Langsung tembak endpoint posting
       await apiBatch.posting(targetId)
       return true
     } catch (e) {
       const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || 'Gagal posting batch'
+      errorMsg.value = data?.detail || data?.pesan || 'Gagal memposting batch produksi'
       return false
     } finally {
       submitting.value = false
@@ -317,7 +295,6 @@ export function useBlendingForm() {
     hapusWipRow,
     perbaruiTelemetriBom,
     mintaPratinjau,
-    simpanDraft,
     simpanDanPosting
   }
 }

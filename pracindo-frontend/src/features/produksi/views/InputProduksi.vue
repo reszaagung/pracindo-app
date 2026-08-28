@@ -10,7 +10,6 @@
 
     <p v-if="errorMsg" class="ip-alert ip-alert--error">{{ errorMsg }}</p>
 
-    <!-- LIST MODE -->
     <section v-if="mode === 'list'" class="ip-list">
       <div class="ip-toolbar">
         <div class="ip-filter">
@@ -135,8 +134,7 @@
         @sukses="saatFormSukses"
       />
     </section>
-
-    <!-- Modal Void -->
+ 
     <div v-if="modalVoid.tampil" class="ip-modal-backdrop" @click.self="tutupModalVoid">
       <div class="ip-modal">
         <h3>Void Batch {{ modalVoid.batch }}</h3>

@@ -1,231 +1,208 @@
+<!-- features/warehouse/views/PackageReceiptList.vue -->
 <template>
     <div class="flex flex-col w-full animate-fade-in relative">
-        <!-- Header & Breadcrumb -->
-        <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-0">
-            <div>
-                <p class="text-xs text-slate-400 mb-1">
-                    <router-link to="/" class="hover:text-slate-700 transition-colors">Dashboard</router-link> ›
-                    <span class="text-slate-600">Gudang & Logistik</span>
-                </p>
-                <div class="flex items-center gap-3">
-                    <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Log Packing & Surat Jalan
-                    </h2>
-                    <span
-                        class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wide border border-amber-200">GUDANG</span>
+        <transition name="fade" mode="out-in">
+            <!-- STATE 1: LAZY VIEW FORM PENERIMAAN KEMASAN -->
+            <div v-if="modeForm" key="form" class="w-full">
+                <!-- Render Form Komponen secara dinamis -->
+                <PackageReceiptForm @tutup="tutupForm" />
+            </div>
+
+            <!-- STATE 2: TAMPILAN DAFTAR (DEFAULT) -->
+            <div v-else key="list" class="w-full">
+                <!-- Header -->
+                <div class="mb-4 md:mb-6 flex justify-between items-end">
+                    <div>
+                        <p class="text-xs text-slate-400 mb-1">
+                            <span class="hover:text-slate-700 transition-colors">Warehouse</span> /
+                            <span class="hover:text-slate-700 transition-colors font-semibold">Penerimaan Kemasan</span>
+                        </p>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Penerimaan Kemasan</h2>
+                    </div>
+                </div>
+
+                <div v-if="galat" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium flex items-start gap-3 shadow-sm">
+                    <i class="pi pi-exclamation-triangle mt-0.5"></i>
+                    <span>{{ galat }}</span>
+                </div>
+
+                <!-- Banner Informasi PO Siap Terima -->
+                <div v-if="daftarPOKemasan.length > 0"
+                    class="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-fade-in relative overflow-hidden">
+                    <div class="absolute -right-6 -top-6 text-purple-100 opacity-50 pointer-events-none">
+                        <i class="pi pi-shopping-bag" style="font-size: 6rem;"></i>
+                    </div>
+                    <div class="flex items-center gap-4 relative z-10">
+                        <div class="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                            <i class="pi pi-bell text-xl animate-bounce"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-purple-900">Menunggu Kedatangan Kemasan</h3>
+                            <p class="text-xs text-purple-700 mt-0.5">
+                                Terdapat <span class="font-black text-purple-800 text-sm mx-1">{{ daftarPOKemasan.length }}</span>
+                                PO Kemasan yang sedang dalam pengiriman suplier dan siap diterima.
+                            </p>
+                        </div>
+                    </div>
+                    <button @click="modeForm = true"
+                        class="relative z-10 w-full md:w-auto px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-colors shadow-md transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
+                        Proses Sekarang <i class="pi pi-arrow-right text-[10px]"></i>
+                    </button>
+                </div>
+
+                <!-- Area Filter & Tabel -->
+                <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full min-h-[400px]">
+                    <!-- Header Kartu & Pencarian -->
+                    <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">Riwayat Penerimaan Kemasan</h3>
+                            <p class="text-xs text-slate-500">Menampilkan dokumen aset kemasan yang telah masuk</p>
+                        </div>
+                        <div class="flex items-center gap-2 w-full xl:w-auto">
+                            <div class="relative w-full md:w-64">
+                                <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" v-model="kataKunci" @keyup.enter="cari" placeholder="Cari No. SJ / No. PO..."
+                                    class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-700" />
+                            </div>
+                            <button @click="cari" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                                Cari
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div v-if="sedangProses" class="flex flex-col items-center justify-center py-12 text-center">
+                        <i class="pi pi-spin pi-spinner text-slate-300 text-2xl mb-3"></i>
+                        <p class="text-xs text-slate-500">Memuat data penerimaan kemasan...</p>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div v-else-if="daftarPenerimaan.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+                        <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
+                            <i class="pi pi-inbox text-slate-300 text-xl"></i>
+                        </div>
+                        <h4 class="text-sm font-bold text-slate-800 mb-1">Belum ada penerimaan kemasan</h4>
+                        <p class="text-xs text-slate-500">Tidak ada data yang cocok dengan pencarian Anda.</p>
+                    </div>
+
+                    <!-- Tampilan Tabel (Desktop) -->
+                    <div v-else class="hidden md:block overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-sm table-fixed">
+                            <thead class="text-slate-500 bg-slate-50/50">
+                                <tr>
+                                    <th class="py-3 px-4 font-semibold rounded-tl-xl w-[20%]">Nomor & Tanggal</th>
+                                    <th class="py-3 px-4 font-semibold w-[25%]">Suplier</th>
+                                    <th class="py-3 px-4 font-semibold w-[20%]">Referensi PO</th>
+                                    <th class="py-3 px-4 font-semibold w-[20%]">No. Surat Jalan</th>
+                                    <th class="py-3 px-4 font-semibold w-[15%] text-center rounded-tr-xl">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="p in daftarPenerimaan" :key="p.id" @click="bukaDetail(p.id)" class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors cursor-pointer">
+                                    <td class="py-3 px-4">
+                                        <div class="font-bold text-slate-800">{{ p.nomor }}</div>
+                                        <div class="text-[11px] font-medium text-slate-400 mt-0.5">
+                                            <i class="pi pi-calendar text-[10px] mr-1"></i>{{ p.tanggal }}
+                                        </div>
+                                    </td>
+                                    <td class="py-3 px-4 text-slate-700 truncate font-medium" :title="p.suplier_nama">{{ p.suplier_nama }}</td>
+                                    <td class="py-3 px-4 text-slate-600">{{ p.po_nomor }}</td>
+                                    <td class="py-3 px-4 text-slate-600">{{ p.no_surat_jalan }}</td>
+                                    <td class="py-3 px-4 text-center">
+                                        <span v-if="p.ada_selisih" class="bg-red-50 text-red-600 border border-red-200 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase inline-flex items-center gap-1">
+                                            <i class="pi pi-exclamation-circle text-[10px]"></i> Ada Selisih
+                                        </span>
+                                        <span v-else class="bg-emerald-50 text-emerald-600 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase">
+                                            Sesuai
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Tampilan Card (Mobile) -->
+                    <div v-if="!sedangProses && daftarPenerimaan.length > 0" class="md:hidden flex flex-col gap-3">
+                        <div v-for="p in daftarPenerimaan" :key="p.id" @click="bukaDetail(p.id)" class="bg-white border border-slate-100 rounded-xl p-4 shadow-sm active:scale-[0.98] transition-transform cursor-pointer">
+                            <div class="flex justify-between items-start mb-3 border-b border-slate-50 pb-3">
+                                <div>
+                                    <div class="font-bold text-slate-800 text-sm mb-1">{{ p.nomor }}</div>
+                                    <div class="text-[11px] text-slate-400 flex items-center gap-1">
+                                        <i class="pi pi-calendar text-[10px]"></i>{{ p.tanggal }}
+                                    </div>
+                                </div>
+                                <span v-if="p.ada_selisih" class="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded text-[9px] font-bold uppercase">
+                                    Ada Selisih
+                                </span>
+                            </div>
+                            <div class="text-xs text-slate-600 flex flex-col gap-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-semibold">Suplier</span>
+                                    <span class="font-bold text-slate-700 truncate max-w-[150px]">{{ p.suplier_nama }}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-semibold">No. PO</span>
+                                    <span class="font-medium bg-slate-50 px-2 py-0.5 rounded text-[11px]">{{ p.po_nomor }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="flex items-center gap-2">
-                <button type="button" @click="muatData"
-                    class="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg transition-colors">
-                    <i class="pi pi-refresh" :class="{ 'pi-spin': isLoading }"></i>
-                </button>
-                <router-link to="/warehouse/do/create"
-                    class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-sm">
-                    <i class="pi pi-plus"></i> Input DO Baru
-                </router-link>
-            </div>
-        </div>
-
-        <!-- Filter & Search Bar -->
-        <div
-            class="bg-white border border-slate-200 rounded-t-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm relative z-10">
-            <div class="w-full md:w-96 relative">
-                <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                <input v-model="pencarian" type="text" placeholder="Cari Ref SO, Plat Nomor, atau Pengemudi..."
-                    class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-slate-700">
-            </div>
-
-            <div class="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                <input type="date" v-model="filterTanggal"
-                    class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-600">
-            </div>
-        </div>
-
-        <!-- Tabel Log Packing -->
-        <div class="w-full bg-white border-x border-b border-slate-200 rounded-b-2xl shadow-sm overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm whitespace-nowrap">
-                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-500">
-                        <tr>
-                            <th class="py-4 px-6 font-semibold w-[5%] text-center">No</th>
-                            <th class="py-4 px-6 font-semibold w-[15%]">Tanggal</th>
-                            <th class="py-4 px-6 font-semibold w-[20%]">Referensi SO</th>
-                            <th class="py-4 px-6 font-semibold w-[25%]">Pengemudi / Plat</th>
-                            <th class="py-4 px-6 font-semibold w-[20%] text-center">Total Item Packing</th>
-                            <th class="py-4 px-6 font-semibold w-[15%] text-center">Aksi</th>
-                        </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-if="isLoading">
-                            <td colspan="6" class="py-8 text-center text-slate-400">
-                                <i class="pi pi-spinner pi-spin text-2xl mb-2 text-amber-500"></i>
-                                <p class="text-sm">Memuat log packing...</p>
-                            </td>
-                        </tr>
-
-                        <tr v-else-if="filteredLog.length === 0">
-                            <td colspan="6"
-                                class="py-12 text-center text-slate-400 flex flex-col items-center justify-center">
-                                <i class="pi pi-box text-4xl mb-3 text-slate-300"></i>
-                                <p class="text-sm font-medium">Tidak ada catatan pengiriman.</p>
-                            </td>
-                        </tr>
-
-                        <!-- Baris Log Data -->
-                        <template v-else v-for="(log, index) in filteredLog" :key="log.id">
-                            <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer"
-                                @click="toggleDetail(log.id)">
-                                <td class="py-4 px-6 text-center text-slate-500">{{ index + 1 }}</td>
-                                <td class="py-4 px-6 text-slate-700 font-medium">{{ formatDate(log.tanggal) }}</td>
-                                <td class="py-4 px-6">
-                                    <span class="font-bold text-slate-700">{{ log.referensi_so || 'Tanpa Referensi'
-                                        }}</span>
-                                </td>
-                                <td class="py-4 px-6">
-                                    <span class="font-semibold text-slate-700 block">{{ log.pengemudi }}</span>
-                                    <span
-                                        class="text-xs text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded uppercase">{{
-                                        log.plat_nomor }}</span>
-                                </td>
-                                <td class="py-4 px-6 text-center">
-                                    <span
-                                        class="bg-amber-50 text-amber-600 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">
-                                        {{ log.items ? log.items.length : 0 }} Barang
-                                    </span>
-                                </td>
-                                <td class="py-4 px-6 text-center">
-                                    <button class="text-slate-400 hover:text-amber-600 transition-colors">
-                                        <i class="pi"
-                                            :class="expandedId === log.id ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
-                                    </button>
-                                </td>
-                            </tr>
-
-                            <!-- Sub-tabel untuk melihat rincian item -->
-                            <tr v-if="expandedId === log.id" class="bg-slate-50 border-b-2 border-slate-200">
-                                <td colspan="6" class="p-0">
-                                    <div class="px-8 py-4 animate-fade-in border-l-4 border-amber-400">
-                                        <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                                            Detail Barang Dikirim</h4>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div v-for="(item, idx) in log.items" :key="idx"
-                                                class="flex justify-between items-center bg-white p-3 border border-slate-200 rounded-lg shadow-sm">
-                                                <div>
-                                                    <span class="text-xs text-slate-400 font-bold mr-2">#{{ idx + 1
-                                                        }}</span>
-                                                    <span class="text-sm font-semibold text-slate-700">{{
-                                                        item.nama_barang }}</span>
-                                                    <p v-if="item.keterangan"
-                                                        class="text-xs text-slate-500 mt-0.5 ml-6">{{ item.keterangan }}
-                                                    </p>
-                                                </div>
-                                                <div class="text-right">
-                                                    <span class="text-sm font-black text-slate-800">{{ item.qty
-                                                        }}</span>
-                                                    <span class="text-xs text-slate-500 ml-1">{{ item.satuan }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div v-if="log.catatan"
-                                            class="mt-4 p-3 bg-white border border-slate-200 rounded-lg">
-                                            <span class="text-xs font-bold text-slate-500 block mb-1">Catatan
-                                                Gudang:</span>
-                                            <p class="text-sm text-slate-700 italic">{{ log.catatan }}</p>
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-            </div>
-
-            <div
-                class="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500 bg-slate-50/50">
-                <span>Menampilkan <b>{{ filteredLog.length }}</b> catatan log</span>
-            </div>
-        </div>
+        </transition>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import warehouseApi from '@/features/warehouse/api' // Sesuaikan path import api Anda
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { usePackageReceipt } from '../composables/usePackageReceipt'
+import PackageReceiptForm from './PackageReceiptForm.vue'
 
-const isLoading = ref(false)
-const pencarian = ref('')
-const filterTanggal = ref('')
-const expandedId = ref(null)
-const daftarLog = ref([])
+const router = useRouter()
+const {
+    daftarPenerimaan,
+    daftarPOKemasan,
+    sedangProses,
+    galat,
+    muatPenerimaan,
+    muatPOKemasan
+} = usePackageReceipt()
+
+const modeForm = ref(false)
+const kataKunci = ref('')
+
+const cari = () => {
+    muatPenerimaan({ search: kataKunci.value })
+}
+
+const bukaDetail = (id) => {
+    // Arahkan ke rute detail kemasan
+    router.push(`/warehouse/input/package-receipt/${id}`)
+}
+
+const tutupForm = () => {
+    modeForm.value = false
+    muatPenerimaan() // Refresh data riwayat
+    muatPOKemasan()  // Refresh sisa PO
+}
 
 onMounted(() => {
-    muatData()
+    muatPenerimaan()
+    muatPOKemasan()
 })
-
-const muatData = async () => {
-    isLoading.value = true
-    try {
-        // Menggunakan method yang tersedia di warehouseApi
-        // (Ganti atau sesuaikan dengan endpoint log packing yang sebenarnya jika sudah ada, misal: getLaporanSelisih atau endpoint kustom)
-        const response = await warehouseApi.getLaporanSelisih()
-        daftarLog.value = response.data.results || response.data || []
-    } catch (error) {
-        console.error('Gagal memuat log packing:', error)
-        daftarLog.value = []
-    } finally {
-        isLoading.value = false
-    }
-}
-
-const toggleDetail = (id) => {
-    expandedId.value = expandedId.value === id ? null : id
-}
-
-const filteredLog = computed(() => {
-    return daftarLog.value.filter(log => {
-        const keyword = pencarian.value.toLowerCase()
-        const matchSearch = (log.referensi_so || '').toLowerCase().includes(keyword) ||
-            (log.pengemudi || '').toLowerCase().includes(keyword) ||
-            (log.plat_nomor || '').toLowerCase().includes(keyword)
-
-        const matchTanggal = filterTanggal.value === '' || log.tanggal === filterTanggal.value
-
-        return matchSearch && matchTanggal
-    })
-})
-
-const formatDate = (dateString) => {
-    if (!dateString) return '-'
-    const options = { day: '2-digit', month: 'short', year: 'numeric' }
-    return new Date(dateString).toLocaleDateString('id-ID', options)
-}
 </script>
 
 <style scoped>
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
-::-webkit-scrollbar {
-    height: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
-}
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-10px); }
+.custom-scrollbar::-webkit-scrollbar { height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>

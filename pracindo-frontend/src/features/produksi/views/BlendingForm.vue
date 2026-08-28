@@ -1,176 +1,181 @@
 <template>
-  <div class="blending-form">
-    <p v-if="errorMsg" class="ip-alert ip-alert--error">{{ errorMsg }}</p>
+  <div class="space-y-6">
+    <div v-if="errorMsg" class="bg-red-50 text-red-600 border border-red-100 rounded-xl px-4 py-3 text-sm">
+      {{ errorMsg }}
+    </div>
 
-    <div v-if="loadingForm" class="ip-empty">Memuat data blending...</div>
+    <div v-if="loadingForm" class="flex justify-center items-center py-20 text-slate-400">
+      <i class="pi pi-spin pi-spinner text-3xl"></i>
+    </div>
+
     <template v-else>
-      <!-- Telemetri Produksi -->
-      <fieldset class="ip-panel">
-        <legend>Telemetri Produksi (Blending)</legend>
-        <div class="ip-grid ip-grid--4">
-          <label class="ip-field">
-            <span>Nama Hasil</span>
-            <input v-model="form.nama_hasil" type="text" placeholder="mis. SUPER WHITE SPESIAL" />
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-6">
+        <h3 class="font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">Telemetri Produksi (Blending)</h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Nama Hasil</span>
+            <input v-model="form.nama_hasil" type="text" placeholder="mis. SUPER WHITE SPESIAL"
+              class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </label>
-          <label class="ip-field">
-            <span>Tangki Tujuan</span>
-            <div class="ip-inline">
-              <select v-model="form.tangki_tujuan">
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Tangki Tujuan</span>
+            <div class="flex items-center gap-2">
+              <select v-model="form.tangki_tujuan" class="flex-1 w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
                 <option value="" disabled>Pilih tangki</option>
                 <option v-for="t in daftarTangki" :key="t.id" :value="t.id">
                   {{ t.nama || t.kode }}
                 </option>
               </select>
-              <button type="button" class="btn btn--icon" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
+              <button type="button" class="w-10 h-10 flex-shrink-0 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center transition-colors font-bold shadow-sm" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
             </div>
           </label>
-          <label class="ip-field">
-            <span>Batch ID</span>
-            <div class="ip-inline">
-              <input v-model="form.batch" type="text" placeholder="PRD-BLD-0001" />
-              <button type="button" class="btn btn--icon" @click="generateNomorBatch">Auto</button>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Batch ID</span>
+            <div class="flex items-center gap-2">
+              <input v-model="form.batch" type="text" placeholder="PRD-BLD-0001" class="flex-1 w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+              <button type="button" class="px-3 py-2.5 h-10 flex-shrink-0 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm" @click="generateNomorBatch">Auto</button>
             </div>
           </label>
-          <label class="ip-field">
-            <span>Tekor / Susut (Kg)</span>
-            <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" />
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Tekor / Susut (Kg)</span>
+            <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </label>
         </div>
-      </fieldset>
-
-      <!-- Alokasi WIP Sumber (Fluida Existing) -->
-      <fieldset class="ip-panel">
-        <legend>Alokasi WIP Sumber (Fluida Existing)</legend>
-
-        <div class="ip-resp-table">
-          <div class="ip-resp-thead grid-wip">
-            <div>Tangki Sumber</div>
-            <div>Batch WIP</div>
-            <div>Qty Transfer (Kg)</div>
-            <div class="text-right">Tersedia</div>
-            <div class="text-right">Harga WIP</div>
-            <div></div>
-          </div>
-
-          <div class="ip-resp-tbody">
-            <div class="ip-resp-tr grid-wip" v-for="row in wipRows" :key="row._id">
-              <div class="ip-resp-td">
-                <label class="ip-resp-label">Tangki Sumber</label>
-                <select v-model="row.tangki_asal" @change="saatTangkiAsalDipilih(row)">
-                  <option value="" disabled>Pilih tangki</option>
-                  <option v-for="t in daftarTangki" :key="t.id" :value="t.id">{{ t.nama || t.kode }}</option>
-                </select>
-              </div>
-
-              <div class="ip-resp-td">
-                <label class="ip-resp-label">Batch WIP</label>
-                <select v-model="row.batch" :disabled="!row.tangki_asal" @change="saatBatchWipDipilih(row)">
-                  <option value="" disabled>Pilih batch</option>
-                  <option v-for="b in row.opsiBatch" :key="b.batch" :value="b.batch">{{ b.batch }}</option>
-                </select>
-              </div>
-
-              <div class="ip-resp-td">
-                <label class="ip-resp-label">Qty Transfer (Kg)</label>
-                <input v-model.number="row.qty" type="number" step="0.001" min="0" />
-              </div>
-
-              <div class="ip-resp-td md-align-right justify-center">
-                <label class="ip-resp-label">Tersedia</label>
-                <span class="num">{{ formatKg(row.tersedia) }}</span>
-              </div>
-
-              <div class="ip-resp-td md-align-right justify-center">
-                <label class="ip-resp-label">Harga WIP</label>
-                <span class="num">{{ formatRupiah(row.harga) }}</span>
-              </div>
-
-              <div class="ip-resp-td justify-center">
-                <button type="button" class="btn btn--sm btn--danger w-full-hp" @click="hapusWipRow(row._id)">Hapus</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn--ghost mt-4" @click="tambahWipRow">+ Tambah Sumber WIP</button>
-      </fieldset>
-
-      <!-- Bahan Baku Tambahan (BOM) -->
-      <fieldset class="ip-panel">
-        <legend>Bahan Baku Tambahan (BOM)</legend>
-
-        <div class="ip-resp-table">
-          <div class="ip-resp-thead grid-bom">
-            <div>Bahan Baku</div>
-            <div>Qty Terpakai (Kg)</div>
-            <div class="text-right">Saldo Pool</div>
-            <div class="text-right">Harga (IDR/Kg)</div>
-            <div class="text-right">Subtotal</div>
-            <div></div>
-          </div>
-
-          <div class="ip-resp-tbody">
-            <div class="ip-resp-tr grid-bom" v-for="row in bomRows" :key="row._id">
-              <div class="ip-resp-td">
-                <label class="ip-resp-label">Bahan Baku</label>
-                <select v-model="row.raw" @change="perbaruiTelemetriBom(row)">
-                  <option value="" disabled>Pilih bahan baku</option>
-                  <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">
-                    {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
-                  </option>
-                </select>
-              </div>
-
-              <div class="ip-resp-td">
-                <label class="ip-resp-label">Qty Terpakai (Kg)</label>
-                <input v-model.number="row.qty" type="number" step="0.001" min="0" />
-              </div>
-
-              <div class="ip-resp-td md-align-right justify-center">
-                <label class="ip-resp-label">Saldo Pool</label>
-                <span class="num" :class="{ 'num--warn': row.qty > row.saldo }">{{ formatKg(row.saldo) }}</span>
-              </div>
-
-              <div class="ip-resp-td md-align-right justify-center">
-                <label class="ip-resp-label">Harga (IDR/Kg)</label>
-                <span class="num">{{ formatRupiah(row.harga) }}</span>
-              </div>
-
-              <div class="ip-resp-td md-align-right justify-center">
-                <label class="ip-resp-label">Subtotal</label>
-                <span class="num">{{ formatRupiah(row.subtotal) }}</span>
-              </div>
-
-              <div class="ip-resp-td justify-center">
-                <button type="button" class="btn btn--sm btn--danger w-full-hp" @click="hapusBomRow(row._id)">Hapus</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn--ghost mt-4" @click="tambahBomRow">+ Tambah Baris BOM</button>
-      </fieldset>
-
-      <!-- Proyeksi Yield & Valuasi -->
-      <div class="ip-projection">
-        Proyeksi Yield: <strong>{{ formatKg(proyeksiYield) }} Kg</strong>
-        &nbsp;|&nbsp;
-        Estimasi Harga Pokok: <strong>{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
       </div>
 
-      <div class="mb-4">
-        <PratinjauValuasi v-if="pratinjau" :hasil="pratinjau" />
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 md:p-6 pb-4">
+          <h3 class="font-bold text-slate-800">Alokasi WIP Sumber (Fluida Existing)</h3>
+        </div>
+
+        <div class="overflow-x-auto border-y border-slate-100">
+          <table class="w-full text-sm text-left whitespace-nowrap">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+              <tr>
+                <th class="px-5 py-3">Tangki Sumber</th>
+                <th class="px-5 py-3">Batch WIP</th>
+                <th class="px-5 py-3">Qty Transfer (Kg)</th>
+                <th class="px-5 py-3 text-right">Tersedia</th>
+                <th class="px-5 py-3 text-right">Harga WIP</th>
+                <th class="px-5 py-3 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="row in wipRows" :key="row._id" class="hover:bg-slate-50/50 transition-colors">
+                <td class="px-5 py-3">
+                  <select v-model="row.tangki_asal" @change="saatTangkiAsalDipilih(row)" class="w-full min-w-[200px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20">
+                    <option value="" disabled>Pilih tangki</option>
+                    <option v-for="t in daftarTangki" :key="t.id" :value="t.id">{{ t.nama || t.kode }}</option>
+                  </select>
+                </td>
+                <td class="px-5 py-3">
+                  <select v-model="row.batch" :disabled="!row.tangki_asal" @change="saatBatchWipDipilih(row)" class="w-full min-w-[200px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:opacity-50">
+                    <option value="" disabled>Pilih batch</option>
+                    <option v-for="b in row.opsiBatch" :key="b.batch" :value="b.batch">{{ b.batch }}</option>
+                  </select>
+                </td>
+                <td class="px-5 py-3">
+                  <input v-model.number="row.qty" type="number" step="0.001" min="0" class="w-full min-w-[120px] px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <span class="font-medium text-slate-700">{{ formatKg(row.tersedia) }}</span>
+                </td>
+                <td class="px-5 py-3 text-right text-slate-500">{{ formatRupiah(row.harga) }}</td>
+                <td class="px-5 py-3 text-center">
+                  <button type="button" class="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 mx-auto transition-colors" @click="hapusWipRow(row._id)">
+                    <i class="pi pi-trash text-sm"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-4 bg-slate-50/50">
+          <button type="button" class="text-sm font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-4 py-2 rounded-xl transition-colors flex items-center gap-2" @click="tambahWipRow">
+            <i class="pi pi-plus text-xs"></i> Tambah Sumber WIP
+          </button>
+        </div>
+      </div>
+
+      <!-- Bahan Baku Tambahan (BOM) -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 md:p-6 pb-4">
+          <h3 class="font-bold text-slate-800">Bahan Baku Tambahan (BOM)</h3>
+        </div>
+
+        <div class="overflow-x-auto border-y border-slate-100">
+          <table class="w-full text-sm text-left whitespace-nowrap">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+              <tr>
+                <th class="px-5 py-3">Bahan Baku</th>
+                <th class="px-5 py-3">Qty Terpakai (Kg)</th>
+                <th class="px-5 py-3 text-right">Saldo Pool</th>
+                <th class="px-5 py-3 text-right">Harga (IDR/Kg)</th>
+                <th class="px-5 py-3 text-right">Subtotal</th>
+                <th class="px-5 py-3 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="row in bomRows" :key="row._id" class="hover:bg-slate-50/50 transition-colors">
+                <td class="px-5 py-3">
+                  <select v-model="row.raw" @change="perbaruiTelemetriBom(row)" class="w-full min-w-[200px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="" disabled>Pilih bahan baku</option>
+                    <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">
+                      {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
+                    </option>
+                  </select>
+                </td>
+                <td class="px-5 py-3">
+                  <input v-model.number="row.qty" type="number" step="0.001" min="0" class="w-full min-w-[120px] px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <span class="font-medium" :class="row.qty > row.saldo ? 'text-red-600' : 'text-slate-700'">
+                    {{ formatKg(row.saldo) }}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-right text-slate-500">{{ formatRupiah(row.harga) }}</td>
+                <td class="px-5 py-3 text-right font-semibold text-slate-700">{{ formatRupiah(row.subtotal) }}</td>
+                <td class="px-5 py-3 text-center">
+                  <button type="button" class="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 mx-auto transition-colors" @click="hapusBomRow(row._id)">
+                    <i class="pi pi-trash text-sm"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-4 bg-slate-50/50">
+          <button type="button" class="text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition-colors flex items-center gap-2" @click="tambahBomRow">
+            <i class="pi pi-plus text-xs"></i> Tambah Baris BOM
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-3 text-sm">
+        <div class="text-blue-800">
+          Proyeksi Yield: <strong class="text-blue-900 text-base ml-1">{{ formatKg(proyeksiYield) }} Kg</strong>
+        </div>
+        <div class="text-blue-800">
+          Estimasi HPP: <strong class="text-blue-900 text-base ml-1">{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
+        </div>
+      </div>
+
+      <div v-if="pratinjau" class="mb-4">
+        <PratinjauValuasi :hasil="pratinjau" />
       </div>
 
       <!-- Actions -->
-      <div class="ip-form-actions">
-        <button type="button" class="btn btn--ghost" @click="$emit('batal')" :disabled="submitting">Batal</button>
-        <button type="button" class="btn btn--secondary" @click="mintaPratinjau" :disabled="submitting">Pratinjau</button>
-        <button type="button" class="btn btn--primary" @click="tanganiSimpanDraft" :disabled="submitting">
-          {{ submitting ? 'Menyimpan...' : (batchId ? 'Simpan Perubahan' : 'Simpan Draft') }}
-        </button>
-        <button type="button" class="btn btn--success" @click="tanganiSimpanDanPosting" :disabled="submitting">
-          Simpan &amp; Posting
+      <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-slate-100">
+        <button type="button" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all disabled:opacity-50" @click="$emit('batal')" :disabled="submitting">Batal</button>
+        <button type="button" class="px-5 py-2.5 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-xl transition-all disabled:opacity-50" @click="mintaPratinjau" :disabled="submitting">Pratinjau</button>
+        <button type="button" class="px-6 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all disabled:opacity-50" @click="tanganiSimpanDanPosting" :disabled="submitting">
+          {{ submitting ? 'Memproses...' : 'Simpan & Posting' }}
         </button>
       </div>
     </template>
@@ -179,7 +184,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { useInputProduksi } from '../composables/useInputProduksi'
+import { useBlendingForm } from '../composables/useBlendingForm' // Sesuaikan path jika berbeda
 import PratinjauValuasi from '../components/PratinjauValuasi.vue'
 
 const props = defineProps({
@@ -189,7 +194,6 @@ const props = defineProps({
 const emit = defineEmits(['batal', 'sukses'])
 
 const {
-  JENIS,
   loadingForm,
   submitting,
   errorMsg,
@@ -205,23 +209,22 @@ const {
   bukaFormEdit,
   tambahTangkiBaru,
   generateNomorBatch,
-  tambahBomRow,
-  hapusBomRow,
-  perbaruiTelemetriBom,
-  tambahWipRow,
-  hapusWipRow,
   saatTangkiAsalDipilih,
   saatBatchWipDipilih,
+  tambahBomRow,
+  hapusBomRow,
+  tambahWipRow,
+  hapusWipRow,
+  perbaruiTelemetriBom,
   mintaPratinjau,
-  simpanDraft,
   simpanDanPosting
-} = useInputProduksi()
+} = useBlendingForm()
 
 onMounted(() => {
   if (props.batchId) {
     bukaFormEdit(props.batchId)
   } else {
-    bukaFormBaru(JENIS.BLENDING)
+    bukaFormBaru()
   }
 })
 
@@ -240,13 +243,8 @@ async function tambahTangkiBaruPrompt() {
   if (dibuat) form.tangki_tujuan = dibuat.id
 }
 
-async function tanganiSimpanDraft() {
-  const ok = await simpanDraft()
-  if (ok) emit('sukses')
-}
-
 async function tanganiSimpanDanPosting() {
-  const ok = await simpanDanPosting()
+  const ok = await simpanDanPosting(props.batchId)
   if (ok) emit('sukses')
 }
 </script>
