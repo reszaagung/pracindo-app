@@ -2,7 +2,13 @@ from django.contrib import admin
 
 from import_export.admin import ImportExportModelAdmin
 from django.contrib import admin
-from .models import Produk, Kategori, Satuan, Suplier, Pelanggan
+from .models import Produk, Kategori, Satuan, Suplier, Pelanggan ,MasterProduk
+
+@admin.register(MasterProduk)
+class MasterProdukAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nama_item')
+    search_fields = ('id', 'nama_item')
+    ordering = ('nama_item',)
 
 
 @admin.register(Kategori)

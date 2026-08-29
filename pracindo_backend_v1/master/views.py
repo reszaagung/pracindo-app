@@ -4,13 +4,12 @@ Endpoint master data — master/views.py
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from staff_user.permissions import HanyaAdmin, SudahLogin, AdminAtauAkunting
-
-# Kategori dihapus dari import
-from .models import Pelanggan, Produk, Satuan, Suplier
+from rest_framework.permissions import AllowAny
+from .models import Pelanggan, Produk, Satuan, Suplier ,MasterProduk
 from .serializers import (
     PelangganSerializer, ProdukRingkasSerializer,
     ProdukSerializer, SatuanSerializer, SuplierRingkasSerializer,
-    SuplierSerializer,
+    SuplierSerializer,MasterProdukSerializer,
 )
 
 class BasisMaster(viewsets.ModelViewSet):
@@ -33,7 +32,6 @@ class SatuanViewSet(BasisMaster):
     search_fields = ['kode', 'nama']
 
 class ProdukViewSet(BasisMaster):
-    # Menggunakan prefetch_related untuk M2M suplier
     queryset = Produk.objects.select_related('satuan').prefetch_related('suplier').order_by('kode')
     
     # Filter 'suplier' ditambahkan untuk fitur Katalog Suplier
@@ -89,3 +87,11 @@ class PelangganViewSet(BasisMaster):
         if self.request.query_params.get('aktif') in ('true', '1', 'True'):
             qs = qs.filter(aktif=True)
         return qs
+
+
+class MasterProdukViewSet(viewsets.ModelViewSet):
+    queryset = MasterProduk.objects.all()
+    serializer_class = MasterProdukSerializer
+    permission_classes = [AllowAny]
+    search_fields = ['id', 'nama_item']
+    ordering_fields = ['nama_item', 'id']

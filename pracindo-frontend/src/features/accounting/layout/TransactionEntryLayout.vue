@@ -1,36 +1,72 @@
 <template>
-  <component :is="layoutAktif" />
+    <div class="flex h-screen bg-[#F8FAFC] font-sans text-slate-700 overflow-hidden relative w-full max-w-[100vw]">
+        <!-- HEADER MOBILE -->
+        <header class="fixed top-0 left-0 right-0 h-16 bg-white shadow-sm z-30 flex items-center justify-between px-4 gap-3 border-b border-slate-100 w-full max-w-[100vw]">
+            <div class="flex items-center gap-3 min-w-0">
+                <a @click="keDashboard" class="p-2 shrink-0 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer">
+                    <i class="pi pi-home text-xl"></i>
+                </a>
+                <span class="font-bold text-slate-800 text-sm md:text-base truncate">Input Transaksi</span>
+            </div>
+            <a @click="kembali" class="w-9 h-9 shrink-0 bg-slate-900 rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-transform cursor-pointer">
+                <i class="pi pi-arrow-left text-white text-sm"></i>
+            </a>
+        </header>
+
+        <!-- KONTEN UTAMA (Ditambah overflow-x-hidden agar layar tidak geser/goyang ke samping) -->
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-3 pt-20 pb-24 w-full max-w-[100vw] text-sm">
+            <div class="mx-auto w-full">
+                <router-view v-slot="{ Component }">
+                    <transition name="fade" mode="out-in">
+                        <component :is="Component" />
+                    </transition>
+                </router-view>
+            </div>
+        </main>
+
+        <!-- BOTTOM NAVIGATION (Diganti tag <a> agar tidak bentrok dengan CSS Button Global) -->
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-end z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.03)] px-1 pb-1 w-full max-w-[100vw]">
+            <!-- Beranda -->
+            <a @click="keDashboard" class="flex flex-col items-center justify-center w-full py-2 transition-colors text-slate-400 hover:text-slate-600 cursor-pointer">
+                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-home text-[1.2rem]"></i></div>
+                <span class="text-[10px] font-medium tracking-tight leading-none">Beranda</span>
+            </a>
+
+            <!-- Menu Transaksi -->
+            <a v-for="menu in transaksi" :key="menu.id" @click="klikMenu(menu)"
+                class="flex flex-col items-center justify-center w-full py-2 transition-colors group cursor-pointer"
+                :class="[aktif(menu.rute) ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600', !menu.activate ? 'opacity-50 pointer-events-none' : '']">
+                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5 transition-all" :class="aktif(menu.rute) ? 'bg-slate-100 shadow-sm' : ''">
+                    <i :class="['pi', menu.ikon, 'text-[1.2rem] transition-transform']"></i>
+                </div>
+                <span class="text-[10px] font-medium tracking-tight leading-none">{{ menu.label }}</span>
+            </a>
+
+            <!-- Keluar -->
+            <a @click="keluar" class="flex flex-col items-center justify-center w-full py-2 transition-colors text-slate-400 hover:text-rose-500 cursor-pointer">
+                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-power-off text-[1.2rem]"></i></div>
+                <span class="text-[10px] font-medium tracking-tight leading-none">Keluar</span>
+            </a>
+        </nav>
+    </div>
 </template>
 
 <script setup>
-import { shallowRef, onMounted, onUnmounted } from 'vue'
-import DesktopTransactionLayout from './DesktopTransactionLayout.vue'
-import MobileTransactionLayout from './MobileTransactionLayout.vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { useNavTransaksi } from '@/features/accounting/composables/useNavTransaction'
 
-const layoutAktif = shallowRef(DesktopTransactionLayout)
+const router = useRouter()
+const { logout } = useAuth()
+const { transaksi, aktif } = useNavTransaksi()
 
-const cekLayar = () => {
-  if (window.innerWidth < 1024) {
-    layoutAktif.value = MobileTransactionLayout
-  } else {
-    layoutAktif.value = DesktopTransactionLayout
-  }
-}
-
-onMounted(() => {
-  cekLayar()
-  window.addEventListener('resize', cekLayar)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', cekLayar)
-})
+const kembali = () => window.history.length > 2 ? router.back() : router.push('/')
+const keDashboard = () => router.push('/')
+const klikMenu = (menu) => { if (menu.activate) router.push(menu.rute) }
+const keluar = async () => { await logout(); router.push('/login') }
 </script>
 
-<style>
-/* Style global untuk Layout Transaksi */
+<style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity .15s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 </style>

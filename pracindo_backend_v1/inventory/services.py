@@ -301,7 +301,7 @@ def posting_packing(packing, user=None):
     from produksi.models import Batch
     from produksi.services import saldo_batch
 
-    user = _wajib_user(user)
+    user = _wajib_user(user)                                                                                                                        
     packing = Packing.objects.select_for_update().select_related("kemasan").get(pk=packing.pk)
 
     if packing.status != StatusDokumen.DRAFT:

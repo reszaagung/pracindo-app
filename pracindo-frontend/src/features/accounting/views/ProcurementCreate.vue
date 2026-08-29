@@ -70,7 +70,7 @@
                 </div>
                 <div class="flex flex-col gap-2">
                     <Select 
-                        v-model="form.suplier_id" 
+                        v-model="draf.suplier_id" 
                         :options="listSupplier" 
                         optionLabel="nama" 
                         optionValue="id" 
@@ -219,6 +219,7 @@
 import { reactive, computed, ref, watch, onMounted } from 'vue'
 import Dropdown from 'primevue/dropdown'
 import Select from 'primevue/select'
+import { CACHE_KEY, denganCache } from '@/utils/cacheService'
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
@@ -235,8 +236,6 @@ const showModalSupplier = ref(false)
 const showModalProduct = ref(false)
 const produkBerdasarkanSuplier = ref([])
 const loadingProduk = ref(false)
-
-// State baru untuk menentukan form (Bahan Baku / Kemasan)
 const jenisPo = ref('BAHAN_BAKU')
 
 const hariIni = () => {

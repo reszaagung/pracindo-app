@@ -12,9 +12,19 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from core.models import TimeStampedModel
 
-# Pastikan fungsi ini ada di file master/utils.py
 from .utils import generate_kode_urut
 
+class MasterProduk(models.Model):
+    id = models.CharField(max_length=50,primary_key=True),
+    nama_item = models.CharField(max_length=70)
+    
+    class Meta:
+        db_table = 'master_produk_intern'
+        ordering = ['nama_item']
+        verbose_name_plural = 'Master Items'
+
+    def __str__(self):
+        return self.nama_item
 
 class Kategori(TimeStampedModel):
     kode = models.CharField(max_length=16, unique=True, blank=True)

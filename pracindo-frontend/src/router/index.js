@@ -1,12 +1,14 @@
+// src/router/index.js (atau tempat file utama router berada)
 import { createRouter, createWebHistory } from 'vue-router'
 import { useGuards } from './guards'
-import ModulLayout from '@/components/layout/ModulLayout.vue'
 
+// Import Rute Modular
 import ruteProduksi from '@/features/produksi/routes.js'
 import ruteWarehouse from '@/features/warehouse/routes.js'
 import ruteDistribusi from '@/features/distribusi/routes.js'
 import ruteLogistik from '@/features/logistik/routes.js'
 import { retailRoutes } from '@/features/retail/routes.js'
+import ruteAccounting from '@/features/accounting/routes.js' // <-- 1. Import rute akunting
 
 const routes = [
   {
@@ -27,85 +29,10 @@ const routes = [
     meta: { perluLogin: true, modul: 'dashboard' },
     component: () => import('@/views/DashboardView.vue')
   },
-  {
-    path: '/accounting',
-    meta: { perluLogin: true, modul: 'akunting' },
-    component: ModulLayout,
-    children: [
-      {
-        path: '',
-        name: 'accounting-landing',
-        redirect: '/accounting/input/po'
-      }
-    ]
-  },
-  {
-    path: '/accounting/input',
-    meta: { perluLogin: true, modul: 'akunting' },
-    component: () => import('@/features/accounting/layout/TransactionEntryLayout.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/accounting/input/po'
-      },
-      {
-        path: 'po',
-        name: 'transaksi-po-list',
-        component: () => import('@/features/accounting/views/PurchaseOrderList.vue')
-      },
-      {
-        path: 'po/buat',
-        name: 'transaksi-po-buat',
-        component: () => import('@/features/accounting/views/ProcurementCreate.vue')
-      },
-      {
-        path: 'so',
-        name: 'transaksi-so-list',
-        component: () => import('@/features/accounting/views/SalesOrderList.vue')
-      },
-      {
-        path: 'so/buat',
-        name: 'transaksi-so-buat',
-        component: () => import('@/features/accounting/views/SalesOrderCreate.vue')
-      },
-      {
-        path: 'pengeluaran/buat',
-        name: 'transaksi-pengeluaran',
-        component: () => import('@/features/accounting/views/Expense.vue')
-      },
-    ]
-  },
-  {
-    path: '/accounting/invoice',
-    meta: { perluLogin: true, modul: 'akunting' },
-    component: () => import('@/features/accounting/layout/InvoiceLayout.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/accounting/invoice/dokumen'
-      },
-      {
-        path: 'dokumen',
-        name: 'accounting-invoice-dokumen',
-        component: () => import('@/features/accounting/views/DocumentAuditView.vue')
-      },
-      {
-        path: 'tagihan',
-        name: 'accounting-invoice-tagihan',
-        component: () => import('@/features/accounting/views/InvoiceList.vue')
-      },
-      {
-        path: 'tagihan/create',
-        name: 'accounting-invoice-buat',
-        component: () => import('@/features/accounting/views/InvoiceCreate.vue')
-      },
-      {
-        path: 'catatan',
-        name: 'accounting-invoice-catatan',
-        component: () => import('@/features/accounting/views/Expense.vue')
-      }
-    ]
-  },
+  
+  // 2. Sebar (Spread) rute akunting di sini
+  ...ruteAccounting,
+
   {
     path: '/master/suplier',
     name: 'master-suplier',
@@ -141,11 +68,14 @@ const routes = [
       },
     ]
   },
+  
+  // Rute Modular Lainnya
   ...ruteProduksi,
   ...ruteWarehouse,
   ...ruteDistribusi,
   ...ruteLogistik,
   ...retailRoutes,
+  
   {
     path: '/work-order',
     name: 'work-order',

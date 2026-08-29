@@ -34,7 +34,7 @@ export function usePurchaseOrder() {
             const q = cari.value.trim().toLowerCase()
             return daftarPO.value
                 .filter(po => {
-                    // PERBAIKAN 1: Samakan case (huruf kecil) agar filter tab berfungsi!
+                    
                     const statusFilter = saringStatus.value
                     if (statusFilter === 'semua') return true
                     return (po.status || '').toLowerCase() === statusFilter
@@ -43,7 +43,6 @@ export function usePurchaseOrder() {
                     || (po.no_po || po.nomor || '').toLowerCase().includes(q)
                     || (po.suplier_nama || '').toLowerCase().includes(q))
                 .sort((a, b) => {
-                    // PERBAIKAN 2: Gunakan localeCompare untuk string tanggal (YYYY-MM-DD). Jauh lebih ringan dari new Date()!
                     return (b.tanggal || '').localeCompare(a.tanggal || '')
                 })
         })
@@ -87,7 +86,6 @@ export function usePurchaseOrder() {
         }
     }
 
-    // Ditambahkan parameter `jenis` (default: 'BAHAN_BAKU')
     const muatPreviewNomor = async (entitasId, tanggal, jenis = 'BAHAN_BAKU') => {
         if (!entitasId || !tanggal) {
             previewNomor.value = 'Pilih entitas & tanggal'
@@ -123,7 +121,6 @@ export function usePurchaseOrder() {
         }
     }
 
-    // Ditambahkan parameter `jenis` untuk menentukan Prefix dan Satuan Default
     const buatProdukBaru = async (nama, jenis = 'BAHAN_BAKU') => {
         const namaProduk = nama.trim()
         if (!namaProduk) throw new Error('Nama produk wajib diisi.')

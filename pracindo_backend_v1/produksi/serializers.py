@@ -7,10 +7,7 @@ from .models import (
 )
 
 QTY_MIN = Decimal("0.000")
-
-# Asumsi ada fungsi helper nomor_baru, jika tidak ada sesuaikan dengan import Anda
 def nomor_baru(awalan, periode):
-    # Dummy placeholder, pastikan fungsi nomor_baru Anda terimport dengan benar dari utils
     pass
 
 class TangkiSerializer(serializers.ModelSerializer):
