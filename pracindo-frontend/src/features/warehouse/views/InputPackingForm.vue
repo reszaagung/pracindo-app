@@ -3,6 +3,7 @@
     <div class="flex flex-col w-full animate-fade-in relative">
         <!-- STATE 1: BERHASIL -->
         <template v-if="hasilEksekusi">
+            <!-- ... (Sama seperti sebelumnya, tidak ada yang berubah di bagian sukses ini) ... -->
             <section class="bg-white border border-emerald-200 rounded-[24px] p-6 md:p-8 shadow-sm w-full">
                 <div class="flex items-center gap-3 mb-2">
                     <div class="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
@@ -30,12 +31,10 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3 ml-0 md:ml-13">
-                    <button type="button" @click="resetForm"
-                        class="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors shadow-md text-center">
+                    <button type="button" @click="resetForm" class="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors shadow-md text-center">
                         Input Packing Lain
                     </button>
-                    <button type="button" @click="$emit('tutup')"
-                        class="px-6 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition-colors text-center">
+                    <button type="button" @click="$emit('tutup')" class="px-6 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition-colors text-center">
                         Tutup
                     </button>
                 </div>
@@ -52,35 +51,51 @@
                     <span>{{ galat }}</span>
                 </div>
 
-                <!-- Bagian 1: Identifikasi Sumber -->
+                <!-- Bagian 1: Identifikasi Sumber WIP -->
                 <section class="bg-white border border-slate-200 rounded-[24px] p-5 md:p-6 shadow-sm">
-                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">1. Identifikasi WIP</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">1. Identifikasi Sumber WIP</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="flex flex-col gap-2">
                             <label class="text-xs font-bold text-slate-500 uppercase">Target Legal Entity</label>
                             <select v-model="form.entitas_id" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-800 text-slate-800">
-                                <option value="" disabled>Pilih Entitas Tujuan...</option>
+                                <option value="" disabled>Pilih Entitas...</option>
                                 <option v-for="ent in daftarEntitas" :key="ent.id" :value="ent.id">{{ ent.nama }}</option>
                             </select>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <label class="text-xs font-bold text-slate-500 uppercase">WIP BATCH ID / TANGKI</label>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Sumber Tangki</label>
+                            <select v-model="form.jenis_sumber" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-800 text-slate-800 font-bold text-blue-700">
+                                <option value="MIXING">Proses MIXING</option>
+                                <option value="BLENDING">Proses BLENDING</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs font-bold text-slate-500 uppercase">Pilih Tangki / Batch</label>
                             <select v-model="form.batch_id" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-800 text-slate-800">
-                                <option value="" disabled>Pilih Batch / Tangki Tersedia...</option>
-                                
-                                <!-- KODE SUPER RINGAN: Langsung render properti teks tanpa komputasi format angka di UI -->
-                                <option v-for="b in daftarBatch" :key="b.id" :value="b.id">
+                                <option value="" disabled>Pilih Tangki Tersedia...</option>
+                                <!-- Looping array yang sudah difilter berdasarkan jenis sumber -->
+                                <option v-for="b in batchDifilter" :key="b.id" :value="b.id">
                                     {{ b.label_dropdown }}
                                 </option>
-
                             </select>
                         </div>
                     </div>
                 </section>
 
-                <!-- Bagian 2: Aset Kemasan & Volume -->
+                <!-- Bagian 2: Produk Jadi & Kemasan -->
                 <section class="bg-white border border-slate-200 rounded-[24px] p-5 md:p-6 shadow-sm">
-                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">2. Penggunaan Aset Kemasan</h3>
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">2. Konversi Produk & Aset Kemasan</h3>
+
+                    <!-- BARU: Dropdown Nama Produk -->
+                    <div class="flex flex-col gap-2 mb-5">
+                        <label class="text-xs font-bold text-slate-500 uppercase">Produk Jadi (Finished Goods)</label>
+                        <select v-model="form.produk_id" required class="w-full px-4 py-3 bg-white border-2 border-emerald-100 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-800 font-bold shadow-sm">
+                            <option value="" disabled>Pilih Produk Jadi yang akan dihasilkan...</option>
+                            <option v-for="p in daftarProduk" :key="p.id" :value="p.id">
+                                {{ p.kode }} - {{ p.nama }}
+                            </option>
+                        </select>
+                    </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div class="flex flex-col gap-2">
@@ -126,6 +141,7 @@
 
             <!-- Panel Kanan: Telemetri & Valuasi -->
             <div class="space-y-6">
+                <!-- ... (Sama seperti sebelumnya) ... -->
                 <div class="bg-slate-900 border border-slate-800 rounded-[24px] p-6 shadow-xl relative overflow-hidden h-full flex flex-col">
                     <div class="absolute -right-6 -bottom-6 text-slate-800 opacity-50 pointer-events-none">
                         <i class="pi pi-receipt" style="font-size: 8rem;"></i>
@@ -182,13 +198,16 @@ import { angka } from '@/utils/format'
 
 const emit = defineEmits(['tutup'])
 const {
-    daftarEntitas, daftarKemasan, daftarBatch, pratinjau, sedangProses, galat,
+    daftarEntitas, daftarKemasan, daftarBatch, daftarProduk, // Produk didapat dari composable
+    pratinjau, sedangProses, galat,
     muatMasterData, cekPratinjau, simpanPacking
 } = usePacking()
 
 const form = reactive({
     entitas_id: '',
+    jenis_sumber: 'MIXING', // Default state sumber
     batch_id: '',
+    produk_id: '', // State baru untuk SKU Produk Jadi
     kemasan_id: '',
     total_unit: null,
     isi_per_unit: null,
@@ -196,6 +215,19 @@ const form = reactive({
 })
 
 const hasilEksekusi = ref(null)
+
+// COMPUTED: Memfilter dropdown Tangki/Batch berdasarkan jenis sumber yang dipilih
+const batchDifilter = computed(() => {
+    if (!form.jenis_sumber) return daftarBatch.value
+    // Menyaring list berdasarkan tipe MIXING atau BLENDING
+    return daftarBatch.value.filter(b => b.jenis === form.jenis_sumber)
+})
+
+// WATCHER: Reset pilihan tangki jika sumbernya diubah
+watch(() => form.jenis_sumber, () => {
+    form.batch_id = ''
+    pratinjau.value.valid = false
+})
 
 watch(() => form.kemasan_id, (kId) => {
     if (kId) {
@@ -225,7 +257,8 @@ watch([() => form.batch_id, () => form.qty_kg], ([batchId, qtyKg]) => {
 })
 
 const isFormValid = computed(() => {
-    return form.entitas_id && form.batch_id && form.kemasan_id && form.qty_kg > 0 && pratinjau.value.valid
+    // Validasi form ditambah wajib pilih produk_id
+    return form.entitas_id && form.batch_id && form.kemasan_id && form.produk_id && form.qty_kg > 0 && pratinjau.value.valid
 })
 
 const submit = async () => {
@@ -233,6 +266,7 @@ const submit = async () => {
     const res = await simpanPacking({
         entitas: form.entitas_id,
         batch: form.batch_id,
+        produk: form.produk_id, // Sisipkan payload SKU produk baru
         kemasan: form.kemasan_id,
         total_unit: form.total_unit,
         qty_kg: form.qty_kg
@@ -245,6 +279,7 @@ const submit = async () => {
 
 const resetForm = () => {
     form.batch_id = ''
+    form.produk_id = ''
     form.kemasan_id = ''
     form.total_unit = null
     form.isi_per_unit = null

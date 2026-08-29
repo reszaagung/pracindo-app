@@ -31,14 +31,22 @@ export function usePurchaseOrder() {
     }
 
     const tampil = computed(() => {
-        const q = cari.value.trim().toLowerCase()
-        return daftarPO.value
-            .filter(po => saringStatus.value === 'semua' || po.status === saringStatus.value)
-            .filter(po => !q
-                || po.no_po?.toLowerCase().includes(q)
-                || po.suplier_nama?.toLowerCase().includes(q))
-            .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal))
-    })
+            const q = cari.value.trim().toLowerCase()
+            return daftarPO.value
+                .filter(po => {
+                    // PERBAIKAN 1: Samakan case (huruf kecil) agar filter tab berfungsi!
+                    const statusFilter = saringStatus.value
+                    if (statusFilter === 'semua') return true
+                    return (po.status || '').toLowerCase() === statusFilter
+                })
+                .filter(po => !q
+                    || (po.no_po || po.nomor || '').toLowerCase().includes(q)
+                    || (po.suplier_nama || '').toLowerCase().includes(q))
+                .sort((a, b) => {
+                    // PERBAIKAN 2: Gunakan localeCompare untuk string tanggal (YYYY-MM-DD). Jauh lebih ringan dari new Date()!
+                    return (b.tanggal || '').localeCompare(a.tanggal || '')
+                })
+        })
 
     const belumDiterima = computed(() =>
         daftarPO.value.filter(po => ['TERKIRIM', 'DISETUJUI', 'SEBAGIAN'].includes(po.status))

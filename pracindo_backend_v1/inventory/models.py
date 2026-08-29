@@ -107,6 +107,7 @@ class Pembelian(DiauditModel):
 class Kemasan(TimeStampedModel):
     nama     = models.CharField(max_length=40, unique=True) 
     bobot_kg = models.DecimalField(max_digits=10, decimal_places=3)
+    produk   = models.ForeignKey("master.Produk", on_delete=models.PROTECT, null=True, blank=True, related_name="varian_kemasan")
     aktif    = models.BooleanField(default=True)
 
     class Meta:

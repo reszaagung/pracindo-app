@@ -69,14 +69,22 @@
                         class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-800" />
                 </div>
                 <div class="flex flex-col gap-2">
-                    <label class="text-xs md:text-sm font-bold text-slate-700">Supplier Tujuan</label>
-                    <select v-model.number="draf.suplier_id" required
-                        class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-slate-800 appearance-none">
-                        <option value="" disabled>-- Pilih Supplier --</option>
-                        <option v-for="sup in listSupplier" :key="sup.id" :value="sup.id">
-                            {{ sup.nama }}{{ sup.kota ? ` — ${sup.kota}` : '' }}
-                        </option>
-                    </select>
+                    <Select 
+                        v-model="form.suplier_id" 
+                        :options="listSupplier" 
+                        optionLabel="nama" 
+                        optionValue="id" 
+                        filter 
+                        placeholder="-- Pilih Supplier --"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                    >
+                        <!-- Template kustom jika tidak ada data -->
+                        <template #empty>
+                            <div class="p-3 text-center text-slate-500 text-xs">
+                                Supplier tidak ditemukan.
+                            </div>
+                        </template>
+                    </Select>
                 </div>
             </div>
 
@@ -210,6 +218,7 @@
 <script setup>
 import { reactive, computed, ref, watch, onMounted } from 'vue'
 import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'

@@ -302,7 +302,7 @@ def posting_packing(packing, user=None):
     from produksi.services import saldo_batch
 
     user = _wajib_user(user)
-    packing = Packing.objects.select_for_update().get(pk=packing.pk)
+    packing = Packing.objects.select_for_update().select_related("kemasan").get(pk=packing.pk)
 
     if packing.status != StatusDokumen.DRAFT:
         raise KonflikSaldo(f"Packing {packing.nomor} sudah {packing.status}.")
@@ -312,18 +312,33 @@ def posting_packing(packing, user=None):
     _pastikan_periode_terbuka(packing.entitas, packing.tanggal)
 
     batch = Batch.objects.select_for_update().get(pk=packing.batch_id)
-
     s = saldo_batch(batch)
+    
     if s.sisa_qty <= 0:
         raise KonflikSaldo(f"Batch {batch.nomor} sudah kosong.")
     if packing.qty_kg > s.sisa_qty + TOL_QTY:
         raise KonflikSaldo(f"Batch {batch.nomor} tinggal {s.sisa_qty:,.3f} Kg. Anda mengambil {packing.qty_kg:,.3f} Kg.")
     
     menghabiskan = abs(packing.qty_kg - s.sisa_qty) <= TOL_QTY
-    nilai_hpp = s.sisa_nilai if menghabiskan else rp(packing.qty_kg * s.harga_per_kg)
+    nilai_hpp_bahan = s.sisa_nilai if menghabiskan else rp(packing.qty_kg * s.harga_per_kg)
 
-    packing.harga_per_kg = s.harga_per_kg
-    packing.nilai_hpp = nilai_hpp
+    nilai_kemasan = D0_RP
+    if packing.kemasan.produk_id:
+        try:
+            pool_kem = PoolKemasan.objects.get(produk_id=packing.kemasan.produk_id)
+            if pool_kem.qty_unit < packing.total_unit:
+                raise KonflikSaldo(f"Stok {packing.kemasan.nama} di Pool hanya sisa {pool_kem.qty_unit} Unit. Anda butuh {packing.total_unit} Unit.")
+            
+            nilai_kemasan = rp(pool_kem.harga_satuan * packing.total_unit)
+            potong_dari_pool_kemasan(packing.kemasan.produk_id, packing.total_unit, nilai_kemasan)
+        except PoolKemasan.DoesNotExist:
+            raise KonflikSaldo(f"Stok Pool untuk produk kemasan {packing.kemasan.nama} kosong/tidak ditemukan.")
+
+    total_nilai_hpp = rp(nilai_hpp_bahan + nilai_kemasan)
+
+    # --- 3. Simpan Dokumen Packing ---
+    packing.harga_per_kg = s.harga_per_kg 
+    packing.nilai_hpp = total_nilai_hpp
     packing.menghabiskan = menghabiskan
     packing.status = StatusDokumen.POSTED
     packing.posted_at = timezone.now()
@@ -332,15 +347,15 @@ def posting_packing(packing, user=None):
     MutasiKlaim.objects.create(
         entitas=packing.entitas, grup_bahan=packing.entitas.grup_bahan,
         tipe=TipeMutasi.TARIK, arah=-1,
-        qty_kg=packing.qty_kg, nilai=nilai_hpp,
+        qty_kg=packing.qty_kg, nilai=total_nilai_hpp,
         ref_type="Packing", ref_id=packing.id,
-        keterangan=f"{packing.nomor} - {batch.nomor} - {packing.kemasan}",
+        keterangan=f"{packing.nomor} - {batch.nomor} - {packing.kemasan.nama}",
         waktu=packing.waktu, dibuat_oleh=user)
 
     se = _kunci_saldo(packing.entitas_id)                                
-    se.total_tarik = rp(se.total_tarik + nilai_hpp)
+    se.total_tarik = rp(se.total_tarik + total_nilai_hpp)
     se.qty_tarik = qty(se.qty_tarik + packing.qty_kg)
-    se.saldo = rp(se.saldo - nilai_hpp)
+    se.saldo = rp(se.saldo - total_nilai_hpp)
     se.save(update_fields=["total_tarik", "qty_tarik", "saldo"])
 
     assert_invarian()

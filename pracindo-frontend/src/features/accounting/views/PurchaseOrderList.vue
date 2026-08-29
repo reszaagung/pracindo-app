@@ -77,10 +77,11 @@
                         <tr>
                             <th class="py-3 px-4 font-semibold rounded-tl-xl w-[20%]">No. PO</th>
                             <th class="py-3 px-4 font-semibold w-[15%]">Tanggal</th>
-                            <th class="py-3 px-4 font-semibold w-[25%]">Supplier</th>
+                            <th class="py-3 px-4 font-semibold w-[20%]">Supplier</th>
                             <th class="py-3 px-4 font-semibold w-[15%] text-center">Status</th>
-                            <!-- Kolom Aksi Ditambahkan -->
-                            <th class="py-3 px-4 font-semibold w-[25%] text-center rounded-tr-xl">Aksi</th>
+                            <!-- Kolom dipisah: Aksi (15%) dan Detail (15%) -->
+                            <th class="py-3 px-4 font-semibold w-[15%] text-center">Aksi</th>
+                            <th class="py-3 px-4 font-semibold w-[15%] text-center rounded-tr-xl">Detail</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -97,46 +98,49 @@
                                 </span>
                             </td>
 
-                            <!-- Kolom Aksi -->
+                            <!-- 1. KOLOM KHUSUS AKSI (Setuju, Tolak, Kirim, Batal) -->
                             <td class="py-3 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-
+                                <div class="flex items-center justify-center gap-2">
                                     <!-- Aksi: DRAFT -->
                                     <template v-if="po.status === 'DRAFT'">
-                                        <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-send text-[10px] mr-1"></i> Ajukan
+                                        <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-full text-xs font-bold transition-colors shadow-sm flex items-center">
+                                            <i class="pi pi-send text-[10px] mr-1.5"></i> Ajukan
                                         </button>
-                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-trash text-[10px]"></i>
+                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 rounded-full transition-colors shadow-sm">
+                                            <i class="pi pi-trash text-[11px]"></i>
                                         </button>
                                     </template>
 
                                     <!-- Aksi: PENDING -->
                                     <template v-else-if="po.status === 'PENDING'">
-                                        <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-check text-[10px] mr-1"></i> Setuju
+                                        <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-full text-xs font-bold transition-colors shadow-sm flex items-center">
+                                            <i class="pi pi-check text-[10px] mr-1.5"></i> Setuju
                                         </button>
-                                        <button @click="handleTolak(po.id)" title="Tolak PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-times text-[10px]"></i>
+                                        <button @click="handleTolak(po.id)" title="Tolak PO" class="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 rounded-full transition-colors shadow-sm">
+                                            <i class="pi pi-times text-[11px]"></i>
                                         </button>
                                     </template>
 
                                     <!-- Aksi: APPROVED -->
                                     <template v-else-if="po.status === 'APPROVED'">
-                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-envelope text-[10px] mr-1"></i> Kirim
+                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-full text-xs font-bold transition-colors shadow-sm flex items-center">
+                                            <i class="pi pi-envelope text-[10px] mr-1.5"></i> Kirim
                                         </button>
-                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-trash text-[10px]"></i>
+                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 rounded-full transition-colors shadow-sm">
+                                            <i class="pi pi-trash text-[11px]"></i>
                                         </button>
                                     </template>
-
-                                    <!-- Tombol Detail (muncul di semua status) -->
-                                    <button @click="bukaDetail(po.id)" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                        <i class="pi pi-eye text-[10px] mr-1"></i> Detail
-                                    </button>
-
+                                    
+                                    <!-- Fallback jika tidak ada aksi (Terkirim, Selesai, Batal) -->
+                                    <span v-else class="text-xs text-slate-300">-</span>
                                 </div>
+                            </td>
+
+                            <!-- 2. KOLOM KHUSUS DETAIL -->
+                            <td class="py-3 px-4 text-center">
+                                <button @click="bukaDetail(po.id)" class="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-full text-xs font-bold transition-colors shadow-sm flex items-center justify-center mx-auto">
+                                    <i class="pi pi-eye text-[10px] mr-1.5 text-slate-400"></i> Detail
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -160,6 +164,7 @@ import { onMounted, ref, defineAsyncComponent } from 'vue'
 import Dialog from 'primevue/dialog'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
 const tampilModalDetail = ref(false)
+import Select from 'primevue/select'
 const poIdTerpilih = ref(null)
 const LazyFormPO = defineAsyncComponent(() =>
     import('@/features/accounting/views/ProcurementCreate.vue')
@@ -187,6 +192,8 @@ onMounted(() => {
 const poBerhasilDisimpan = () => {
     tampilModalPO.value = false
     muatDaftarPO()
+    
+    alert('Mantap! Purchase Order berhasil disimpan.') 
 }
 
 const handleAjukan = async (id) => {
@@ -250,7 +257,6 @@ const badgeColor = (status) => {
 </script>
 
 <style scoped>
-/* ... (Style tetap sama) ... */
 .animate-fade-in {
     animation: fadeIn 0.3s ease-out forwards;
 }
