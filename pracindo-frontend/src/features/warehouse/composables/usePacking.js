@@ -1,7 +1,9 @@
 // src/features/warehouse/composables/usePacking.js
 import { ref } from 'vue'
-import { warehouseApi } from '../api' // Memanggil dari api.js lokal modul warehouse
+import { warehouseApi } from '../api' 
+import { apiProduksi } from '@/features/produksi/api'
 import { bacaError } from '@/utils/error'
+import { angka } from '@/utils/format' // Wajib di-import untuk format teks di belakang layar
 
 export function usePacking() {
     const daftarEntitas = ref([])
@@ -11,7 +13,6 @@ export function usePacking() {
     const sedangProses = ref(false)
     const galat = ref('')
 
-    // Menyimpan hasil kalkulasi COGS dari Backend
     const pratinjau = ref({
         valid: false,
         qty_kg: 0,
@@ -21,21 +22,38 @@ export function usePacking() {
         pesan: ''
     })
 
-    // --- INI ADALAH VERSI FINAL muatMasterData ---
     const muatMasterData = async () => {
         sedangProses.value = true
         galat.value = ''
         try {
-            // Memanggil endpoint API dari warehouseApi secara bersamaan
             const [resEntitas, resKemasan, resBatch] = await Promise.all([
                 warehouseApi.getEntitasAktif(),
                 warehouseApi.getKemasanAktif(),
-                warehouseApi.getBatchTersedia()
+                apiProduksi.getBatches({ status: 'POSTED' }) 
             ])
 
             daftarEntitas.value = resEntitas.data?.results || resEntitas.data || []
             daftarKemasan.value = resKemasan.data?.results || resKemasan.data || []
-            daftarBatch.value = resBatch.data?.results || resBatch.data || []
+            
+            // 1. AMBIL DATA MENTAH DARI BACKEND
+            const rawBatch = resBatch.data?.results || resBatch.data || []
+
+            // 2. FILTERING DEWA: Buang semua batch yang sisanya 0
+            const batchAdaIsi = rawBatch.filter(b => {
+                const qty = b.yield_kg ?? b.yield ?? b.sisa_qty ?? 0
+                return Number(qty) > 0 // Hanya loloskan jika lebih dari 0
+            })
+
+            // 3. MAPPING UI: Format teks sekali saja agar browser tidak lag
+            daftarBatch.value = batchAdaIsi.map(b => {
+                const qty = b.yield_kg ?? b.yield ?? b.sisa_qty ?? 0
+                const harga = b.harga_rata ?? 0
+                return {
+                    ...b,
+                    label_dropdown: `${b.batch || b.nomor} - ${b.nama_hasil} (Sisa: ${angka(qty, 3)} Kg | Rp ${angka(harga)})`
+                }
+            })
+
         } catch (err) {
             galat.value = bacaError(err, 'Gagal memuat data referensi packing.')
         } finally {
@@ -49,7 +67,6 @@ export function usePacking() {
             return
         }
         try {
-            // Menggunakan fungsi dari warehouseApi
             const { data } = await warehouseApi.getPratinjauPacking(batchId, qtyKg)
             pratinjau.value = data
         } catch (err) {
@@ -68,11 +85,9 @@ export function usePacking() {
         sedangProses.value = true
         galat.value = ''
         try {
-            // FASE 1: Buat Dokumen (DRAFT) via warehouseApi
             const resDraft = await warehouseApi.simpanDraftPacking(payload)
             const draftId = resDraft.data.id
 
-            // FASE 2: Posting & Absorpsi COGS (POSTED) via warehouseApi
             const resPost = await warehouseApi.postingPacking(draftId)
             return { success: true, data: resPost.data }
         } catch (err) {

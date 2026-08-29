@@ -64,12 +64,15 @@
                             </select>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <label class="text-xs font-bold text-slate-500 uppercase">WIP Batch ID</label>
+                            <label class="text-xs font-bold text-slate-500 uppercase">WIP BATCH ID / TANGKI</label>
                             <select v-model="form.batch_id" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-800 text-slate-800">
-                                <option value="" disabled>Pilih Batch Tersedia...</option>
+                                <option value="" disabled>Pilih Batch / Tangki Tersedia...</option>
+                                
+                                <!-- KODE SUPER RINGAN: Langsung render properti teks tanpa komputasi format angka di UI -->
                                 <option v-for="b in daftarBatch" :key="b.id" :value="b.id">
-                                    {{ b.nomor }} - {{ b.nama_hasil }} (Sisa: {{ angka(b.sisa_qty, 3) }} Kg)
+                                    {{ b.label_dropdown }}
                                 </option>
+
                             </select>
                         </div>
                     </div>
@@ -105,7 +108,6 @@
                         </div>
                     </div>
 
-                    <!-- Input Total Qty (Hybrid: Auto + Editable) -->
                     <div class="p-4 bg-blue-50 border border-blue-100 rounded-xl mt-4">
                         <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
                             <div>
@@ -125,7 +127,6 @@
             <!-- Panel Kanan: Telemetri & Valuasi -->
             <div class="space-y-6">
                 <div class="bg-slate-900 border border-slate-800 rounded-[24px] p-6 shadow-xl relative overflow-hidden h-full flex flex-col">
-                    <!-- Icon Latar Belakang -->
                     <div class="absolute -right-6 -bottom-6 text-slate-800 opacity-50 pointer-events-none">
                         <i class="pi pi-receipt" style="font-size: 8rem;"></i>
                     </div>
@@ -133,7 +134,6 @@
                     <h3 class="text-xs font-bold text-amber-500 uppercase tracking-widest mb-6 border-b border-slate-700 pb-2 relative z-10">Valuasi HPP / COGS</h3>
 
                     <div class="space-y-4 relative z-10 flex-1">
-                        <!-- Peringatan Kapasitas / Error Pratinjau -->
                         <div v-if="pratinjau.pesan && !pratinjau.valid" class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 font-medium">
                             <i class="pi pi-times-circle mr-1"></i> {{ pratinjau.pesan }}
                         </div>
@@ -141,7 +141,6 @@
                             <i class="pi pi-info-circle mr-1"></i> Penarikan ini menghabiskan sisa batch.
                         </div>
 
-                        <!-- Baris Data Evaluasi -->
                         <div class="flex justify-between items-center border-b border-slate-700 pb-3 mt-4">
                             <span class="text-xs text-slate-400">Status Kalkulasi</span>
                             <span v-if="pratinjau.valid" class="text-xs font-bold text-emerald-400 flex items-center gap-1"><i class="pi pi-check-circle"></i> Valid</span>
@@ -187,7 +186,6 @@ const {
     muatMasterData, cekPratinjau, simpanPacking
 } = usePacking()
 
-// State Data Form
 const form = reactive({
     entitas_id: '',
     batch_id: '',
@@ -199,7 +197,6 @@ const form = reactive({
 
 const hasilEksekusi = ref(null)
 
-// 1. WATCHER KEMASAN: Ambil default berat kemasan dari database untuk sugesti 'Isi per Unit'
 watch(() => form.kemasan_id, (kId) => {
     if (kId) {
         const kemasanTerpilih = daftarKemasan.value.find(k => k.id === kId)
@@ -209,14 +206,12 @@ watch(() => form.kemasan_id, (kId) => {
     }
 })
 
-// 2. WATCHER HYBRID: Kalkulasi otomatis Qty(Kg)
 watch([() => form.total_unit, () => form.isi_per_unit], ([unit, isi]) => {
     if (unit > 0 && isi > 0) {
         form.qty_kg = Number((unit * isi).toFixed(3))
     }
 })
 
-// 3. WATCHER PRATINJAU: Panggil API Backend saat Batch atau Qty(Kg) berubah
 let debounceTimer
 watch([() => form.batch_id, () => form.qty_kg], ([batchId, qtyKg]) => {
     clearTimeout(debounceTimer)
@@ -224,7 +219,6 @@ watch([() => form.batch_id, () => form.qty_kg], ([batchId, qtyKg]) => {
         pratinjau.value.valid = false
         return
     }
-    // Tunda hit API 500ms agar tidak spam server saat user mengetik
     debounceTimer = setTimeout(() => {
         cekPratinjau(batchId, qtyKg)
     }, 500)
@@ -256,7 +250,6 @@ const resetForm = () => {
     form.isi_per_unit = null
     form.qty_kg = 0
     hasilEksekusi.value = null
-    // Refresh master data untuk memperbarui sisa qty batch yang baru saja disedot
     muatMasterData()
 }
 
@@ -266,10 +259,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
