@@ -920,3 +920,24 @@ def batalkan_po_kemasan(*, po_id, user, alasan=''):
     po.catatan = f'{po.catatan}\n[BATAL {timezone.now():%Y-%m-%d} oleh {user}] {alasan}'.strip()
     po.save(update_fields=['status', 'catatan'])
     return po
+
+
+@transaction.atomic
+def tutup_paksa_po(po_id, user):
+    """
+    Menutup paksa PO yang berstatus SEBAGIAN atau TERKIRIM.
+    Mengabaikan sisa barang yang belum dikirim oleh supplier.
+    """
+    po = PurchaseOrder.objects.select_for_update().filter(pk=po_id).first()
+    
+    if not po:
+        raise DjangoValidationError("Purchase Order tidak ditemukan.")
+        
+    if po.status not in ['TERKIRIM', 'SEBAGIAN']:
+        raise DjangoValidationError("Hanya PO berstatus TERKIRIM atau SEBAGIAN yang bisa ditutup paksa.")
+
+    po.status = 'SELESAI'
+    po.save(update_fields=['status'])
+
+    
+    return po

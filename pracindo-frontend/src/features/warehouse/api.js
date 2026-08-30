@@ -26,7 +26,16 @@ export const warehouseApi = {
     getLaporanSelisih: (params) => api.get('warehouse/laporan-selisih/', { params }),
     getSelisihTerbuka: (params) => api.get('warehouse/laporan-selisih/terbuka/', { params }),
     buatLaporanManual: (payload) => api.post('warehouse/laporan-selisih/', payload),
-    ajukanKlaim: (id, catatan) => api.post(`warehouse/laporan-selisih/${id}/ajukan/`, { catatan })
+    ajukanKlaim: (id, catatan) => api.post(`warehouse/laporan-selisih/${id}/ajukan/`, { catatan }),
+
+    // ==========================================
+    // 4. MASTER PRODUK (PRODUK INTERNAL & KEMASAN)
+    // ==========================================
+    getMasterProduk: (params) => api.get('master/master-produk/', { params }),
+    getDetailMasterProduk: (id) => api.get(`master/master-produk/${id}/`),
+    buatMasterProduk: (payload) => api.post('master/master-produk/', payload),
+    updateMasterProduk: (id, payload) => api.put(`master/master-produk/${id}/`, payload),
+    patchMasterProduk: (id, payload) => api.patch(`master/master-produk/${id}/`, payload),
 }
 
 export default warehouseApi

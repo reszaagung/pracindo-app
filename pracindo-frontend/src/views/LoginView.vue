@@ -54,15 +54,16 @@
                             class="form-input" />
                     </div>
 
-                    <div class="input-group relative">
+                    <div class="input-group">
                         <input v-model="form.password" :type="showPassword ? 'text' : 'password'"
                             placeholder="Kata Sandi" autocomplete="current-password" required :disabled="sedangProses"
                             class="form-input pr-icon" />
-                        <button type="button" class="btn-toggle-pass"
-                            :aria-label="showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'"
+                        <!-- Tag button diganti jadi span agar kebal dari CSS global -->
+                        <span class="btn-toggle-pass"
+                            :title="showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'"
                             @click="showPassword = !showPassword">
                             <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
-                        </button>
+                        </span>
                     </div>
 
                 <!-- Pesan Error / Notifikasi Sesi -->
@@ -373,6 +374,14 @@ const bolehKe = (tujuan) => {
     color: #94a3b8;
     cursor: pointer;
     font-size: 1.125rem;
+    /* Tambahan pengunci agar tidak melar oleh CSS Global */
+    width: auto !important;
+    height: auto !important;
+    padding: 0.25rem !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
 }
 
 .btn-toggle-pass:hover {

@@ -1,6 +1,6 @@
 <template>
     <div class="flex flex-col w-full animate-fade-in relative">
-        <!-- HEADER: Dibuat flex-col di HP agar tombol Buat PO turun ke bawah, dan flex-row di PC -->
+        <!-- HEADER -->
         <div class="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
             <div>
                 <p class="text-xs text-slate-400 mb-1">
@@ -47,7 +47,7 @@
                             class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 text-slate-700" />
                     </div>
 
-                    <!-- Filter Status (Bisa discroll ke samping jika penuh) -->
+                    <!-- Filter Status -->
                     <div class="flex bg-slate-50 p-1 rounded-xl w-full overflow-x-auto custom-scrollbar">
                         <button
                             v-for="tab in ['semua', 'DRAFT', 'PENDING', 'APPROVED', 'TERKIRIM', 'DISETUJUI', 'DITOLAK', 'SEBAGIAN', 'SELESAI', 'BATAL']"
@@ -76,23 +76,20 @@
             </div>
 
             <!-- STATE: ADA DATA (TABEL RESPONSIVE) -->
-            <!-- KUNCI PERBAIKAN: overflow-x-auto dipasang di sini -->
             <div v-else class="overflow-x-auto custom-scrollbar pb-2">
-                <!-- KUNCI PERBAIKAN: min-w-[900px] memaksa tabel tetap lebar dan memicu scroll horizontal di HP -->
-                <table class="w-full text-left text-sm min-w-[900px]">
+                <table class="w-full text-left text-sm min-w-[1000px]">
                     <thead class="text-slate-500 bg-slate-50/50">
                         <tr>
-                            <th class="py-3 px-4 font-semibold rounded-tl-xl w-[20%]">No. PO</th>
-                            <th class="py-3 px-4 font-semibold w-[15%]">Tanggal</th>
+                            <th class="py-3 px-4 font-semibold rounded-tl-xl w-[18%]">No. PO</th>
+                            <th class="py-3 px-4 font-semibold w-[12%]">Tanggal</th>
                             <th class="py-3 px-4 font-semibold w-[20%]">Supplier</th>
                             <th class="py-3 px-4 font-semibold w-[15%] text-center">Status</th>
-                            <th class="py-3 px-4 font-semibold w-[15%] text-center">Aksi</th>
-                            <th class="py-3 px-4 font-semibold w-[15%] text-center rounded-tr-xl">Detail</th>
+                            <th class="py-3 px-4 font-semibold w-[22%] text-center">Aksi</th>
+                            <th class="py-3 px-4 font-semibold w-[13%] text-center rounded-tr-xl">Detail</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="po in tampil" :key="po.id" class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                            <!-- KUNCI PERBAIKAN: whitespace-nowrap mencegah teks patah dan menumpuk -->
                             <td class="py-3 px-4 font-bold text-slate-800 whitespace-nowrap">{{ po.no_po || po.nomor }}</td>
                             <td class="py-3 px-4 text-slate-600 whitespace-nowrap">{{ po.tanggal }}</td>
                             <td class="py-3 px-4 text-slate-700 truncate max-w-[200px]" :title="po.suplier_nama">
@@ -107,7 +104,12 @@
                             <!-- KOLOM AKSI -->
                             <td class="py-3 px-4 text-center">
                                 <div class="flex items-center justify-center gap-1.5">
+                                    
+                                    <!-- AKSI DRAFT -->
                                     <template v-if="po.status === 'DRAFT'">
+                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak Draf" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-700 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-print text-[10px] mr-1"></i> Cetak
+                                        </button>
                                         <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-send text-[10px] mr-1"></i> Ajukan
                                         </button>
@@ -115,6 +117,8 @@
                                             <i class="pi pi-trash text-[10px]"></i>
                                         </button>
                                     </template>
+
+                                    <!-- AKSI PENDING -->
                                     <template v-else-if="po.status === 'PENDING'">
                                         <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-check text-[10px] mr-1"></i> Setuju
@@ -123,7 +127,12 @@
                                             <i class="pi pi-times text-[10px]"></i>
                                         </button>
                                     </template>
+
+                                    <!-- AKSI APPROVED -->
                                     <template v-else-if="po.status === 'APPROVED'">
+                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-700 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-print text-[10px]"></i>
+                                        </button>
                                         <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-envelope text-[10px] mr-1"></i> Kirim
                                         </button>
@@ -131,6 +140,24 @@
                                             <i class="pi pi-trash text-[10px]"></i>
                                         </button>
                                     </template>
+
+                                    <!-- AKSI TERKIRIM / SEBAGIAN (Bisa Cetak & Tutup Paksa) -->
+                                    <template v-else-if="['TERKIRIM', 'SEBAGIAN'].includes(po.status)">
+                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-print text-[10px] mr-1"></i> Cetak
+                                        </button>
+                                        <button @click="handleTutupPaksa(po.id)" title="Selesaikan & Tutup Paksa PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-power-off text-[10px] mr-1"></i> Tutup Paksa
+                                        </button>
+                                    </template>
+
+                                    <!-- AKSI SELESAI / DISETUJUI (Hanya Bisa Cetak) -->
+                                    <template v-else-if="['SELESAI', 'DISETUJUI'].includes(po.status)">
+                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak Dokumen PO" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
+                                            <i class="pi pi-print text-[10px] mr-1.5"></i> Cetak PO
+                                        </button>
+                                    </template>
+
                                     <span v-else class="text-xs text-slate-300">-</span>
                                 </div>
                             </td>
@@ -159,22 +186,20 @@
 <script setup>
 import { onMounted, ref, defineAsyncComponent } from 'vue'
 import Dialog from 'primevue/dialog'
-import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
-const tampilModalDetail = ref(false)
 import Select from 'primevue/select'
+import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
+import api from '@/utils/api' // Digunakan untuk fungsi cetak & tutup paksa
+
+const tampilModalDetail = ref(false)
 const poIdTerpilih = ref(null)
+const tampilModalPO = ref(false)
+
 const LazyFormPO = defineAsyncComponent(() =>
     import('@/features/accounting/views/ProcurementCreate.vue')
 )
 const LazyDetailPO = defineAsyncComponent(() =>
     import('@/features/accounting/views/PurchaseOrderDetail.vue')
 )
-
-const bukaDetail = (id) => {
-    poIdTerpilih.value = id
-    tampilModalDetail.value = true
-}
-const tampilModalPO = ref(false)
 
 const {
     daftarPO, isLoadingDaftar, cari, saringStatus, tampil,
@@ -186,10 +211,14 @@ onMounted(() => {
     muatDaftarPO()
 })
 
+const bukaDetail = (id) => {
+    poIdTerpilih.value = id
+    tampilModalDetail.value = true
+}
+
 const poBerhasilDisimpan = () => {
     tampilModalPO.value = false
     muatDaftarPO()
-    
     alert('Mantap! Purchase Order berhasil disimpan.') 
 }
 
@@ -238,6 +267,45 @@ const handleBatal = async (id) => {
     }
 }
 
+// === FUNGSI TUTUP PAKSA PO MENGGANTUNG ===
+const handleTutupPaksa = async (id) => {
+    if(confirm('Anda yakin ingin TUTUP PAKSA dokumen ini?\nSisa barang yang belum dikirim tidak akan ditagihkan lagi ke Gudang.')) {
+        try {
+            await api.post(`accounting/purchase-order/${id}/tutup-paksa/`)
+            alert('Purchase Order berhasil ditutup paksa dan status menjadi SELESAI.')
+            muatDaftarPO() // Refresh tabel agar statusnya berubah
+        } catch (error) {
+            console.error('Gagal menutup PO:', error)
+            alert(error.response?.data?.detail || 'Terjadi kesalahan saat menutup paksa PO.')
+        }
+    }
+}
+
+// === FUNGSI UNDUH DOKUMEN WORD ===
+const unduhDokumenPO = async (id, no_po) => {
+    try {
+        const fallbackName = no_po ? no_po.replace(/\//g, '_') : id
+        
+        const response = await api.get(`accounting/purchase-order/${id}/cetak/`, {
+            responseType: 'blob' 
+        })
+        
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `PO_${fallbackName}.docx`)
+        document.body.appendChild(link)
+        link.click()
+        
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        
+    } catch (error) {
+        console.error('Gagal mengunduh dokumen:', error)
+        alert('Gagal mencetak dokumen. Pastikan backend sudah merender template Word-nya.')
+    }
+}
+
 const badgeColor = (status) => {
     const st = String(status).toUpperCase()
     if (st === 'DRAFT') return 'bg-slate-100 text-slate-600'
@@ -263,7 +331,6 @@ const badgeColor = (status) => {
         opacity: 0;
         transform: translateY(10px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);

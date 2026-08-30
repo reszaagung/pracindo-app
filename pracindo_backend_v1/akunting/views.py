@@ -17,8 +17,13 @@ import django_filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated # Pastikan ini di-import
-
+from rest_framework.permissions import IsAuthenticated 
+from django.conf import settings
+from django.http import HttpResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from docxtpl import DocxTemplate
+from .models import PurchaseOrder
 from .models.pengeluaran import PengeluaranKas
 from .serializers import PengeluaranKasSerializer
 from staff_user.models import Role
@@ -28,8 +33,6 @@ from . import services
 from .models import (
     Akun, FakturPembelian, FakturPenjualan, JurnalUmum, PurchaseOrder,
     PurchaseOrderItem, UangMukaSuplier,
-    
-    # --- TAMBAHAN KEMASAN ---
     PembelianKemasan
 )
 from .serializers import (
@@ -40,8 +43,6 @@ from .serializers import (
     TerbitkanFakturJualSerializer, TerbitkanFakturSerializer,
     TerimaPiutangSerializer, UangMukaSerializer, UbahItemPOSerializer,
     BuatPOSerializer,
-    
-    # --- TAMBAHAN KEMASAN ---
     PurchaseOrderKemasanSerializer
 )
 
@@ -315,6 +316,16 @@ class PurchaseOrderViewSet(BasisAkunting):
                 po_id=pk, 
                 user=request.user,
                 alasan=s.validated_data['alasan']
+            )
+        except DjangoValidationError as e:
+            return _galat(e)
+        return Response(PurchaseOrderSerializer(po).data)
+    @action(detail=True, methods=['post'], url_path='tutup-paksa')
+    def tutup_paksa(self, request, pk=None):
+        try:
+            po = services.tutup_paksa_po(
+                po_id=pk, 
+                user=request.user
             )
         except DjangoValidationError as e:
             return _galat(e)
@@ -604,3 +615,61 @@ class PurchaseOrderKemasanViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(dibuat_oleh=self.request.user)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def cetak_po_word(request, pk):
+    try:
+        # 1. Ambil data PO dari Database beserta relasinya
+        # Menggunakan select_related & prefetch_related agar query database lebih ringan
+        po = PurchaseOrder.objects.select_related('entitas', 'suplier').prefetch_related('items').get(pk=pk)
+        
+        
+        items_data = []
+        total_subtotal = 0
+        
+        for item in po.items.all():
+         
+            nama_produk = item.produk.nama if hasattr(item, 'produk') and item.produk else getattr(item.kemasan, 'nama', '-')
+            
+            qty = float(item.qty_pesan)
+            harga = float(item.harga_per_kg) if hasattr(item, 'harga_per_kg') else float(getattr(item, 'harga_per_pcs', 0))
+            subtotal = qty * harga
+            total_subtotal += subtotal
+            
+            items_data.append({
+                "nama_item": nama_produk,
+                "kuantitas": f"{qty:g}", 
+                "total_harga": f"Rp {subtotal:,.0f}".replace(',', '.')
+            })
+        
+        ppn_nominal = (total_subtotal * float(po.ppn_persen) / 100) if po.pakai_ppn else 0
+        grand_total = total_subtotal + ppn_nominal
+        
+        context = {
+            "NAMA_PIC": po.entitas.nama if po.entitas else "Pracindo Staff",
+            "NAMA_SUPPLIER": po.suplier.nama if po.suplier else "-",
+            "NO_PO": po.no_po,
+            "TANGGAL_BUAT": po.tanggal.strftime("%d %B %Y"),
+            "TOTAL_PPN": f"Rp {ppn_nominal:,.0f}".replace(',', '.'),
+            "TOTAL_FINAL": f"Rp {grand_total:,.0f}".replace(',', '.'),
+            "items": items_data
+        }
+        
+        template_path = os.path.join(settings.BASE_DIR, 'templates_dokumen', 'Tabel_Template_Benar.docx')
+        doc = DocxTemplate(template_path)
+        doc.render(context)
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        
+        # Bersihkan karakter "/" pada nomor PO agar aman menjadi nama file
+        safe_filename = po.no_po.replace('/', '_').replace(' ', '_')
+        response['Content-Disposition'] = f'attachment; filename="PO_{safe_filename}.docx"'
+        
+        doc.save(response)
+        return response
+        
+    except PurchaseOrder.DoesNotExist:
+        return HttpResponse("Dokumen Purchase Order tidak ditemukan.", status=404)
+    except Exception as e:
+        return HttpResponse(f"Gagal mencetak dokumen: {str(e)}", status=500)

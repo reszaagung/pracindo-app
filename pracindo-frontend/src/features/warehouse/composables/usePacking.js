@@ -19,23 +19,24 @@ export function usePacking() {
         valid: false, qty_kg: 0, harga_rata: 0, nilai_hpp: 0, sisa_qty_batch: 0, pesan: ''
     })
 
-    const muatMasterData = async () => {
+const muatMasterData = async () => {
         sedangProses.value = true
         galat.value = ''
         try {
-            // Tarik semua master data secara paralel (ditambah Produk)
+            // Tarik semua master data secara paralel
             const [resEntitas, resKemasan, resBatch, resProduk] = await Promise.all([
                 warehouseApi.getEntitasAktif(),
                 warehouseApi.getKemasanAktif(),
                 apiProduksi.getBatches({ status: 'POSTED' }),
-                api.get('master/produk/', { params: { aktif: true } }) // Tarik daftar produk
+                // Sesuaikan URL ini dengan router di master/urls.py
+                api.get('master/master-produk/') 
             ])
 
             const ekstrakData = (res) => res?.data?.results || res?.results || res?.data || (Array.isArray(res) ? res : [])
 
             daftarEntitas.value = ekstrakData(resEntitas)
             daftarKemasan.value = ekstrakData(resKemasan)
-            daftarProduk.value = ekstrakData(resProduk) // Simpan data produk
+            daftarProduk.value = ekstrakData(resProduk) 
             
             const rawBatch = ekstrakData(resBatch)
 
@@ -52,7 +53,7 @@ export function usePacking() {
                 const idBatch = b.nomor ?? '-'
                 
                 return {
-                    ...b, // Membawa b.jenis (MIXING/BLENDING) dari backend
+                    ...b, 
                     label_dropdown: `[${kodeTangki}] ${namaHasil} (Sisa: ${angka(qty, 3)} Kg | Batch: ${idBatch})`
                 }
             })
