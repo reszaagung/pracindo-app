@@ -11,13 +11,13 @@ from .views import (
     FakturPenjualanViewSet, 
     PenerimaanPiutangView,
     PengeluaranKasViewSet,
-    PurchaseOrderKemasanViewSet,
-    cetak_po_word  # <-- Added missing import here
+    PurchaseOrderKemasanViewSet
 )
 
 app_name = 'akunting'
 
 router = DefaultRouter()
+
 router.register('akun', AkunViewSet, basename='akun')
 router.register('jurnal', JurnalUmumViewSet, basename='jurnal')
 router.register('purchase-order', PurchaseOrderViewSet, basename='purchase-order')
@@ -31,6 +31,4 @@ router.register('pengeluaran-kas', PengeluaranKasViewSet, basename='pengeluaran-
 
 urlpatterns = [
     path('', include(router.urls)),
-    # <-- Moved the path inside urlpatterns and removed 'views.' prefix
-    path('purchase-order/<int:pk>/cetak/', cetak_po_word, name='cetak_po_word'), 
 ]

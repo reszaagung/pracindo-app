@@ -385,7 +385,6 @@ from .models import DeliveryOrder
 def distribusi_siap_kirim(entitas_id=None):
     """Mengembalikan daftar DO asli dari database yang berstatus DRAFT."""
     
-    # Query langsung ke database PracindoERP
     dos = DeliveryOrder.objects.filter(status='DRAFT').order_by('tanggal')
     
     hasil = []

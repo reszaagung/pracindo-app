@@ -7,7 +7,6 @@ dia sudah jadi domain dan layak pindah ke app sendiri.
 """
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from core.models import TimeStampedModel
@@ -15,7 +14,7 @@ from core.models import TimeStampedModel
 from .utils import generate_kode_urut
 
 class MasterProduk(models.Model):
-    id = models.CharField(max_length=50,primary_key=True),
+    id = models.CharField(max_length=50, primary_key=True)
     nama_item = models.CharField(max_length=70)
     
     class Meta:
@@ -44,10 +43,6 @@ class Kategori(TimeStampedModel):
             self.kode = generate_kode_urut(Kategori, prefix='KAT', padding=3)
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        raise ValidationError('Kategori tidak boleh dihapus. Set aktif=False.')
-
-
 class Satuan(TimeStampedModel):
     kode = models.CharField(max_length=8, unique=True)
     nama = models.CharField(max_length=40)
@@ -60,10 +55,6 @@ class Satuan(TimeStampedModel):
 
     def __str__(self):
         return self.kode
-
-    def delete(self, *args, **kwargs):
-        raise ValidationError('Satuan tidak boleh dihapus. Set aktif=False.')
-
 
 class JenisProduk(models.TextChoices):
     BAHAN_BAKU  = 'BAHAN_BAKU',  'Bahan baku'
@@ -102,9 +93,6 @@ class Suplier(TimeStampedModel):
             self.kode = generate_kode_urut(Suplier, prefix='SUP', padding=4)
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        raise ValidationError('Suplier tidak boleh dihapus. Set aktif=False.')
-
 
 class Produk(TimeStampedModel):
     kode     = models.CharField(max_length=24, unique=True, blank=True)
@@ -129,7 +117,6 @@ class Produk(TimeStampedModel):
         
     def save(self, *args, **kwargs):
         if not self.kode:
-            # Bikin prefix dinamis berdasarkan jenis produk
             if self.jenis == JenisProduk.BAHAN_BAKU:
                 prefix = 'BP'
             elif self.jenis == JenisProduk.BARANG_JADI:
@@ -142,12 +129,8 @@ class Produk(TimeStampedModel):
             self.kode = generate_kode_urut(Produk, prefix=prefix, padding=4)
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        raise ValidationError('Produk tidak boleh dihapus. Set aktif=False.')
-
 
 class Pelanggan(TimeStampedModel):
-    # Tambahkan blank=True agar lolos validasi serializer
     kode   = models.CharField(max_length=16, unique=True, blank=True)
     nama   = models.CharField(max_length=200)
     npwp   = models.CharField(max_length=20, blank=True)
@@ -175,6 +158,3 @@ class Pelanggan(TimeStampedModel):
         if not self.kode:
             self.kode = generate_kode_urut(Pelanggan, prefix='CUST', padding=4)
         super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        raise ValidationError('Pelanggan tidak boleh dihapus. Set aktif=False.')

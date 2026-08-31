@@ -1,15 +1,15 @@
 """
 Endpoint master data — master/views.py
 """
-from rest_framework import viewsets
+from rest_framework import viewsets , filters
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from staff_user.permissions import HanyaAdmin, SudahLogin, AdminAtauAkunting
 from rest_framework.permissions import AllowAny
-from .models import Pelanggan, Produk, Satuan, Suplier ,MasterProduk
+from .models import Pelanggan, Produk, Satuan, Suplier, MasterProduk
 from .serializers import (
     PelangganSerializer, ProdukRingkasSerializer,
     ProdukSerializer, SatuanSerializer, SuplierRingkasSerializer,
-    SuplierSerializer,MasterProdukSerializer,
+    SuplierSerializer, MasterProdukSerializer,
 )
 
 class BasisMaster(viewsets.ModelViewSet):
@@ -33,8 +33,7 @@ class SatuanViewSet(BasisMaster):
 
 class ProdukViewSet(BasisMaster):
     queryset = Produk.objects.select_related('satuan').prefetch_related('suplier').order_by('kode')
-    
-    # Filter 'suplier' ditambahkan untuk fitur Katalog Suplier
+
     filterset_fields = ['jenis', 'aktif', 'suplier']
     search_fields = ['kode', 'nama']
 
@@ -64,12 +63,6 @@ class SuplierViewSet(BasisMaster):
         return [AdminAtauAkunting()]
 
 class PelangganViewSet(BasisMaster):
-    queryset = Pelanggan.objects.order_by('nama')
-    filterset_fields = ['aktif']
-    search_fields = ['kode', 'nama', 'npwp']
-    serializer_class = PelangganSerializer
-
-class PelangganViewSet(BasisMaster):
     """
     Master pelanggan. Dipakai selector di form Sales Order.
 
@@ -88,10 +81,9 @@ class PelangganViewSet(BasisMaster):
             qs = qs.filter(aktif=True)
         return qs
 
-
 class MasterProdukViewSet(viewsets.ModelViewSet):
     queryset = MasterProduk.objects.all()
     serializer_class = MasterProdukSerializer
     permission_classes = [AllowAny]
+    filter_backends = [filters.SearchFilter]
     search_fields = ['id', 'nama_item']
-    ordering_fields = ['nama_item', 'id']

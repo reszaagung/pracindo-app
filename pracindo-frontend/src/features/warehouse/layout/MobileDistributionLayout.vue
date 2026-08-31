@@ -26,9 +26,6 @@
                 </nav>
             </div>
             <div class="mt-auto flex flex-col items-center gap-4 mb-4">
-                <button @click="keDashboard" type="button" class="w-10 h-10 rounded-xl overflow-hidden cursor-pointer border border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center">
-                    <i class="pi pi-home text-slate-400"></i>
-                </button>
                 <button @click="keluar" type="button" class="w-10 h-10 rounded-xl overflow-hidden cursor-pointer border border-rose-100 hover:border-rose-400 bg-white hover:bg-rose-50 transition-all shadow-sm flex items-center justify-center">
                     <i class="pi pi-power-off text-rose-400"></i>
                 </button>

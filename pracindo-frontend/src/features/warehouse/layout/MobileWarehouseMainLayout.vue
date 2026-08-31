@@ -14,7 +14,7 @@
 
         <div v-if="sidebarAktif" @click="tutupDiMobile" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity"></div>
 
-        <aside class="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center py-6 flex-shrink-0 justify-between transition-transform duration-300 ease-in-out fixed top-2 bottom-2 left-2 w-[88px] z-50"
+        <aside cl   ass="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center py-6 flex-shrink-0 justify-between transition-transform duration-300 ease-in-out fixed top-2 bottom-2 left-2 w-[88px] z-50"
             :class="sidebarAktif ? 'translate-x-0' : '-translate-x-[150%]'">
             <div class="flex flex-col items-center w-full gap-6">
                 <nav class="flex flex-col gap-3 w-full px-4 mt-8">

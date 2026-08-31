@@ -89,8 +89,12 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     list_select_related = ('entitas', 'suplier', 'dibuat_oleh')
     readonly_fields = ('no_po', 'dibuat_oleh', 'dibuat_pada')
     inlines = [PurchaseOrderItemInline]
+    
     def get_queryset(self, request):
         return super().get_queryset(request).dengan_total()
+
+    def has_delete_permission(self, request, obj=None):
+        return True
 
     @admin.display(description='Subtotal')
     def subtotal(self, obj):
@@ -188,10 +192,8 @@ class FakturPenjualanAdmin(admin.ModelAdmin):
 
 class PurchaseOrderKemasanItemInline(admin.TabularInline):
     model = PurchaseOrderKemasanItem
-    extra = 0 # Mencegah crash form kosong seperti bug fix Anda sebelumnya
+    extra = 0 
     readonly_fields = ('qty_diterima', 'amount', 'sisa_qty')
-    
-    # Pastikan model 'Kemasan' di inventory/admin.py memiliki `search_fields`
     autocomplete_fields = ('kemasan',) 
 
     @admin.display(description='Sisa (Pcs/Unit)')

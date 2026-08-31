@@ -141,7 +141,7 @@
                                         </button>
                                     </template>
 
-                                    <!-- AKSI TERKIRIM / SEBAGIAN (Bisa Cetak & Tutup Paksa) -->
+                                    <!-- AKSI TERKIRIM / SEBAGIAN (Bisa Cetak & Tutup S) -->
                                     <template v-else-if="['TERKIRIM', 'SEBAGIAN'].includes(po.status)">
                                         <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-print text-[10px] mr-1"></i> Cetak
@@ -188,7 +188,7 @@ import { onMounted, ref, defineAsyncComponent } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
-import api from '@/utils/api' // Digunakan untuk fungsi cetak & tutup paksa
+import api from '@/utils/api' // Digunakan untuk fungsi cetak & tutup sesi
 
 const tampilModalDetail = ref(false)
 const poIdTerpilih = ref(null)
@@ -267,16 +267,16 @@ const handleBatal = async (id) => {
     }
 }
 
-// === FUNGSI TUTUP PAKSA PO MENGGANTUNG ===
-const handleTutupPaksa = async (id) => {
-    if(confirm('Anda yakin ingin TUTUP PAKSA dokumen ini?\nSisa barang yang belum dikirim tidak akan ditagihkan lagi ke Gudang.')) {
+// === FUNGSI TUTUP SESI PO MENGGANTUNG ===
+const handleTutupSesi = async (id) => {
+    if(confirm('Anda yakin ingin MENUTUP SESI dokumen ini?\nSisa barang yang belum dikirim tidak akan ditagihkan lagi ke Gudang.')) {
         try {
-            await api.post(`accounting/purchase-order/${id}/tutup-paksa/`)
-            alert('Purchase Order berhasil ditutup paksa dan status menjadi SELESAI.')
+            await api.post(`akunting/purchase-order/${id}/tutup-sesi/`)
+            alert('Sesi Purchase Order berhasil ditutup dan status menjadi SELESAI.')
             muatDaftarPO() // Refresh tabel agar statusnya berubah
         } catch (error) {
-            console.error('Gagal menutup PO:', error)
-            alert(error.response?.data?.detail || 'Terjadi kesalahan saat menutup paksa PO.')
+            console.error('Gagal menutup sesi PO:', error)
+            alert(error.response?.data?.detail || 'Terjadi kesalahan saat menutup sesi PO.')
         }
     }
 }
@@ -286,7 +286,7 @@ const unduhDokumenPO = async (id, no_po) => {
     try {
         const fallbackName = no_po ? no_po.replace(/\//g, '_') : id
         
-        const response = await api.get(`accounting/purchase-order/${id}/cetak/`, {
+        const response = await api.get(`akunting/purchase-order/${id}/cetak/`, {
             responseType: 'blob' 
         })
         

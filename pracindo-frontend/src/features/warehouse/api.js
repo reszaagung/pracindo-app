@@ -14,7 +14,7 @@ export const warehouseApi = {
     // 2. MODUL PACKING
     // ==========================================
     getEntitasAktif: () => api.get('inventory/entitas/', { params: { aktif: true } }),
-    getKemasanAktif: () => api.get('inventory/kemasan/', { params: { aktif: true } }),
+    getKemasanAktif: () => api.get('inventory/pool/kemasan/'), 
     getBatchTersedia: () => api.get('produksi/batch/', { params: { status: 'POSTED' } }),
     getPratinjauPacking: (batchId, qtyKg) => api.get('inventory/packing/pratinjau/', { params: { batch: batchId, qty: qtyKg } }),
     simpanDraftPacking: (payload) => api.post('inventory/packing/', payload),

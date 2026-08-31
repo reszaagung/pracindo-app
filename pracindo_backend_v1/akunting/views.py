@@ -1,40 +1,26 @@
-"""
-Endpoint akunting — akunting/views.py
-
-View TIDAK berisi logika bisnis. Semua operasi yang mengubah state
-memanggil services.py, supaya row lock, idempotency, dan posting jurnal
-konsisten di semua jalur -- API maupun shell.
-
-Setiap viewset menetapkan `modul` dan memakai AksesModul. Permission class
-itu MENOLAK view yang tidak punya atribut `modul` -- gagal tertutup.
-"""
 import uuid
-
+import os
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Prefetch
-import django_filters
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated 
 from django.conf import settings
 from django.http import HttpResponse
-from rest_framework.decorators import api_view, permission_classes
+import django_filters
+from rest_framework import status 
+from rest_framework.response import Response
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from docxtpl import DocxTemplate
-from .models import PurchaseOrder
-from .models.pengeluaran import PengeluaranKas
-from .serializers import PengeluaranKasSerializer
+
 from staff_user.models import Role
 from staff_user.permissions import AksesModul, PunyaRole
 
 from . import services
 from .models import (
     Akun, FakturPembelian, FakturPenjualan, JurnalUmum, PurchaseOrder,
-    PurchaseOrderItem, UangMukaSuplier,
-    PembelianKemasan
+    PurchaseOrderItem, UangMukaSuplier, PembelianKemasan
 )
+from .models.pengeluaran import PengeluaranKas
 from .serializers import (
     AkunSerializer, BatalPOSerializer, BayarSerializer,
     FakturListSerializer, FakturPembelianSerializer, FakturPenjualanSerializer,
@@ -42,31 +28,10 @@ from .serializers import (
     PurchaseOrderListSerializer, PurchaseOrderSerializer,
     TerbitkanFakturJualSerializer, TerbitkanFakturSerializer,
     TerimaPiutangSerializer, UangMukaSerializer, UbahItemPOSerializer,
-    BuatPOSerializer,
-    PurchaseOrderKemasanSerializer
+    BuatPOSerializer, PurchaseOrderKemasanSerializer, PengeluaranKasSerializer
 )
 
 def batasi_entitas(qs, request, field="entitas"):
-    """
-    Saring queryset menurut entitas yang boleh diakses pengguna.
-
-    GAGAL TERTUTUP, BUKAN MELEDAK
-
-        Versi sebelumnya langsung membaca u.entitas_diizinkan.exists().
-        AnonymousUser tidak punya atribut itu, jadi hasilnya AttributeError
-        -> 500 -- dan 500 tidak menyaring apa pun. Filter yang gagal
-        terbuka lebih berbahaya daripada filter yang menolak, karena
-        kegagalannya terlihat seperti kerusakan biasa, bukan kebocoran.
-
-    SATU QUERY, BUKAN DUA
-
-        `.exists()` lalu `.all()` menembak database dua kali untuk satu
-        keputusan, dan di antara keduanya daftarnya bisa berubah.
-        values_list() sekali sudah cukup untuk keduanya.
-
-    Daftar izin KOSONG berarti boleh semua -- perilaku yang sudah
-    berlaku, dan berbeda dari pengguna anonim yang tidak boleh apa pun.
-    """
     u = getattr(request, "user", None)
     if not (u and u.is_authenticated):
         return qs.none()
@@ -82,37 +47,15 @@ def batasi_entitas(qs, request, field="entitas"):
         return qs
     return qs.filter(**{f"{field}_id__in": ids})
 
-
 def _galat(e):
     isi = e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}
     return Response(isi, status=status.HTTP_400_BAD_REQUEST)
 
-
 def _idem(request, prefix):
-    """
-    Kunci idempotency untuk transaksi uang.
-
-    Kunci HARUS datang dari klien -- kunci yang diacak di server berubah
-    tiap request, jadi retry apa pun lolos sebagai pembayaran kedua.
-    Header absen tetap dilayani demi klien lama, tapi tanpa perlindungan.
-    """
     return f'{prefix}:{request.headers.get("Idempotency-Key") or uuid.uuid4()}'
 
-
 class BasisAkunting(viewsets.ModelViewSet):
-    """
-    Induk viewset akunting. Menyaring queryset menurut entitas yang boleh
-    diakses pengguna.
-    """
-
     def filter_entitas(self, qs):
-        """
-        Dipanggil turunan yang membangun querysetnya sendiri.
-
-        Isinya didelegasikan ke batasi_entitas() supaya aturannya hanya
-        ada di satu tempat -- dua salinan aturan akses akan berbeda cepat
-        atau lambat, dan yang tertinggal biasanya yang lebih longgar.
-        """
         return batasi_entitas(qs, self.request)
 
     def get_queryset(self):
@@ -126,15 +69,8 @@ class AkunViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['tipe', 'boleh_diposting', 'aktif']
     search_fields = ['kode', 'nama']
 
-
-
 class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Read-only. Jurnal hanya lahir dari posting(), tidak pernah diketik.
-    Koreksi lewat aksi balik.
-    """
     queryset = JurnalUmum.objects.none()
-
     modul = 'akunting'
     permission_classes = [AksesModul]
     serializer_class = JurnalUmumSerializer
@@ -148,8 +84,7 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
               .order_by('-tanggal', '-id'))
         return batasi_entitas(qs, self.request)
 
-    @action(detail=True, methods=['post'],
-            permission_classes=[PunyaRole.dengan(Role.SUPERVISOR)])
+    @action(detail=True, methods=['post'], permission_classes=[PunyaRole.dengan(Role.SUPERVISOR)])
     def balik(self, request, pk=None):
         s = JurnalBalikSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -161,25 +96,12 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
             )
         except DjangoValidationError as e:
             return _galat(e)
-        return Response(JurnalUmumSerializer(balik).data,
-                        status=status.HTTP_201_CREATED)
-
-
+        return Response(JurnalUmumSerializer(balik).data, status=status.HTTP_201_CREATED)
 
 class PurchaseOrderFilter(django_filters.FilterSet):
-    """
-    FilterSet eksplisit.
-
-    filterset_fields mengandalkan django_filters MENEBAK model dari
-    queryset yang dikembalikan get_queryset(). Karena get_queryset() di
-    sini menyaring per entitas dan bentuknya bisa berubah, penebakan itu
-    gagal -- dan galatnya menyebut field yang sebenarnya ADA di model,
-    sehingga menunjuk ke arah yang salah sama sekali.
-    """
     class Meta:
         model = PurchaseOrder
         fields = ['entitas', 'suplier', 'status', 'tanggal']
-
 
 class PurchaseOrderViewSet(BasisAkunting):
     serializer_class = PurchaseOrderSerializer
@@ -216,8 +138,7 @@ class PurchaseOrderViewSet(BasisAkunting):
                     po.save(update_fields=['ppn_persen'])
         except DjangoValidationError as e:
             return _galat(e)
-        return Response(PurchaseOrderSerializer(po).data,
-                        status=status.HTTP_201_CREATED)
+        return Response(PurchaseOrderSerializer(po).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         return Response(
@@ -241,17 +162,14 @@ class PurchaseOrderViewSet(BasisAkunting):
         entitas_id = request.query_params.get('entitas')
         tanggal = request.query_params.get('tanggal')
         if not entitas_id:
-            return Response({'detail': 'Parameter entitas wajib.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
         entitas = Entitas.objects.get(pk=entitas_id)
-        tgl = (timezone.datetime.fromisoformat(tanggal).date()
-               if tanggal else timezone.localdate())
+        tgl = (timezone.datetime.fromisoformat(tanggal).date() if tanggal else timezone.localdate())
         return Response({'nomor': services.preview_nomor_po(entitas, tgl),
                          'catatan': 'Preview. Nomor final ditetapkan saat simpan.'})
 
     @action(detail=False, methods=['get'])
     def outstanding(self, request):
-        """PO yang masih menunggu barang. Dasar laporan komitmen."""
         qs = self.filter_entitas(
             PurchaseOrder.objects.terbuka()
             .select_related('entitas', 'suplier').dengan_total()
@@ -320,27 +238,85 @@ class PurchaseOrderViewSet(BasisAkunting):
         except DjangoValidationError as e:
             return _galat(e)
         return Response(PurchaseOrderSerializer(po).data)
-    @action(detail=True, methods=['post'], url_path='tutup-paksa')
-    def tutup_paksa(self, request, pk=None):
+
+    @action(detail=True, methods=['post'], url_path='tutup-sesi')
+    def tutup_sesi(self, request, pk=None):
         try:
             po = services.tutup_paksa_po(
                 po_id=pk, 
                 user=request.user
             )
-        except DjangoValidationError as e:
-            return _galat(e)
-        return Response(PurchaseOrderSerializer(po).data)
+            return Response(PurchaseOrderSerializer(po).data)
+        except Exception as e:
+            return Response(
+                {"detail": str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=True, methods=['get'])
     def ringkasan(self, request, pk=None):
         return Response(services.ringkasan_po(pk))
 
+    @action(detail=True, methods=['get'], url_path='cetak')
+    def cetak(self, request, pk=None):
+        try:
+            po = self.get_object() 
+            
+            items_data = []
+            total_subtotal = 0
+            
+            for barang in po.item.all():
+                nama_produk = barang.produk.nama if hasattr(barang, 'produk') and barang.produk else getattr(barang.kemasan, 'nama', '-')
+                
+                qty = float(barang.qty_pesan)
+                harga = float(barang.harga_per_kg) if hasattr(barang, 'harga_per_kg') else float(getattr(barang, 'harga_per_pcs', 0))
+                subtotal = qty * harga
+                total_subtotal += subtotal
+                
+                items_data.append({
+                    "nama_item": nama_produk,
+                    "kuantitas": f"{qty:g}", 
+                    "total_harga": f"Rp {subtotal:,.0f}".replace(',', '.')
+                })
+            
+            persen = float(po.ppn_persen) if po.ppn_persen else 0
+            ppn_nominal = total_subtotal * (persen / 100) 
+            grand_total = total_subtotal + ppn_nominal
+            
+            context = {
+                "NAMA_PIC": po.entitas.nama if po.entitas else "Pracindo Staff",
+                "NAMA_SUPPLIER": po.suplier.nama if po.suplier else "-",
+                "NO_PO": po.no_po,
+                "TANGGAL_BUAT": po.tanggal.strftime("%d %B %Y") if po.tanggal else "-",
+                "TOTAL_PPN": f"Rp {ppn_nominal:,.0f}".replace(',', '.'),
+                "TOTAL_FINAL": f"Rp {grand_total:,.0f}".replace(',', '.'),
+                "items": items_data
+            }
+            
+            template_path = os.path.join(settings.BASE_DIR, 'akunting', 'templates_dokumen', 'master_doc_po.docx')
+            
+            if not os.path.exists(template_path):
+                return HttpResponse(f"Gagal: File template tidak ditemukan di {template_path}", status=404)
+                
+            doc = DocxTemplate(template_path)
+            doc.render(context)
+            response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+            
+            safe_filename = po.no_po.replace('/', '_').replace(' ', '_')
+            response['Content-Disposition'] = f'attachment; filename="PO_{safe_filename}.docx"'
+            
+            doc.save(response)
+            return response
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()  
+            return HttpResponse(f"Gagal mencetak dokumen: {str(e)}", status=500)
 
 class FakturPembelianViewSet(BasisAkunting):
     queryset = FakturPembelian.objects.none()
     serializer_class = FakturPembelianSerializer
-    filterset_fields = ['entitas', 'suplier', 'status', 'jenis',
-                        'tanggal_jatuh_tempo']
+    filterset_fields = ['entitas', 'suplier', 'status', 'jenis', 'tanggal_jatuh_tempo']
     search_fields = ['nomor_faktur', 'no_internal', 'suplier__nama']
 
     def get_queryset(self):
@@ -357,38 +333,29 @@ class FakturPembelianViewSet(BasisAkunting):
 
     def create(self, request):
         return Response(
-            {'detail': 'Faktur barang diterbitkan lewat '
-                       'POST faktur/dari-penerimaan/{id}/'},
+            {'detail': 'Faktur barang diterbitkan lewat POST faktur/dari-penerimaan/{id}/'},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
     def update(self, request, *args, **kwargs):
         return Response(
-            {'detail': 'Faktur hanya berubah lewat terbitkan_faktur() dan '
-                       'pembayaran, tidak lewat PUT/PATCH langsung.'},
+            {'detail': 'Faktur hanya berubah lewat terbitkan_faktur() dan pembayaran, tidak lewat PUT/PATCH langsung.'},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
     partial_update = update
 
     def destroy(self, request, *args, **kwargs):
-        return Response({'detail': 'Faktur tidak bisa dihapus.'},
-                        status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return Response({'detail': 'Faktur tidak bisa dihapus.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    @action(detail=False, methods=['get'],
-            url_path=r'draft-dari-penerimaan/(?P<penerimaan_id>\d+)')
+    @action(detail=False, methods=['get'], url_path=r'draft-dari-penerimaan/(?P<penerimaan_id>\d+)')
     def draft_dari_penerimaan(self, request, penerimaan_id=None):
-        """
-        Angka usulan untuk mengisi form. Read-only, dan sudah basi begitu
-        dibaca -- yang mengikat adalah perhitungan ulang saat penerbitan.
-        """
         try:
             return Response(services.draft_faktur(penerimaan_id))
         except DjangoValidationError as e:
             return _galat(e)
 
-    @action(detail=False, methods=['post'],
-            url_path=r'dari-penerimaan/(?P<penerimaan_id>\d+)')
+    @action(detail=False, methods=['post'], url_path=r'dari-penerimaan/(?P<penerimaan_id>\d+)')
     def dari_penerimaan(self, request, penerimaan_id=None):
         s = TerbitkanFakturSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -407,8 +374,7 @@ class FakturPembelianViewSet(BasisAkunting):
             return _galat(e)
 
         return Response(
-            {'faktur': FakturPembelianSerializer(faktur).data,
-             'rincian': rincian},
+            {'faktur': FakturPembelianSerializer(faktur).data, 'rincian': rincian},
             status=status.HTTP_201_CREATED,
         )
 
@@ -419,10 +385,8 @@ class FakturPembelianViewSet(BasisAkunting):
         entitas_id = request.query_params.get('entitas')
         sampai = request.query_params.get('sampai')
         if not entitas_id:
-            return Response({'detail': 'Parameter entitas wajib.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        tgl = (timezone.datetime.fromisoformat(sampai).date()
-               if sampai else timezone.localdate())
+            return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
+        tgl = (timezone.datetime.fromisoformat(sampai).date() if sampai else timezone.localdate())
         qs = services.faktur_jatuh_tempo(entitas_id, tgl)
         return Response(FakturListSerializer(qs, many=True).data)
 
@@ -430,18 +394,10 @@ class FakturPembelianViewSet(BasisAkunting):
     def aging(self, request):
         entitas_id = request.query_params.get('entitas')
         if not entitas_id:
-            return Response({'detail': 'Parameter entitas wajib.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response(services.aging_hutang(entitas_id))
 
-
 class PembayaranView(viewsets.ViewSet):
-    """
-    Alokasi pembayaran ke faktur terbuka, FIFO berdasarkan jatuh tempo.
-
-    Peran KEUANGAN yang boleh, bukan AKUNTING -- pemisahan tugas.
-    """
-
     modul = 'keuangan'
     permission_classes = [AksesModul]
 
@@ -450,8 +406,7 @@ class PembayaranView(viewsets.ViewSet):
         s.is_valid(raise_exception=True)
         d = s.validated_data
         if not request.user.bisa_akses_entitas(d['entitas_id']):
-            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             alokasi, uang_muka = services.alokasi_pembayaran(
                 user=request.user, idem_key=_idem(request, 'bayar'), **d,
@@ -459,20 +414,19 @@ class PembayaranView(viewsets.ViewSet):
         except DjangoValidationError as e:
             return _galat(e)
         return Response(
-            {'alokasi': alokasi,
-             'uang_muka': UangMukaSerializer(uang_muka).data if uang_muka else None},
+            {
+                'alokasi': alokasi,
+                'uang_muka': UangMukaSerializer(uang_muka).data if uang_muka else None
+            },
             status=status.HTTP_201_CREATED,
         )
-
 
 class UangMukaViewSet(viewsets.ReadOnlyModelViewSet):
     modul = 'keuangan'
     permission_classes = [AksesModul]
-    queryset = (UangMukaSuplier.objects
-                .select_related('entitas', 'suplier').order_by('-tanggal'))
+    queryset = (UangMukaSuplier.objects.select_related('entitas', 'suplier').order_by('-tanggal'))
     serializer_class = UangMukaSerializer
     filterset_fields = ['entitas', 'suplier']
-
 
 class FakturPenjualanViewSet(BasisAkunting):
     serializer_class = FakturPenjualanSerializer
@@ -501,8 +455,7 @@ class FakturPenjualanViewSet(BasisAkunting):
     partial_update = update
 
     def destroy(self, request, *args, **kwargs):
-        return Response({'detail': 'Faktur penjualan tidak bisa dihapus.'},
-                        status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return Response({'detail': 'Faktur penjualan tidak bisa dihapus.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(detail=False, methods=['post'], url_path=r'dari-do/(?P<delivery_order_id>\d+)')
     def dari_do(self, request, delivery_order_id=None):
@@ -519,18 +472,9 @@ class FakturPenjualanViewSet(BasisAkunting):
         except DjangoValidationError as e:
             return _galat(e)
 
-        return Response(
-            FakturPenjualanSerializer(faktur).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-
+        return Response(FakturPenjualanSerializer(faktur).data, status=status.HTTP_201_CREATED)
 
 class PenerimaanPiutangView(viewsets.ViewSet):
-    """
-    Penerimaan pembayaran dari pelanggan untuk memotong sisa piutang.
-    Modul KEUANGAN yang memproses ini, mirip dengan alur AP.
-    """
     modul = 'keuangan'
     permission_classes = [AksesModul]
 
@@ -543,11 +487,9 @@ class PenerimaanPiutangView(viewsets.ViewSet):
                       .values_list('entitas_id', flat=True)
                       .first())
         if entitas_id is None:
-            return Response({'detail': 'Faktur penjualan tidak ditemukan.'},
-                            status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Faktur penjualan tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
         if not request.user.bisa_akses_entitas(entitas_id):
-            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'}, status=status.HTTP_403_FORBIDDEN)
 
         try:
             mutasi = services.terima_pembayaran_piutang(
@@ -566,12 +508,8 @@ class PenerimaanPiutangView(viewsets.ViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-
 class PengeluaranKasViewSet(viewsets.ModelViewSet):
-    queryset = PengeluaranKas.objects.select_related(
-        'entitas', 'kategori_beban', 'sumber_dana'
-    ).order_by('-tanggal', '-id')
-    
+    queryset = PengeluaranKas.objects.select_related('entitas', 'kategori_beban', 'sumber_dana').order_by('-tanggal', '-id')
     serializer_class = PengeluaranKasSerializer
     filterset_fields = ['entitas', 'status']
 
@@ -580,10 +518,6 @@ class PengeluaranKasViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def posting(self, request, pk=None):
-        """
-        Endpoint khusus untuk menyetujui pengeluaran dan otomatis mencetak Jurnal.
-        URL: POST /api/v1/akunting/pengeluaran-kas/{id}/posting/
-        """
         pengeluaran = self.get_object()
         try:
             pengeluaran.posting(user=request.user)
@@ -592,21 +526,14 @@ class PengeluaranKasViewSet(viewsets.ModelViewSet):
             return Response({'detail': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
 class PurchaseOrderKemasanViewSet(viewsets.ModelViewSet):
-    """
-    Endpoint API untuk Transaksi Pembelian Kemasan.
-    Terpisah dari bahan baku agar satuan Pcs/Unit tidak merusak HPP curah.
-    """
     queryset = PembelianKemasan.objects.all().order_by('-tanggal', '-id')
     serializer_class = PurchaseOrderKemasanSerializer
-    permission_classes = [IsAuthenticated] # Bisa disesuaikan jika Anda memakai AksesModul
+    permission_classes = [IsAuthenticated] 
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        # Simpan dengan merekam siapa user yang login (dibuat_oleh)
         self.perform_create(serializer)
-        
         return Response({
             "success": True,
             "message": "Purchase Order Kemasan berhasil dibuat.",
@@ -615,61 +542,3 @@ class PurchaseOrderKemasanViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(dibuat_oleh=self.request.user)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def cetak_po_word(request, pk):
-    try:
-        # 1. Ambil data PO dari Database beserta relasinya
-        # Menggunakan select_related & prefetch_related agar query database lebih ringan
-        po = PurchaseOrder.objects.select_related('entitas', 'suplier').prefetch_related('items').get(pk=pk)
-        
-        
-        items_data = []
-        total_subtotal = 0
-        
-        for item in po.items.all():
-         
-            nama_produk = item.produk.nama if hasattr(item, 'produk') and item.produk else getattr(item.kemasan, 'nama', '-')
-            
-            qty = float(item.qty_pesan)
-            harga = float(item.harga_per_kg) if hasattr(item, 'harga_per_kg') else float(getattr(item, 'harga_per_pcs', 0))
-            subtotal = qty * harga
-            total_subtotal += subtotal
-            
-            items_data.append({
-                "nama_item": nama_produk,
-                "kuantitas": f"{qty:g}", 
-                "total_harga": f"Rp {subtotal:,.0f}".replace(',', '.')
-            })
-        
-        ppn_nominal = (total_subtotal * float(po.ppn_persen) / 100) if po.pakai_ppn else 0
-        grand_total = total_subtotal + ppn_nominal
-        
-        context = {
-            "NAMA_PIC": po.entitas.nama if po.entitas else "Pracindo Staff",
-            "NAMA_SUPPLIER": po.suplier.nama if po.suplier else "-",
-            "NO_PO": po.no_po,
-            "TANGGAL_BUAT": po.tanggal.strftime("%d %B %Y"),
-            "TOTAL_PPN": f"Rp {ppn_nominal:,.0f}".replace(',', '.'),
-            "TOTAL_FINAL": f"Rp {grand_total:,.0f}".replace(',', '.'),
-            "items": items_data
-        }
-        
-        template_path = os.path.join(settings.BASE_DIR, 'templates_dokumen', 'Tabel_Template_Benar.docx')
-        doc = DocxTemplate(template_path)
-        doc.render(context)
-        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-        
-        # Bersihkan karakter "/" pada nomor PO agar aman menjadi nama file
-        safe_filename = po.no_po.replace('/', '_').replace(' ', '_')
-        response['Content-Disposition'] = f'attachment; filename="PO_{safe_filename}.docx"'
-        
-        doc.save(response)
-        return response
-        
-    except PurchaseOrder.DoesNotExist:
-        return HttpResponse("Dokumen Purchase Order tidak ditemukan.", status=404)
-    except Exception as e:
-        return HttpResponse(f"Gagal mencetak dokumen: {str(e)}", status=500)

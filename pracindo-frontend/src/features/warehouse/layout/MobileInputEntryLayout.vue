@@ -8,9 +8,6 @@
                 </a>
                 <span class="font-bold text-slate-800 text-sm md:text-base truncate">Input Gudang</span>
             </div>
-            <a @click="kembali" class="w-9 h-9 shrink-0 bg-slate-900 rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-transform cursor-pointer">
-                <i class="pi pi-arrow-left text-white text-sm"></i>
-            </a>
         </header>
 
         <!-- KONTEN UTAMA (Dengan padding khusus mobile) -->
@@ -26,11 +23,6 @@
 
         <!-- BOTTOM NAVIGATION -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-end z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.03)] px-1 pb-1 w-full max-w-[100vw]">
-            <!-- Beranda -->
-            <a @click="keDashboard" class="flex flex-col items-center justify-center w-full py-2 transition-colors text-slate-400 hover:text-slate-600 cursor-pointer">
-                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-home text-[1.2rem]"></i></div>
-                <span class="text-[10px] font-medium tracking-tight leading-none">Beranda</span>
-            </a>
 
             <!-- Menu Input Gudang -->
             <a v-for="menu in menus" :key="menu.id" @click="klikMenu(menu)"

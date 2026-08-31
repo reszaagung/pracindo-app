@@ -126,6 +126,17 @@ export function useMixingForm() {
     row.subtotal = (Number(row.qty) || 0) * row.harga
   }
 
+  const cekBahanDuplikat = (row) => {
+    if (!row.raw) return; 
+    const jumlahMuncul = bomRows.value.filter(r => r.raw === row.raw).length;
+
+    if (jumlahMuncul > 1) {
+        alert('Bahan baku ini sudah dipilih di baris lain! Silakan gabungkan QTY-nya di baris yang sudah ada.');
+        row.raw = ""; 
+        perbaruiTelemetriBom(row); 
+    }
+}
+
   const totalQtyBom = computed(() => bomRows.value.reduce((s, r) => s + (Number(r.qty) || 0), 0))
   const totalNilaiBom = computed(() => bomRows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.harga) || 0), 0))
   const proyeksiYield = computed(() => totalQtyBom.value - (Number(form.tekor_kg) || 0))
