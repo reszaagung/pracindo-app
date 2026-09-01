@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -99,6 +100,7 @@ class PembelianViewSet(viewsets.ModelViewSet):
             qs = qs.filter(tanggal__lte=p["sampai"])
         return qs
 
+    @transaction.atomic
     def perform_create(self, serializer):
         d = serializer.validated_data
         ent = d["entitas"]
@@ -165,6 +167,7 @@ class PackingViewSet(viewsets.ModelViewSet):
             qs = qs.filter(tanggal__lte=p["sampai"])
         return qs
 
+    @transaction.atomic
     def perform_create(self, serializer):
         from django.utils import timezone
         d = serializer.validated_data

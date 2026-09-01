@@ -305,29 +305,17 @@ const submit = async () => {
     }
 
     const payload = {
-        entitas: ambilId(
-            form.entitas_id
-        ),
-
-        batch: ambilId(
-            form.batch_id
-        ),
-
-        produk: ambilId(
-            form.produk_id
-        ),
-
-        kemasan: ambilId(
-            form.kemasan_id
-        ),
-
-        total_unit: Number(
-            form.total_unit
-        ),
-
-        qty_kg: Number(
-            form.qty_kg
-        )
+        entitas: ambilId(form.entitas_id),
+        batch: ambilId(form.batch_id),
+        produk: ambilId(form.produk_id),
+        // --- BARIS YANG DIPERBAIKI ---
+        // Menarik ID string asli dari Master Kemasan, bukan dari Pool Kemasan
+        kemasan: typeof form.kemasan_id === 'object' && form.kemasan_id !== null
+            ? (form.kemasan_id.kemasan_id || form.kemasan_id.produk || form.kemasan_id.id || form.kemasan_id.kode)
+            : form.kemasan_id,
+        // -----------------------------
+        total_unit: Number(form.total_unit),
+        qty_kg: Number(form.qty_kg)
     }
 
     // Debug FINAL sebelum POST
@@ -473,7 +461,6 @@ onBeforeUnmount(() => {
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                         <div class="flex flex-col gap-2">
                             <label class="text-xs font-bold text-slate-500 uppercase">Produk Jadi (Finished Goods)</label>
-                            <!-- optionValue DIHAPUS agar Vue menangkap seluruh objek -->
                             <Dropdown 
                                 v-model="form.produk_id" 
                                 :options="daftarProduk" 
@@ -493,7 +480,6 @@ onBeforeUnmount(() => {
                                 :options="daftarKemasan" 
                                 filter 
                                 optionLabel="label_dropdown" 
-                                optionValue="id" 
                                 placeholder="Pilih Kemasan..." 
                                 class="w-full"
                                 scrollHeight="160px"

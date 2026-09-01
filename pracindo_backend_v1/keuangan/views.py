@@ -41,7 +41,7 @@ class PengeluaranViewSet(viewsets.ModelViewSet):
         entitas_kode = request.query_params.get('entitas', 'PT')
         rek = RekeningBank.objects.filter(entitas__kode=entitas_kode, jenis='KAS_KECIL').first()
         saldo_kas = rek.saldo if rek else 0
-        total_out = PengeluaranKas.objects.filter(entitas__kode=entitas_kode).aggregate(tot=Sum('nominal'))['tot'] or 0
+        total_out = self.get_queryset().aggregate(tot=Sum('nominal'))['tot'] or 0
 
         return Response({
             'saldo_kas': saldo_kas,
