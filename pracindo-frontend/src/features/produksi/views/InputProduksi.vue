@@ -48,7 +48,6 @@
               <th>Tangki Tujuan</th>
               <th>Nama Hasil</th>
               <th>Yield (Kg)</th>
-              <th>Harga Rata</th>
               <th>Status</th>
               <th></th>
             </tr>

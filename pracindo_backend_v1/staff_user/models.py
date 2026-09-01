@@ -24,7 +24,7 @@ Akun TIDAK PERNAH dihapus. Semua model transaksional memakai
 on_delete=PROTECT ke dibuat_oleh -- menghapus user berarti menghancurkan
 jejak audit.
 """
-# PERBAIKAN 1: Tambahkan UserManager di baris impor ini
+
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -88,7 +88,6 @@ class Jabatan(TimeStampedModel):
         return self.nama
 
 
-# PERBAIKAN 2: Ubah models.Manager menjadi UserManager
 class ProfilManager(UserManager):
 
     def aktif(self):

@@ -108,7 +108,6 @@ class PenerimaanItem(models.Model):
         related_name='realisasi',
     )
 
-    # ---- kemasan (opsional untuk pengiriman curah) ----
     jenis_kemasan = models.CharField(
         max_length=8, choices=JenisKemasan.choices,
         default=JenisKemasan.CURAH,
@@ -129,7 +128,6 @@ class PenerimaanItem(models.Model):
         default=Decimal('0'), editable=False,
     )
 
-    # ---- hasil timbangan: inilah angka yang dipakai ----
     qty_diterima = models.DecimalField(
         max_digits=QTY_DIGITS, decimal_places=QTY_PLACES,
         validators=[MinValueValidator(Decimal('0'))],
@@ -162,8 +160,6 @@ class PenerimaanItem(models.Model):
 
     def __str__(self):
         return f"{self.po_item.nama_item} = {self.qty_diterima}"
-
-    # ---- turunan ----
 
     @property
     def selisih_berat(self):
@@ -211,9 +207,6 @@ class PenerimaanItem(models.Model):
                 )
 
 
-# =========================================================
-# LAPORAN SELISIH
-# =========================================================
 
 class JenisSelisih(models.TextChoices):
     KURANG_KIRIM  = 'KURANG_KIRIM',  'Kurang kirim'
@@ -342,9 +335,6 @@ class LaporanSelisih(DiauditModel):
         raise ValidationError('Laporan selisih tidak bisa dihapus. Tutup saja.')
 
 
-# =========================================================
-# PACKAGING
-# =========================================================
 
 class Packaging(TimeStampedModel):
     """Pengemasan barang jadi. Dikerjakan gudang, bukan produksi."""

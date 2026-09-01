@@ -1,16 +1,36 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { usePacking } from '../composables/usePacking'
-import { angka } from '@/utils/format'
+import {
+    ref,
+    reactive,
+    computed,
+    watch,
+    onMounted,
+    onBeforeUnmount
+} from 'vue'
 import Dropdown from 'primevue/dropdown'
 
+import { usePacking } from '../composables/usePacking'
+import { angka } from '@/utils/format'
+
 const emit = defineEmits(['tutup'])
+
 const {
-    daftarEntitas, daftarKemasan, daftarBatch, daftarProduk,
-    pratinjau, sedangProses, galat,
-    muatMasterData, cekPratinjau, simpanPacking
+    daftarEntitas,
+    daftarKemasan,
+    daftarBatch,
+    daftarProduk,
+    pratinjau,
+    sedangProses,
+    galat,
+    muatMasterData,
+    cekPratinjau,
+    simpanPacking,
+    ambilId
 } = usePacking()
 
+// ========================================
+// FORM
+// ========================================
 const initialFormState = () => ({
     entitas_id: '',
     jenis_sumber: 'MIXING',
@@ -23,109 +43,351 @@ const initialFormState = () => ({
 })
 
 const form = reactive(initialFormState())
+
 const hasilEksekusi = ref(null)
 
+// ========================================
+// BATCH FILTER
+// ========================================
 const batchDifilter = computed(() => {
-    if (!form.jenis_sumber) return daftarBatch.value
-    return daftarBatch.value.filter(b => b.jenis === form.jenis_sumber)
+    if (!form.jenis_sumber) {
+        return daftarBatch.value
+    }
+
+    return daftarBatch.value.filter(
+        (b) => b.jenis === form.jenis_sumber
+    )
 })
 
+// ========================================
+// KEMASAN TERPILIH
+// ========================================
 const kemasanTerpilih = computed(() => {
-    return daftarKemasan.value.find(k => k.id === form.kemasan_id)
+    const kemasanId = ambilId(form.kemasan_id)
+
+    return daftarKemasan.value.find(
+        (k) => Number(k.id) === Number(kemasanId)
+    )
 })
 
+// ========================================
+// NILAI KEMASAN
+// ========================================
 const totalNilaiKemasan = computed(() => {
     const qtyUnit = Number(form.total_unit) || 0
-    const hargaSatuan = Number(kemasanTerpilih.value?.harga_satuan_calculated ?? kemasanTerpilih.value?.harga_satuan) || 0
+
+    const hargaSatuan =
+        Number(
+            kemasanTerpilih.value?.harga_satuan_calculated ??
+            kemasanTerpilih.value?.harga_satuan ??
+            0
+        ) || 0
+
     return qtyUnit * hargaSatuan
 })
 
-const nilaiHppWip = computed(() => Number(pratinjau.value?.nilai_tagihan) || 0)
-const totalNilaiAbsorpsi = computed(() => nilaiHppWip.value + totalNilaiKemasan.value)
-
-// costPerUnitFinal / costPerKgFinal dihapus — tidak dibutuhkan.
-// Total Nilai Absorpsi (HPP WIP + Cost Packaging) sudah cukup;
-// breakdown per-unit/per-kg bukan tanggung jawab form operasional ini.
-
-watch(() => form.jenis_sumber, () => {
-    form.batch_id = ''
-    pratinjau.value.valid = false
+// ========================================
+// NILAI WIP / HPP
+// ========================================
+const nilaiHppWip = computed(() => {
+    return Number(
+        pratinjau.value?.nilai_tagihan
+    ) || 0
 })
 
-watch(() => form.kemasan_id, (kId) => {
-    if (kId && kemasanTerpilih.value) {
-        const bobot = kemasanTerpilih.value.bobot_kg ?? kemasanTerpilih.value.kapasitas_kg
-        if (bobot) {
+const totalNilaiAbsorpsi = computed(() => {
+    return (
+        nilaiHppWip.value +
+        totalNilaiKemasan.value
+    )
+})
+
+// ========================================
+// CHANGE JENIS SUMBER
+// ========================================
+watch(
+    () => form.jenis_sumber,
+    () => {
+        form.batch_id = ''
+
+        pratinjau.value = {
+            valid: false,
+            qty_kg: 0,
+            harga_per_kg: 0,
+            nilai_tagihan: 0,
+            sisa_qty_batch: 0,
+            menghabiskan: false,
+            peringatan: [],
+            pesan: ''
+        }
+    }
+)
+
+// ========================================
+// CHANGE KEMASAN
+// ========================================
+watch(
+    () => form.kemasan_id,
+    (kId) => {
+        const id = ambilId(kId)
+
+        if (!id) {
+            form.isi_per_unit = null
+            return
+        }
+
+        const kemasan = daftarKemasan.value.find(
+            (k) =>
+                Number(k.id) === Number(id)
+        )
+
+        if (!kemasan) {
+            return
+        }
+
+        const bobot =
+            kemasan.bobot_kg ??
+            kemasan.kapasitas_kg
+
+        if (Number(bobot) > 0) {
             form.isi_per_unit = Number(bobot)
         }
     }
-})
+)
 
-watch([() => form.total_unit, () => form.isi_per_unit], ([unit, isi]) => {
-    if (unit > 0 && isi > 0) {
-        form.qty_kg = Number((unit * isi).toFixed(3))
+// ========================================
+// HITUNG QTY KG
+// ========================================
+watch(
+    [
+        () => form.total_unit,
+        () => form.isi_per_unit
+    ],
+    ([unit, isi]) => {
+        const totalUnit = Number(unit) || 0
+        const isiPerUnit = Number(isi) || 0
+
+        if (
+            totalUnit > 0 &&
+            isiPerUnit > 0
+        ) {
+            form.qty_kg = Number(
+                (
+                    totalUnit *
+                    isiPerUnit
+                ).toFixed(3)
+            )
+
+            return
+        }
+
+        form.qty_kg = 0
     }
-})
+)
 
-let debounceTimer
-watch([() => form.batch_id, () => form.qty_kg], ([batchId, qtyKg]) => {
-    clearTimeout(debounceTimer)
-    if (!batchId || qtyKg <= 0) {
-        pratinjau.value.valid = false
-        return
+// ========================================
+// PREVIEW DEBOUNCE
+// ========================================
+let debounceTimer = null
+
+watch(
+    [
+        () => form.batch_id,
+        () => form.qty_kg
+    ],
+    ([batchValue, qtyKg]) => {
+        clearTimeout(debounceTimer)
+
+        const batchId = ambilId(batchValue)
+        const qty = Number(qtyKg) || 0
+
+        if (!batchId || qty <= 0) {
+            pratinjau.value.valid = false
+            return
+        }
+
+        debounceTimer = setTimeout(() => {
+            cekPratinjau(
+                batchId,
+                qty
+            )
+        }, 500)
     }
-    debounceTimer = setTimeout(() => {
-        cekPratinjau(batchId, qtyKg)
-    }, 500)
-})
+)
 
+// ========================================
+// PREVIEW HARUS SAMA DENGAN FORM
+// ========================================
 const previewSinkronDenganForm = computed(() => {
-    const qtyPreview = Number(pratinjau.value?.qty_kg) || 0
-    const qtyForm = Number(form.qty_kg) || 0
-    return Math.abs(qtyPreview - qtyForm) < 0.001
+    const qtyPreview =
+        Number(
+            pratinjau.value?.qty_kg
+        ) || 0
+
+    const qtyForm =
+        Number(form.qty_kg) || 0
+
+    return (
+        Math.abs(
+            qtyPreview - qtyForm
+        ) < 0.001
+    )
 })
 
+// ========================================
+// FORM VALID
+// ========================================
 const isFormValid = computed(() => {
+    const entitasId =
+        ambilId(form.entitas_id)
+
+    const batchId =
+        ambilId(form.batch_id)
+
+    const produkId =
+        ambilId(form.produk_id)
+
+    const kemasanId =
+        ambilId(form.kemasan_id)
+
+    const totalUnit =
+        Number(form.total_unit) || 0
+
+    const qtyKg =
+        Number(form.qty_kg) || 0
+
     return Boolean(
-        form.entitas_id && 
-        form.batch_id && 
-        form.kemasan_id && 
-        form.produk_id && 
-        form.qty_kg > 0 && 
+        entitasId &&
+        batchId &&
+        produkId &&
+        kemasanId &&
+        totalUnit > 0 &&
+        qtyKg > 0 &&
         pratinjau.value.valid &&
         previewSinkronDenganForm.value
     )
 })
 
-const resetFormState = () => {
-    Object.assign(form, initialFormState())
-    pratinjau.value = { valid: false, qty_kg: 0, harga_per_kg: 0, nilai_tagihan: 0, sisa_qty_batch: 0, menghabiskan: false, peringatan: [], pesan: '' }
-}
-
-const submit = async () => {
-    if (!isFormValid.value) return
-    const res = await simpanPacking({
-        entitas: form.entitas_id,
-        batch: form.batch_id,
-        produk: form.produk_id,
-        kemasan: form.kemasan_id,
-        total_unit: form.total_unit,
-        qty_kg: form.qty_kg
-    })
-
-    if (res.success) {
-        hasilEksekusi.value = res.data
-        resetFormState()
+// ========================================
+// RESET PREVIEW
+// ========================================
+const resetPreview = () => {
+    pratinjau.value = {
+        valid: false,
+        qty_kg: 0,
+        harga_per_kg: 0,
+        nilai_tagihan: 0,
+        sisa_qty_batch: 0,
+        menghabiskan: false,
+        peringatan: [],
+        pesan: ''
     }
 }
 
-const resetForm = () => {
-    hasilEksekusi.value = null
-    muatMasterData()
+// ========================================
+// RESET FORM
+// ========================================
+const resetFormState = () => {
+    Object.assign(
+        form,
+        initialFormState()
+    )
+
+    resetPreview()
 }
 
+// ========================================
+// SUBMIT
+// ========================================
+const submit = async () => {
+    if (!isFormValid.value) {
+        return
+    }
+
+    const payload = {
+        entitas: ambilId(
+            form.entitas_id
+        ),
+
+        batch: ambilId(
+            form.batch_id
+        ),
+
+        produk: ambilId(
+            form.produk_id
+        ),
+
+        kemasan: ambilId(
+            form.kemasan_id
+        ),
+
+        total_unit: Number(
+            form.total_unit
+        ),
+
+        qty_kg: Number(
+            form.qty_kg
+        )
+    }
+
+    // Debug FINAL sebelum POST
+    console.log(
+        '[PACKING] Form:',
+        {
+            entitas: form.entitas_id,
+            batch: form.batch_id,
+            produk: form.produk_id,
+            kemasan: form.kemasan_id,
+            total_unit: form.total_unit,
+            qty_kg: form.qty_kg
+        }
+    )
+
+    console.log(
+        '[PACKING] Payload FINAL:',
+        payload
+    )
+
+    const res =
+        await simpanPacking(payload)
+
+    if (!res.success) {
+        return
+    }
+
+    // Simpan hasil posting untuk ditampilkan
+    hasilEksekusi.value = res.data
+
+    // Bersihkan form
+    resetFormState()
+
+    // Refresh master data supaya stok / batch terbaru
+    await muatMasterData()
+}
+
+// ========================================
+// RESET FORM UTAMA
+// ========================================
+const resetForm = async () => {
+    hasilEksekusi.value = null
+
+    resetFormState()
+
+    await muatMasterData()
+}
+
+// ========================================
+// MOUNT
+// ========================================
 onMounted(() => {
     muatMasterData()
+})
+
+// ========================================
+// CLEANUP TIMER
+// ========================================
+onBeforeUnmount(() => {
+    clearTimeout(debounceTimer)
 })
 </script>
 
@@ -153,7 +415,7 @@ onMounted(() => {
                         </div>
                         <div>
                             <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">Absorbed COGS</p>
-                            <p class="text-sm font-bold text-emerald-600">Rp {{ angka(hasilEksekusi.cost) }}</p>
+                            <p class="text-sm font-bold text-emerald-600">Rp {{ angka(hasilEksekusi.cost_nom) }}</p>
                         </div>
                     </div>
                 </div>
@@ -211,12 +473,12 @@ onMounted(() => {
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                         <div class="flex flex-col gap-2">
                             <label class="text-xs font-bold text-slate-500 uppercase">Produk Jadi (Finished Goods)</label>
+                            <!-- optionValue DIHAPUS agar Vue menangkap seluruh objek -->
                             <Dropdown 
                                 v-model="form.produk_id" 
                                 :options="daftarProduk" 
                                 filter 
                                 optionLabel="label_display" 
-                                optionValue="id"
                                 placeholder="Pilih Produk..." 
                                 class="w-full"
                                 scrollHeight="160px"
@@ -237,7 +499,7 @@ onMounted(() => {
                                 scrollHeight="160px"
                                 appendTo="body"
                             />
-                       </div>
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="flex flex-col gap-2">
@@ -278,7 +540,7 @@ onMounted(() => {
                         <i class="pi pi-receipt" style="font-size: 8rem;"></i>
                     </div>
 
-                    <h3 class="text-xs font-bold text-amber-500 uppercase tracking-widest mb-6 border-b border-slate-700 pb-2 relative z-10">Valuasi HPP / COGS</h3>
+                    <h3 class="text-xs font-bold text-amber-500 uppercase tracking-widest mb-6 border-b border-slate-700 pb-2 relative z-10">COST Valuasi</h3>
 
                     <div class="space-y-4 relative z-10 flex-1">
                         <div v-if="pratinjau.pesan && !pratinjau.valid" class="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 font-medium">
@@ -295,7 +557,7 @@ onMounted(() => {
                         </div>
 
                         <div class="flex justify-between items-center border-b border-slate-700 pb-3 mt-4">
-                            <span class="text-xs text-slate-400">HPP WIP (dari Batch)</span>
+                            <span class="text-xs text-slate-400">COST WIP (dari Batch)</span>
                             <span class="text-sm font-mono text-slate-200">{{ pratinjau.valid ? `Rp ${angka(nilaiHppWip)}` : '—' }}</span>
                         </div>
 
@@ -306,8 +568,8 @@ onMounted(() => {
 
                         <div class="pt-4">
                             <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                                Total Nilai Absorpsi
-                                <span v-if="!pratinjau.valid" class="text-amber-500 normal-case font-medium tracking-normal ml-1">(menunggu kalkulasi HPP)</span>
+                                Total Cost
+                                <span v-if="!pratinjau.valid" class="text-amber-500 normal-case font-medium tracking-normal ml-1">(menunggu kalkulasi)</span>
                             </span>
                             <span class="text-3xl font-black text-white block">{{ pratinjau.valid ? `Rp ${angka(totalNilaiAbsorpsi)}` : '—' }}</span>
                         </div>

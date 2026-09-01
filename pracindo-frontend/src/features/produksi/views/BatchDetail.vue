@@ -78,7 +78,7 @@
               <span class="font-semibold text-red-500">{{ formatKg(batch.tekor_kg) }} Kg</span>
             </div>
             <div class="flex justify-between pb-1">
-              <span class="text-slate-500">Harga Pokok (HPP)</span>
+              <span class="text-slate-500">Nilai</span>
               <span class="font-semibold text-slate-800">
                 {{ formatRupiah(hitungHpp(batch)) }} / Kg
               </span>
@@ -98,7 +98,7 @@
               <tr class="bg-white border-b border-slate-100">
                 <th class="px-5 py-3 font-semibold text-slate-500 text-xs uppercase text-left">Kode/Bahan</th>
                 <th class="px-5 py-3 font-semibold text-slate-500 text-xs uppercase text-right">Kuantitas</th>
-                <th class="px-5 py-3 font-semibold text-slate-500 text-xs uppercase text-right">Harga Satuan</th>
+                <th class="px-5 py-3 font-semibold text-slate-500 text-xs uppercase text-right">Nom/KG</th>
                 <th class="px-5 py-3 font-semibold text-slate-500 text-xs uppercase text-right">Total Nilai</th>
               </tr>
             </thead>

@@ -41,9 +41,11 @@ class SaldoEntitasSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SaldoEntitas
-        fields = ["entitas", "entitas_kode", "entitas_nama", "grup_kode",
-                  "qty_setor", "qty_tarik", "total_setor", "total_tarik",
-                  "total_rugi", "saldo", "status", "diubah_pada"]
+        fields = [
+            "entitas", "entitas_kode", "entitas_nama", "grup_kode",
+            "qty_setor", "qty_tarik", "total_setor", "total_tarik",
+            "total_rugi", "saldo", "status", "diubah_pada"
+        ]
         read_only_fields = fields
 
     def get_status(self, obj):
@@ -66,9 +68,11 @@ class PembelianSerializer(serializers.ModelSerializer):
             "tanggal", "waktu", "status", "sumber", "penerimaan_item",
             "catatan", "dibuat_oleh", "dibuat_pada", "posted_at",
         ]
-        read_only_fields = ["nomor", "nilai", "status", "sumber",
-                            "penerimaan_item", "grup_bahan", "dibuat_oleh",
-                            "dibuat_pada", "posted_at"]
+        read_only_fields = [
+            "nomor", "nilai", "status", "sumber",
+            "penerimaan_item", "grup_bahan", "dibuat_oleh",
+            "dibuat_pada", "posted_at"
+        ]
 
     def validate(self, data):
         inst = self.instance
@@ -94,22 +98,28 @@ class PackingSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)
     batch_nomor = serializers.CharField(source="batch.nomor", read_only=True)
     batch_hasil = serializers.CharField(source="batch.nama_hasil", read_only=True)
-    kemasan_nama = serializers.CharField(source="kemasan.nama", read_only=True)
-
+    produk = serializers.PrimaryKeyRelatedField(
+        source="nama_hasil",
+        queryset=Packing._meta.get_field("nama_hasil").related_model.objects.all(),
+    )
+    produk_nama = serializers.CharField(source="nama_hasil.nama_item", read_only=True)
+    kemasan_nama = serializers.CharField(source="kemasan.produk.nama", read_only=True)
     class Meta:
         model = Packing
         fields = [
             "id", "nomor", "entitas", "entitas_kode",
             "batch", "batch_nomor", "batch_hasil",
+            "produk", "produk_nama",
             "kemasan", "kemasan_nama",
-            "total_unit", "qty_kg", "harga_per_kg", "nilai_hpp",
+            "total_unit", "qty_kg", "harga_per_kg", "cost_nom",
             "menghabiskan", "tanggal", "waktu", "status",
             "dibuat_oleh", "dibuat_pada", "posted_at",
         ]
-        read_only_fields = ["nomor", "harga_per_kg", "nilai_hpp",
-                            "menghabiskan", "status", "dibuat_oleh",
-                            "dibuat_pada", "posted_at"]
-
+        read_only_fields = [
+            "nomor", "harga_per_kg", "cost_nom",
+            "menghabiskan", "status", "dibuat_oleh",
+            "dibuat_pada", "posted_at"
+        ]
     def validate(self, data):
         inst = self.instance
         if inst and inst.status != StatusDokumen.DRAFT:
@@ -125,11 +135,13 @@ class PackingSerializer(serializers.ModelSerializer):
         batch = data.get("batch") or getattr(inst, "batch", None)
         if ent is not None and not ent.aktif:
             raise serializers.ValidationError({"entitas": f"Entitas {ent.kode} nonaktif."})
-        
-        # Validasi bahwa batch dan entitas memiliki grup yang sama dihapus 
-        # karena batch sekarang mengambil dari PoolResource (lintas grup).
-
+        if batch is not None and batch.status != StatusDokumen.POSTED:
+            raise serializers.ValidationError({
+                "batch": f"Batch {batch.nomor} belum POSTED (status saat ini: {batch.status})."
+            })
         return data
+
+        
 
 class MutasiKlaimSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)
@@ -137,9 +149,11 @@ class MutasiKlaimSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MutasiKlaim
-        fields = ["id", "entitas", "entitas_kode", "grup_bahan", "grup_kode",
-                  "tipe", "arah", "qty_kg", "nilai", "ref_type", "ref_id",
-                  "keterangan", "waktu", "dibuat_pada", "dibuat_oleh"]
+        fields = [
+            "id", "entitas", "entitas_kode", "grup_bahan", "grup_kode",
+            "tipe", "arah", "qty_kg", "nilai", "ref_type", "ref_id",
+            "keterangan", "waktu", "dibuat_pada", "dibuat_oleh"
+        ]
         read_only_fields = fields
         
 class PoolKemasanSerializer(serializers.ModelSerializer):
@@ -151,4 +165,3 @@ class PoolKemasanSerializer(serializers.ModelSerializer):
         model = PoolKemasan
         fields = ["id", "produk", "produk_kode", "produk_nama", "qty_unit", "nilai", "harga_satuan", "diubah_pada"]
         read_only_fields = fields
-

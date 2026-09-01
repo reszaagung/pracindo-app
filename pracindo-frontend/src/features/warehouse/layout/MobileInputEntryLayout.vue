@@ -10,8 +10,8 @@
             </div>
         </header>
 
-        <!-- KONTEN UTAMA (Dengan padding khusus mobile) -->
-        <main class="flex-1 overflow-y-auto overflow-x-hidden p-3 pt-20 pb-24 w-full max-w-[100vw] text-sm">
+        <!-- KONTEN UTAMA (Padding bawah dikurangi karena nav lebih kecil) -->
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-3 pt-20 pb-20 w-full max-w-[100vw] text-sm">
             <div class="mx-auto w-full">
                 <router-view v-slot="{ Component }">
                     <transition name="fade" mode="out-in">
@@ -21,23 +21,26 @@
             </div>
         </main>
 
-        <!-- BOTTOM NAVIGATION -->
+        <!-- BOTTOM NAVIGATION (Dikecilkan) -->
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-end z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.03)] px-1 pb-1 w-full max-w-[100vw]">
 
             <!-- Menu Input Gudang -->
             <a v-for="menu in menus" :key="menu.id" @click="klikMenu(menu)"
-                class="flex flex-col items-center justify-center w-full py-2 transition-colors group cursor-pointer"
+                class="flex flex-col items-center justify-center w-full py-1.5 transition-colors group cursor-pointer"
                 :class="[aktif(menu.rute) ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600', !menu.activate ? 'opacity-50 pointer-events-none' : '']">
-                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5 transition-all" :class="aktif(menu.rute) ? 'bg-slate-100 shadow-sm' : ''">
-                    <i :class="['pi', menu.ikon, 'text-[1.2rem] transition-transform']"></i>
+                <!-- Ukuran container ikon dikecilkan dari h-8 w-12 menjadi h-6 w-10 -->
+                <div class="h-6 w-10 flex items-center justify-center rounded-full mb-0.5 transition-all" :class="aktif(menu.rute) ? 'bg-slate-100 shadow-sm' : ''">
+                    <!-- Ukuran ikon dikecilkan dari text-[1.2rem] menjadi text-base -->
+                    <i :class="['pi', menu.ikon, 'text-base transition-transform']"></i>
                 </div>
-                <span class="text-[10px] font-medium tracking-tight leading-none">{{ menu.label }}</span>
+                <!-- Ukuran teks dikecilkan dari 10px ke 9px -->
+                <span class="text-[9px] font-medium tracking-tight leading-none">{{ menu.label }}</span>
             </a>
 
             <!-- Keluar -->
-            <a @click="keluar" class="flex flex-col items-center justify-center w-full py-2 transition-colors text-slate-400 hover:text-rose-500 cursor-pointer">
-                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-power-off text-[1.2rem]"></i></div>
-                <span class="text-[10px] font-medium tracking-tight leading-none">Keluar</span>
+            <a @click="keluar" class="flex flex-col items-center justify-center w-full py-1.5 transition-colors text-slate-400 hover:text-rose-500 cursor-pointer">
+                <div class="h-6 w-10 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-power-off text-base"></i></div>
+                <span class="text-[9px] font-medium tracking-tight leading-none">Keluar</span>
             </a>
         </nav>
     </div>
@@ -52,7 +55,7 @@ const router = useRouter()
 const { logout } = useAuth()
 const { menus, aktif } = useNavInputEntry()
 
-const kembali = () => window.history.length > 2 ? router.back() : router.push('/warehouse')
+
 const keDashboard = () => router.push('/')
 const klikMenu = (menu) => { if (menu.activate) router.push(menu.rute) }
 const keluar = async () => { await logout(); router.push('/login') }

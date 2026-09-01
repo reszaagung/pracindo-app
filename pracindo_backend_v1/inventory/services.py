@@ -1,10 +1,11 @@
 ﻿from decimal import Decimal, ROUND_HALF_UP
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import DecimalField, Sum, Value, Q 
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-
+from produksi.models import Batch
+from produksi.services import saldo_batch
 from core.models import CounterDokumen, PeriodeAkuntansi
 from .models import (
     MutasiKlaim, Packing, Pembelian, SaldoEntitas,
@@ -19,7 +20,6 @@ TOL_RP = Decimal("0.01")
 Q_RP = Decimal("0.01")
 Q_QTY = Decimal("0.001")
 Q_HARGA = Decimal("0.000001")
-
 F_RP = DecimalField(max_digits=20, decimal_places=2)
 
 class GalatInventory(ValidationError):
@@ -55,16 +55,13 @@ def _kunci_saldo(entitas_id):
     except SaldoEntitas.DoesNotExist:
         raise InvariantMelenceng(f"Entitas id {entitas_id} tidak punya baris SaldoEntitas.")
 
-# --- FUNGSI POOL RESOURCE PATUNGAN ---
 def tambah_ke_pool_resource(produk_id, q, nilai_tambahan):
-    """Menambah qty dan nilai ke tabel PoolResource patungan lintas entitas."""
     pool, _ = PoolResource.objects.select_for_update().get_or_create(produk_id=produk_id)
     pool.qty_kg = qty(pool.qty_kg + q)
     pool.nilai = rp(pool.nilai + nilai_tambahan)
     pool.save(update_fields=["qty_kg", "nilai"])
 
 def potong_dari_pool_resource(produk_id, q, nilai_potongan):
-    """Mengurangi qty dan nilai dari tabel PoolResource (Dipakai saat VOID)."""
     try:
         pool = PoolResource.objects.select_for_update().get(produk_id=produk_id)
     except PoolResource.DoesNotExist:
@@ -79,16 +76,13 @@ def potong_dari_pool_resource(produk_id, q, nilai_potongan):
         pool.nilai = D0_RP   
     pool.save(update_fields=["qty_kg", "nilai"])
 
-# --- FUNGSI POOL KEMASAN ---
 def tambah_ke_pool_kemasan(produk_id, q_unit, nilai_tambahan):
-    """Menambah qty (integer) dan nilai ke tabel PoolKemasan."""
     pool, _ = PoolKemasan.objects.select_for_update().get_or_create(produk_id=produk_id)
     pool.qty_unit = pool.qty_unit + int(q_unit)
     pool.nilai = rp(pool.nilai + nilai_tambahan)
     pool.save(update_fields=["qty_unit", "nilai"])
 
 def potong_dari_pool_kemasan(produk_id, q_unit, nilai_potongan):
-    """Mengurangi qty (integer) dan nilai dari tabel PoolKemasan."""
     try:
         pool = PoolKemasan.objects.select_for_update().get(produk_id=produk_id)
     except PoolKemasan.DoesNotExist:
@@ -121,7 +115,6 @@ def posting_pembelian(pembelian, user=None):
     nilai = rp(pembelian.qty_kg * pembelian.harga_per_kg)
     pembelian.nilai = nilai
 
-    # ROUTING POOL BERDASARKAN JENIS PRODUK
     if pembelian.produk.jenis == 'KEMASAN':
         tambah_ke_pool_kemasan(pembelian.produk_id, pembelian.qty_kg, nilai)
         keterangan_mutasi = f"PO Kemasan {pembelian.nomor} - {pembelian.produk}"
@@ -171,7 +164,6 @@ def void_pembelian(pembelian, alasan, user=None):
     if bergerak or _pool_terpakai_sejak(pembelian):
         raise KonflikSaldo(f"Pool {pembelian.produk} sudah bergerak sejak {pembelian.nomor} diposting.")
 
-    # ROUTING PEMOTONGAN POOL BERDASARKAN JENIS
     if pembelian.produk.jenis == 'KEMASAN':
         q_unit_int = int(pembelian.qty_kg)
         try:
@@ -301,11 +293,18 @@ def posting_packing(packing, user=None):
     from produksi.models import Batch
     from produksi.services import saldo_batch
 
-    user = _wajib_user(user)                                                                                                                        
-    packing = Packing.objects.select_for_update().select_related("kemasan").get(pk=packing.pk)
+    user = _wajib_user(user)
+
+    packing = (
+        Packing.objects
+        .select_for_update()
+        .select_related("entitas", "kemasan")
+        .get(pk=packing.pk)
+    )
 
     if packing.status != StatusDokumen.DRAFT:
         raise KonflikSaldo(f"Packing {packing.nomor} sudah {packing.status}.")
+
     if not packing.entitas.aktif:
         raise GalatInventory(f"Entitas {packing.entitas.kode} nonaktif.")
 
@@ -313,66 +312,84 @@ def posting_packing(packing, user=None):
 
     batch = Batch.objects.select_for_update().get(pk=packing.batch_id)
     s = saldo_batch(batch)
-    
+
     if s.sisa_qty <= 0:
         raise KonflikSaldo(f"Batch {batch.nomor} sudah kosong.")
+
     if packing.qty_kg > s.sisa_qty + TOL_QTY:
         raise KonflikSaldo(f"Batch {batch.nomor} tinggal {s.sisa_qty:,.3f} Kg. Anda mengambil {packing.qty_kg:,.3f} Kg.")
-    
+
     menghabiskan = abs(packing.qty_kg - s.sisa_qty) <= TOL_QTY
-    nilai_hpp_bahan = s.sisa_nilai if menghabiskan else rp(packing.qty_kg * s.harga_per_kg)
 
-    nilai_kemasan = D0_RP
-    if packing.kemasan.produk_id:
-        try:
-            pool_kem = PoolKemasan.objects.get(produk_id=packing.kemasan.produk_id)
-            if pool_kem.qty_unit < packing.total_unit:
-                raise KonflikSaldo(f"Stok {packing.kemasan.nama} di Pool hanya sisa {pool_kem.qty_unit} Unit. Anda butuh {packing.total_unit} Unit.")
-            
-            nilai_kemasan = rp(pool_kem.harga_satuan * packing.total_unit)
-            potong_dari_pool_kemasan(packing.kemasan.produk_id, packing.total_unit, nilai_kemasan)
-        except PoolKemasan.DoesNotExist:
-            raise KonflikSaldo(f"Stok Pool untuk produk kemasan {packing.kemasan.nama} kosong/tidak ditemukan.")
+    if menghabiskan:
+        cost_nom_bahan = s.sisa_nilai
+    else:
+        cost_nom_bahan = rp(packing.qty_kg * s.harga_per_kg)
 
-    total_nilai_hpp = rp(nilai_hpp_bahan + nilai_kemasan)
+    pool_kem = PoolKemasan.objects.select_for_update().select_related("produk").get(pk=packing.kemasan_id)
 
-    # --- 3. Simpan Dokumen Packing ---
-    packing.harga_per_kg = s.harga_per_kg 
-    packing.nilai_hpp = total_nilai_hpp
+    if pool_kem.qty_unit < packing.total_unit:
+        raise KonflikSaldo(f"Stok {pool_kem.produk.nama} di Pool hanya sisa {pool_kem.qty_unit} Unit. Anda butuh {packing.total_unit} Unit.")
+
+    nilai_kemasan = rp(pool_kem.harga_satuan * packing.total_unit)
+
+    potong_dari_pool_kemasan(pool_kem.produk_id, packing.total_unit, nilai_kemasan)
+
+    total_cost_nom = rp(cost_nom_bahan + nilai_kemasan)
+
+    packing.harga_per_kg = s.harga_per_kg
+    packing.cost_nom = total_cost_nom
     packing.menghabiskan = menghabiskan
     packing.status = StatusDokumen.POSTED
     packing.posted_at = timezone.now()
-    packing.save(update_fields=["harga_per_kg", "nilai_hpp", "menghabiskan", "status", "posted_at"])
+
+    packing.save(
+        update_fields=[
+            "harga_per_kg",
+            "cost_nom",
+            "menghabiskan",
+            "status",
+            "posted_at",
+        ]
+    )
 
     MutasiKlaim.objects.create(
-        entitas=packing.entitas, grup_bahan=packing.entitas.grup_bahan,
-        tipe=TipeMutasi.TARIK, arah=-1,
-        qty_kg=packing.qty_kg, nilai=total_nilai_hpp,
-        ref_type="Packing", ref_id=packing.id,
-        keterangan=f"{packing.nomor} - {batch.nomor} - {packing.kemasan.nama}",
-        waktu=packing.waktu, dibuat_oleh=user)
+        entitas=packing.entitas,
+        grup_bahan=packing.entitas.grup_bahan,
+        tipe=TipeMutasi.TARIK,
+        arah=-1,
+        qty_kg=packing.qty_kg,
+        nilai=total_cost_nom,
+        ref_type="Packing",
+        ref_id=packing.id,
+        keterangan=f"{packing.nomor} - {batch.nomor} - {pool_kem.produk.nama}",
+        waktu=packing.waktu,
+        dibuat_oleh=user,
+    )
 
-    se = _kunci_saldo(packing.entitas_id)                                
-    se.total_tarik = rp(se.total_tarik + total_nilai_hpp)
+    se = _kunci_saldo(packing.entitas_id)
+    se.total_tarik = rp(se.total_tarik + total_cost_nom)
     se.qty_tarik = qty(se.qty_tarik + packing.qty_kg)
-    se.saldo = rp(se.saldo - total_nilai_hpp)
+    se.saldo = rp(se.saldo - total_cost_nom)
     se.save(update_fields=["total_tarik", "qty_tarik", "saldo"])
 
     assert_invarian()
     return packing
 
 def pratinjau_packing(batch_id, qty_diminta):
-    from produksi.models import Batch
     from produksi.services import saldo_batch
-
+    
     try:
-        batch = Batch.objects.select_related("tangki").get(pk=batch_id)
-    except (Batch.DoesNotExist, ValueError, TypeError):
-        return {"valid": False, "kode": "BATCH_TIDAK_DITEMUKAN", "pesan": f"Batch id {batch_id} tidak ditemukan."}
+        b_id = int(batch_id) 
+        batch = Batch.objects.select_related("tangki").get(pk=b_id)
+    except (ObjectDoesNotExist, ValueError, TypeError):
+        return {"valid": False, "kode": "BATCH_TIDAK_DITEMUKAN", "pesan": "Batch tidak ditemukan atau ID tidak valid."}
+        
     try:
         q = qty(Decimal(str(qty_diminta)))
     except Exception:
         return {"valid": False, "kode": "QTY_TIDAK_VALID", "pesan": "Qty harus berupa angka."}
+        
     if q <= 0:
         return {"valid": False, "kode": "QTY_TIDAK_VALID", "pesan": "Qty harus lebih dari 0."}
 
@@ -389,6 +406,25 @@ def pratinjau_packing(batch_id, qty_diminta):
         "nilai_tagihan": str(nilai), "menghabiskan": menghabiskan,
         "peringatan": ([f"Pengambilan ini MENGHABISKAN batch {batch.nomor}. Seluruh sisa nilainya ikut keluar."] if menghabiskan else []),
     }
+
+@transaction.atomic
+def generate_nomor_packing(entitas_id):
+    last = (
+        Packing.objects
+        .select_for_update()
+        .filter(entitas_id=entitas_id)
+        .order_by("-id")
+        .first())
+
+    nomor_urut = 1
+
+    if last and last.nomor:
+        try:
+            nomor_urut = int(last.nomor.rsplit("-", 1)[1]) + 1
+        except (ValueError, IndexError):
+            nomor_urut = 1
+
+    return f"PKG-{entitas_id}-{nomor_urut:03d}"
 
 @transaction.atomic
 def bebankan_susut(batch, user=None):
@@ -436,7 +472,6 @@ def bebankan_susut(batch, user=None):
     return beban
 
 def get_pool_resource_all():
-    """Mengambil list keseluruhan saldo fisik Pool."""
     qs = PoolResource.objects.select_related("produk").all()
     rincian = []
     total_nilai = D0_RP
@@ -460,42 +495,31 @@ def jalankan_pemeriksaan_invarian():
         return {"cocok": False, "catatan": [str(e)], "rincian": []}
 
 def assert_invarian(raise_on_fail=True):
-    """
-    INVARIANT GLOBAL (POOL PATUNGAN):
-    Total Rp Saldo Entitas (Hak) = Total Rp PoolResource + Total Rp PoolKemasan + Sisa Nilai WIP di Produksi
-    """
     from produksi.models import Batch, StatusBatch
     from produksi.services import saldo_batch
     
     catatan = []
-    
-    # 1. Hitung Hak Entitas Keseluruhan
     hak_total = SaldoEntitas.objects.aggregate(t=Coalesce(Sum("saldo"), Value(D0_RP), output_field=F_RP))["t"]
-    
-    # 2. Hitung Fisik Pool Keseluruhan (Bahan Baku + Kemasan)
+
     pool_res_total = PoolResource.objects.aggregate(t=Coalesce(Sum("nilai"), Value(D0_RP), output_field=F_RP))["t"]
     pool_kemasan_total = PoolKemasan.objects.aggregate(t=Coalesce(Sum("nilai"), Value(D0_RP), output_field=F_RP))["t"]
     pool_total = rp(pool_res_total + pool_kemasan_total)
     
-    # 3. Hitung WIP yang masih tertahan di Produksi
     wip_total = D0_RP
     for b in Batch.objects.filter(status=StatusBatch.POSTED):
         wip_total += saldo_batch(b).sisa_nilai
         
-    # 4. Validasi Keseimbangan
     fisik_total = rp(pool_total + wip_total)
     selisih = rp(hak_total - fisik_total)
     
-    if abs(selisih) > TOL_RP * 10:  # Toleransi pembulatan longgar
+    if abs(selisih) > TOL_RP * 10:
         catatan.append(f"KONSERVASI RUPIAH GLOBAL: Hak Entitas Rp{hak_total:,.2f} != Nilai Barang Rp{fisik_total:,.2f} (Pool Rp{pool_total:,.2f} + WIP Rp{wip_total:,.2f}). Selisih Rp{selisih:,.2f}.")
 
-    # Pengecekan Anomali Pool Resource (Bahan Baku)
     if PoolResource.objects.filter(Q(qty_kg__lt=0) | Q(nilai__lt=0)).exists():
         catatan.append("POOL NEGATIF: ada baris PoolResource bernilai minus.")
     if PoolResource.objects.filter(qty_kg=0).exclude(nilai=0).exists():
         catatan.append("POOL KOSONG TAPI BERNILAI: isinya akan keluar gratis pada pengambilan berikutnya.")
 
-    # Pengecekan Anomali Pool Kemasan
     if PoolKemasan.objects.filter(Q(qty_unit__lt=0) | Q(nilai__lt=0)).exists():
         catatan.append("POOL KEMASAN NEGATIF: ada baris PoolKemasan bernilai minus.")
     if PoolKemasan.objects.filter(qty_unit=0).exclude(nilai=0).exists():
@@ -514,10 +538,6 @@ def assert_invarian(raise_on_fail=True):
     return {"cocok": not catatan, "catatan": catatan, "rincian": rincian}
 
 def get_rekap_klaim(grup_id=None):
-    """
-    Mengembalikan rekapitulasi mutasi atau klaim berdasarkan grup bahan/entitas.
-    Sesuaikan logika query di bawah ini dengan kebutuhan model Anda.
-    """
     queryset = MutasiKlaim.objects.all()
     if grup_id:
         queryset = queryset.filter(grup_bahan_id=grup_id)
@@ -527,3 +547,18 @@ def get_rekap_klaim(grup_id=None):
         "results": rekap_data,
         "total": len(rekap_data)
     }
+
+def get_barang_jadi(grup=None):
+    pools = PoolResource.objects.all()
+    if grup:
+        pools = pools.filter(produk_id__icontains=grup)
+    
+    return [
+        {
+            "produk_id": p.produk_id,
+            "qty_kg": str(p.qty_kg),
+            "nilai": str(p.nilai),
+            "grup": grup or "UMUM"
+        } 
+        for p in pools
+    ]

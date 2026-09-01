@@ -28,18 +28,12 @@
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-end z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.03)] px-1 pb-1">
             <!-- Menu Transaksi -->
             <button v-for="menu in transaksi" :key="menu.id" :disabled="!menu.activate" @click="klikMenu(menu)"
-                class="flex flex-col items-center justify-center w-full py-2 transition-colors group"
+                class="flex flex-col items-center justify-center w-full py-1.5 transition-colors group"
                 :class="aktif(menu.rute) ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'">
-                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5 transition-all" :class="aktif(menu.rute) ? 'bg-slate-100 shadow-sm' : ''">
-                    <i :class="['pi', menu.ikon, 'text-[1.2rem] transition-transform']"></i>
+                <div class="h-7 w-10 flex items-center justify-center rounded-full mb-0.5 transition-all" :class="aktif(menu.rute) ? 'bg-slate-100 shadow-sm' : ''">
+                    <i :class="['pi', menu.ikon, 'text-[1.05rem] transition-transform']"></i>
                 </div>
-                <span class="text-[10px] font-medium tracking-tight leading-none">{{ menu.label }}</span>
-            </button>
-
-            <!-- Keluar -->
-            <button @click="keluar" type="button" class="flex flex-col items-center justify-center w-full py-2 transition-colors text-slate-400 hover:text-rose-500">
-                <div class="h-8 w-12 flex items-center justify-center rounded-full mb-0.5"><i class="pi pi-power-off text-[1.2rem]"></i></div>
-                <span class="text-[10px] font-medium tracking-tight leading-none">Keluar</span>
+                <span class="text-[9px] font-medium tracking-tight leading-none">{{ menu.label }}</span>
             </button>
         </nav>
     </div>
@@ -47,17 +41,14 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
 import { useNavTransaksi } from '@/features/accounting/composables/useNavTransaction'
 
 const router = useRouter()
-const { logout } = useAuth()
 const { transaksi, aktif } = useNavTransaksi()
 
 const kembali = () => window.history.length > 2 ? router.back() : router.push('/')
 const keDashboard = () => router.push('/')
 const klikMenu = (menu) => { if (menu.activate) router.push(menu.rute) }
-const keluar = async () => { await logout(); router.push('/login') }
 </script>
 
 <style scoped>

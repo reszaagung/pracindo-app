@@ -28,8 +28,7 @@ class TangkiViewSet(viewsets.ModelViewSet):
         tangki = self.get_object()
         try:
             from decimal import Decimal
-            
-            # Ambil semua batch posted di tangki ini
+            \\
             batches = Batch.objects.filter(tangki=tangki, status=StatusBatch.POSTED)
             
             total_qty = Decimal('0')

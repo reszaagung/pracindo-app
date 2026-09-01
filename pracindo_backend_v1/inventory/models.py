@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import CheckConstraint, Q, UniqueConstraint
 from django.utils import timezone
-
+from django.db import transaction
 from core.models import DiauditModel, TimeStampedModel
 
 D0 = Decimal("0")
@@ -107,7 +107,6 @@ class Pembelian(DiauditModel):
 class Kemasan(TimeStampedModel):
     nama     = models.CharField(max_length=40, unique=True) 
     bobot_kg = models.DecimalField(max_digits=10, decimal_places=3)
-    produk   = models.ForeignKey("master.Produk", on_delete=models.PROTECT, null=True, blank=True, related_name="varian_kemasan")
     aktif    = models.BooleanField(default=True)
 
     class Meta:
@@ -121,35 +120,92 @@ class Kemasan(TimeStampedModel):
     def __str__(self):
         return self.nama
 
-
 class Packing(DiauditModel):
-    nomor        = models.CharField(max_length=48, unique=True, editable=False)
-    entitas      = models.ForeignKey("core.Entitas", on_delete=models.PROTECT, related_name="packing")
-    batch        = models.ForeignKey("produksi.Batch", on_delete=models.PROTECT, related_name="packing_set")
-    kemasan      = models.ForeignKey(Kemasan, on_delete=models.PROTECT, related_name="packing")
-    total_unit   = models.DecimalField(max_digits=14, decimal_places=3)
-    qty_kg       = models.DecimalField(max_digits=18, decimal_places=3)
+    nomor = models.CharField(
+        max_length=48,
+        unique=True,
+        editable=False,
+    )
+
+    entitas = models.ForeignKey(
+        "core.Entitas",
+        on_delete=models.PROTECT,
+        related_name="packing",
+    )
+
+    batch = models.ForeignKey(
+        "produksi.Batch",
+        on_delete=models.PROTECT,
+        related_name="packing_set",
+    )
+
+    nama_hasil = models.ForeignKey(
+        "master.MasterProduk",
+        on_delete=models.PROTECT,
+        related_name="packing_hasil",
+    )
+
+    kemasan = models.ForeignKey(
+        "PoolKemasan",
+        on_delete=models.PROTECT,
+        related_name="packing",
+    )
+
+    total_unit = models.DecimalField(max_digits=14, decimal_places=3)
+    qty_kg = models.DecimalField(max_digits=18, decimal_places=3)
     harga_per_kg = models.DecimalField(max_digits=20, decimal_places=6, default=D0)
-    nilai_hpp    = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
+    cost_nom = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
     menghabiskan = models.BooleanField(default=False)
-    tanggal      = models.DateField(default=timezone.localdate, db_index=True)
-    waktu        = models.DateTimeField(default=timezone.now, db_index=True)
-    status       = models.CharField(max_length=10, choices=StatusDokumen.choices, default=StatusDokumen.DRAFT, db_index=True)
-    posted_at    = models.DateTimeField(null=True, blank=True, editable=False)
+
+    tanggal = models.DateField(default=timezone.localdate, db_index=True)
+    waktu = models.DateTimeField(default=timezone.now, db_index=True)
+
+    status = models.CharField(
+        max_length=10,
+        choices=StatusDokumen.choices,
+        default=StatusDokumen.DRAFT,
+        db_index=True,
+    )
+
+    posted_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         db_table = "inventory_packing"
         ordering = ["-waktu", "-id"]
         verbose_name_plural = "Packing"
+
         indexes = [
             models.Index(fields=["batch", "status"], name="ix_pack_batch"),
             models.Index(fields=["entitas", "waktu"], name="ix_pack_entitas"),
+            models.Index(fields=["nama_hasil", "status"], name="ix_pack_hasil"),
         ]
+
         constraints = [
             CheckConstraint(condition=Q(qty_kg__gt=0), name="ck_pack_qty_positif"),
             CheckConstraint(condition=Q(total_unit__gt=0), name="ck_pack_unit_positif"),
-            CheckConstraint(condition=Q(nilai_hpp__gte=0), name="ck_pack_nilai_non_negatif"),
+            CheckConstraint(condition=Q(cost_nom__gte=0), name="ck_pack_nilai_non_negatif"),
         ]
+
+    def save(self, *args, **kwargs):
+        if not self.nomor:
+            with transaction.atomic():
+                last = (
+                    Packing.objects
+                    .select_for_update()
+                    .filter(entitas=self.entitas)
+                    .order_by("-id")
+                    .first()
+                )
+                urutan = 1
+                if last and last.nomor:
+                    try:
+                        urutan = int(last.nomor.split("-")[-1]) + 1
+                    except (ValueError, IndexError):
+                        urutan = 1
+                self.nomor = f"PKG-{self.entitas_id}-{urutan:03d}"
+                super().save(*args, **kwargs)
+                return
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nomor
@@ -246,5 +302,4 @@ class PoolKemasan(TimeStampedModel):
 
     @property
     def harga_satuan(self):
-        # qty_unit di-cast ke Decimal agar presisi pembagiannya aman
         return harga(self.nilai / Decimal(self.qty_unit)) if self.qty_unit > 0 else D0

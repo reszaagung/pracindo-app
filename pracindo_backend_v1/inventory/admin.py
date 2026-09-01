@@ -99,13 +99,10 @@ class PembelianAdmin(KunciSetelahPosting, admin.ModelAdmin):
 
 @admin.register(Packing)
 class PackingAdmin(KunciSetelahPosting, admin.ModelAdmin):
-    list_display = ("nomor", "tanggal", "entitas", "batch", "kemasan", "total_unit", "qty_kg", "harga_per_kg", "nilai_hpp", "menghabiskan", "status")
-    list_filter = ("status", "tanggal", "kemasan", "entitas")
-    search_fields = ("nomor", "entitas__kode", "batch__nomor")
-    date_hierarchy = "tanggal"
+    list_display = ['nomor', 'entitas', 'batch', 'kemasan', 'status'] 
+    list_filter = ['status', 'entitas']
     list_select_related = ("entitas", "batch", "kemasan")
-    readonly_dasar = ("nomor", "harga_per_kg", "nilai_hpp", "menghabiskan", "status", "dibuat_oleh", "dibuat_pada", "posted_at")
-
+    readonly_dasar = ("nomor", "harga_per_kg", "cost_nom", "menghabiskan", "status", "dibuat_oleh", "dibuat_pada", "posted_at")
 
 @admin.register(MutasiKlaim)
 class MutasiKlaimAdmin(TanpaTulis, admin.ModelAdmin):

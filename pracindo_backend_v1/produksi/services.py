@@ -391,7 +391,7 @@ def saldo_batch(batch):
 
     agg_pack = Packing.objects.filter(batch=batch, status=StatusDokumen.POSTED).aggregate(
         q=Coalesce(Sum("qty_kg"), Value(D0_QTY), output_field=F_QTY),
-        n=Coalesce(Sum("nilai_hpp"), Value(D0_RP), output_field=F_RP),
+        n=Coalesce(Sum("cost_nom"), Value(D0_RP), output_field=F_RP),
     )
     agg_wip = TransferWip.objects.filter(batch_sumber=batch).aggregate(
         q=Coalesce(Sum("qty_kg"), Value(D0_QTY), output_field=F_QTY),
