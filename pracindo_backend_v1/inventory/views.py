@@ -199,12 +199,25 @@ class PackingViewSet(viewsets.ModelViewSet):
     def pratinjau(self, request):
         return Response(services.pratinjau_packing(request.query_params.get("batch"), request.query_params.get("qty") or 0))
 
+    @action(detail=True, methods=['post'])
+    def vulkanisir_atau_selesai(self, request, pk=None):
+        packing = self.get_object()
+        packing.status = Packing.Status.SELESAI
+        packing.save()
+        return Response({"status": "sukses", "pesan": "Packing berhasil diselesaikan"})
 
-def _int_atau_none(nilai):
-    try:
-        return int(nilai) if nilai not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
+    @action(detail=True, methods=['post'])
+    def void_dokumen(self, request, pk=None):
+        packing = self.get_object()
+        packing.status = Packing.Status.VOID
+        packing.save()
+        return Response({"status": "sukses", "pesan": "Packing dibatalkan (Void)"})
+
+    def _int_atau_none(nilai):
+        try:
+            return int(nilai) if nilai not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
 
 
 @api_view(["GET"])

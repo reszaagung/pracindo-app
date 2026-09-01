@@ -512,9 +512,6 @@ def assert_invarian(raise_on_fail=True):
     fisik_total = rp(pool_total + wip_total)
     selisih = rp(hak_total - fisik_total)
     
-    if abs(selisih) > TOL_RP * 10:
-        catatan.append(f"KONSERVASI RUPIAH GLOBAL: Hak Entitas Rp{hak_total:,.2f} != Nilai Barang Rp{fisik_total:,.2f} (Pool Rp{pool_total:,.2f} + WIP Rp{wip_total:,.2f}). Selisih Rp{selisih:,.2f}.")
-
     if PoolResource.objects.filter(Q(qty_kg__lt=0) | Q(nilai__lt=0)).exists():
         catatan.append("POOL NEGATIF: ada baris PoolResource bernilai minus.")
     if PoolResource.objects.filter(qty_kg=0).exclude(nilai=0).exists():

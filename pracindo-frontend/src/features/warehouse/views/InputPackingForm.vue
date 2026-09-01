@@ -28,9 +28,6 @@ const {
     ambilId
 } = usePacking()
 
-// ========================================
-// FORM
-// ========================================
 const initialFormState = () => ({
     entitas_id: '',
     jenis_sumber: 'MIXING',
@@ -46,9 +43,6 @@ const form = reactive(initialFormState())
 
 const hasilEksekusi = ref(null)
 
-// ========================================
-// BATCH FILTER
-// ========================================
 const batchDifilter = computed(() => {
     if (!form.jenis_sumber) {
         return daftarBatch.value
@@ -59,9 +53,6 @@ const batchDifilter = computed(() => {
     )
 })
 
-// ========================================
-// KEMASAN TERPILIH
-// ========================================
 const kemasanTerpilih = computed(() => {
     const kemasanId = ambilId(form.kemasan_id)
 
@@ -70,9 +61,6 @@ const kemasanTerpilih = computed(() => {
     )
 })
 
-// ========================================
-// NILAI KEMASAN
-// ========================================
 const totalNilaiKemasan = computed(() => {
     const qtyUnit = Number(form.total_unit) || 0
 
@@ -86,9 +74,6 @@ const totalNilaiKemasan = computed(() => {
     return qtyUnit * hargaSatuan
 })
 
-// ========================================
-// NILAI WIP / HPP
-// ========================================
 const nilaiHppWip = computed(() => {
     return Number(
         pratinjau.value?.nilai_tagihan
@@ -102,9 +87,7 @@ const totalNilaiAbsorpsi = computed(() => {
     )
 })
 
-// ========================================
-// CHANGE JENIS SUMBER
-// ========================================
+
 watch(
     () => form.jenis_sumber,
     () => {
@@ -475,16 +458,17 @@ onBeforeUnmount(() => {
 
                         <div class="flex flex-col gap-2">
                             <label class="text-xs font-bold text-slate-500 uppercase">Aset Kemasan Utama</label>
-                            <Dropdown 
-                                v-model="form.kemasan_id" 
-                                :options="daftarKemasan" 
-                                filter 
-                                optionLabel="label_dropdown" 
-                                placeholder="Pilih Kemasan..." 
-                                class="w-full"
-                                scrollHeight="160px"
-                                appendTo="body"
-                            />
+                                <Dropdown 
+                                    v-model="form.kemasan_id" 
+                                    :options="daftarKemasan" 
+                                    filter 
+                                    optionLabel="label_dropdown" 
+                                    optionValue="id" 
+                                    placeholder="Pilih Kemasan..." 
+                                    class="w-full"
+                                    scrollHeight="160px"
+                                    appendTo="body"
+                                />
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

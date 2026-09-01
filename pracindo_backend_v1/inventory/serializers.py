@@ -108,6 +108,7 @@ class PackingSerializer(serializers.ModelSerializer):
         model = Packing
         fields = [
             "id", "nomor", "entitas", "entitas_kode",
+            "entitas", 
             "batch", "batch_nomor", "batch_hasil",
             "produk", "produk_nama",
             "kemasan", "kemasan_nama",

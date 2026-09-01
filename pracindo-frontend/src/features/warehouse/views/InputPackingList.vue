@@ -14,12 +14,10 @@
                         <p class="text-xs text-slate-500">Tarik WIP dari Produksi menjadi Finished Goods</p>
                     </div>
                 </div>
-
-                <!-- Render Form Packing yang baru saja kita buat -->
                 <InputPackingForm @tutup="tutupForm" />
             </div>
 
-            <!-- STATE 2: TAMPILAN DAFTAR RIWAYAT PACKING -->
+           
             <div v-else key="list" class="w-full">
                 <!-- Header -->
                 <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -36,23 +34,23 @@
                     </button>
                 </div>
 
-                <!-- Area Filter & Tabel -->
+                
                 <div class="bg-white border border-slate-200 rounded-[24px] p-4 md:p-6 shadow-sm w-full min-h-[400px]">
 
                     <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
                         <div>
                             <h3 class="text-sm font-bold text-slate-800">Daftar Dokumen Packing</h3>
-                            <p class="text-xs text-slate-500">Menampilkan riwayat klaim barang jadi</p>
+                            <p class="text-xs text-slate-500">Riwayat Packing</p>
                         </div>
                     </div>
 
-                    <!-- Loading State -->
+                    
                     <div v-if="memuat" class="flex flex-col items-center justify-center py-12 text-center">
                         <i class="pi pi-spin pi-spinner text-slate-300 text-2xl mb-3"></i>
                         <p class="text-xs text-slate-500">Memuat riwayat packing...</p>
                     </div>
 
-                    <!-- Empty State -->
+                
                     <div v-else-if="daftarPacking.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
                         <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
                             <i class="pi pi-box text-slate-300 text-xl"></i>
@@ -61,16 +59,17 @@
                         <p class="text-xs text-slate-500">Klik "Input Packing Baru" untuk memulai klaim WIP pertama Anda.</p>
                     </div>
 
-                    <!-- Tampilan Tabel -->
+                    
                     <div v-else class="overflow-x-auto custom-scrollbar">
                         <table class="w-full text-left text-sm whitespace-nowrap">
                             <thead class="text-slate-500 bg-slate-50/50">
                                 <tr>
                                     <th class="py-3 px-4 font-semibold rounded-tl-xl">Nomor & Tanggal</th>
+                                    <th class="py-3 px-4 font-semibold rounded-tl-xl">Entitas</th>
                                     <th class="py-3 px-4 font-semibold">Batch Sumber</th>
                                     <th class="py-3 px-4 font-semibold">Kemasan</th>
-                                    <th class="py-3 px-4 font-semibold text-right">Qty (Kg)</th>
-                                    <th class="py-3 px-4 font-semibold text-right">Nilai HPP</th>
+                                    <th class="py-3 px-4 font-semibold text-right">Qty(Kg)</th>
+                                    <th class="py-3 px-4 font-semibold text-right">Cost/unit</th>
                                     <th class="py-3 px-4 font-semibold text-center rounded-tr-xl">Status</th>
                                 </tr>
                             </thead>
@@ -82,6 +81,12 @@
                                             <i class="pi pi-calendar text-[10px] mr-1"></i>{{ tanggal(p.tanggal) }}
                                         </div>
                                     </td>
+                                    <td class="py-3 px-4">
+                                         <span class="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold inline-block">
+                                                {{ p.entitas_kode }}
+                                         </span>
+                                    </td>
+                                    
                                     <td class="py-3 px-4 text-slate-700 font-medium">
                                         {{ p.batch_nomor }}
                                         <span class="block text-[10px] text-slate-400">{{ p.batch_hasil }}</span>
@@ -91,7 +96,7 @@
                                         <span class="block text-[10px] text-slate-400">{{ p.total_unit }} Unit</span>
                                     </td>
                                     <td class="py-3 px-4 text-right font-bold text-blue-600">{{ angka(p.qty_kg, 3) }}</td>
-                                    <td class="py-3 px-4 text-right font-medium text-slate-600">Rp {{ angka(p.nilai_hpp) }}</td>
+                                    <td class="py-3 px-4 text-right font-medium text-slate-600">Rp {{ angka(p.cost_nom) }}</td>
                                     <td class="py-3 px-4 text-center">
                                         <span :class="badgeColor(p.status)" class="px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase border inline-block">
                                             {{ p.status }}
@@ -120,7 +125,6 @@ const modeForm = ref(false)
 const memuat = ref(false)
 const daftarPacking = ref([])
 
-// Muat daftar riwayat packing dari backend
 const muatRiwayat = async () => {
     memuat.value = true
     try {
@@ -133,18 +137,14 @@ const muatRiwayat = async () => {
     }
 }
 
-// Handler saat form ditutup
 const tutupForm = () => {
     modeForm.value = false
-    muatRiwayat() // Refresh list otomatis agar data baru muncul
+    muatRiwayat() 
 }
 
-// Styling badge dinamis
 const badgeColor = (status) => {
     const st = String(status).toUpperCase()
     if (st === 'POSTED') return 'bg-emerald-50 text-emerald-600 border-emerald-200'
-    if (st === 'DRAFT') return 'bg-amber-50 text-amber-600 border-amber-200'
-    if (st === 'VOID') return 'bg-rose-50 text-rose-600 border-rose-200'
     return 'bg-slate-50 text-slate-500 border-slate-200'
 }
 

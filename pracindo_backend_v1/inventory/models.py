@@ -121,6 +121,11 @@ class Kemasan(TimeStampedModel):
         return self.nama
 
 class Packing(DiauditModel):
+    class Status(models.TextChoices):
+        PROGRESS = "PROCESSING", "PROCESSING"
+        SELESAI  = "SELESAI",  "Selesai"
+
+
     nomor = models.CharField(
         max_length=48,
         unique=True,
@@ -151,7 +156,7 @@ class Packing(DiauditModel):
         related_name="packing",
     )
 
-    total_unit = models.DecimalField(max_digits=14, decimal_places=3)
+    total_unit = models.IntegerField()
     qty_kg = models.DecimalField(max_digits=18, decimal_places=3)
     harga_per_kg = models.DecimalField(max_digits=20, decimal_places=6, default=D0)
     cost_nom = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
@@ -187,6 +192,10 @@ class Packing(DiauditModel):
         ]
 
     def save(self, *args, **kwargs):
+        # Hitung otomatis HPP/cost_nom jika harga per kg ada dan cost_nom masih 0
+        if self.harga_per_kg > 0 and self.cost_nom == D0:
+            self.cost_nom = rp(self.qty_kg * self.harga_per_kg)
+
         if not self.nomor:
             with transaction.atomic():
                 last = (
