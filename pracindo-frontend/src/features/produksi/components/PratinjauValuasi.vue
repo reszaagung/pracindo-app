@@ -20,7 +20,7 @@
           <i class="pi pi-calculator text-sm"></i>
         </div>
         <div>
-          <h3 class="text-sm font-bold text-slate-800">Pratinjau Kalkulasi HPP</h3>
+          <h3 class="text-sm font-bold text-slate-800">Pratinjau Kalkulasi Cost Nom</h3>
           <p class="text-[11px] text-slate-500">Rincian nilai bahan baku yang terserap ke dalam produk jadi</p>
         </div>
       </div>

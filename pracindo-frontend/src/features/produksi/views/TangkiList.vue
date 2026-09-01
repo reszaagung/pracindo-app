@@ -109,12 +109,11 @@
 </template>
 
 <script setup>
-import { useTangkiList } from '../composables/useTangkiList' // Sesuaikan path jika berbeda
+import { useTangkiList } from '../composables/useTangkiList' 
 
-// Ekstrak state dan fungsi dari composable
 const { loading, errorMsg, tangkis, muatData } = useTangkiList()
 
-// Fungsi formatter (khusus UI) tetap dibiarkan di komponen
+
 function formatKg(v) {
   return Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }

@@ -1,30 +1,3 @@
-"""
-Model inti produksi — produksi/models.py
-
-KONSEP KUNCI: POOL PATUNGAN
-
-Batch TIDAK menyimpan grup_bahan atau entitas apa pun. Bahan baku ditarik
-dari inventory.PoolResource — satu saldo per produk, digabung lintas
-entitas dan lintas grup bahan ("patungan"). Konsekuensinya:
-
-  - Mixing menarik nilai langsung dari PoolResource, dicatat per baris di
-    BatchInputRaw. harga_per_kg & nilai di baris itu adalah SNAPSHOT
-    harga_rata pool pada saat ditarik.
-  - Blending menarik nilai dari batch lain yang sudah POSTED (dicatat di
-    TransferWip), bukan dari pool mentah.
-  - Kedua proses ini murni memindahkan nilai fisik (pool -> WIP batch,
-    atau WIP batch -> WIP batch). TIDAK ADA satu baris MutasiKlaim pun
-    yang tercipta di sini.
-  - Siapa berhak atas berapa rupiah baru dihitung saat Packing menarik
-    barang jadi dari batch dan membebankan ke SaldoEntitas si penarik.
-    Itulah satu-satunya titik "klaim" — bukan di titik produksi.
-
-Karena itu JANGAN PERNAH menambahkan field grup_bahan/entitas ke Batch,
-BatchInputRaw, atau TransferWip. Kode di modul lain yang memfilter
-Batch pakai grup_bahan_id (langsung atau lewat relasi) adalah bug
-peninggalan arsitektur lama dan harus dihapus filternya, bukan
-diperbaiki jalur relasinya.
-"""
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -52,12 +25,6 @@ def harga(x):
     return Decimal(x).quantize(Q_HARGA, rounding=ROUND_HALF_UP)
 
 
-class StatusBatch(models.TextChoices):
-    DRAFT  = "DRAFT",  "Draft"
-    POSTED = "POSTED", "Diposting"
-    VOID   = "VOID",   "Dibatalkan"
-
-
 class TipeProses(models.TextChoices):
     MIXING   = "MIXING",   "Mixing (racik dari pool bersama)"
     BLENDING = "BLENDING", "Blending (racik dari batch lain)"
@@ -82,7 +49,7 @@ class Tangki(TimeStampedModel):
 class Batch(DiauditModel):
     nomor      = models.CharField(max_length=48, unique=True, editable=False)   # Batch ID (Auto-Gen)
     jenis      = models.CharField(max_length=10, choices=TipeProses.choices)    # MIXING / BLENDING
-    nama_hasil = models.CharField(max_length=120)                               # Yield Nomenclature — label bebas
+    nama_hasil = models.CharField(max_length=120)                                # Yield Nomenclature — label bebas
     tangki     = models.ForeignKey(Tangki, on_delete=models.PROTECT, related_name="batch_set")  # Destination Tank
 
     qty_hasil   = models.DecimalField(max_digits=18, decimal_places=3, default=D0)  # output aktual setelah posting
@@ -93,7 +60,6 @@ class Batch(DiauditModel):
 
     tanggal   = models.DateField(default=timezone.localdate, db_index=True)
     waktu     = models.DateTimeField(default=timezone.now, db_index=True)
-    status    = models.CharField(max_length=10, choices=StatusBatch.choices, default=StatusBatch.DRAFT, db_index=True)
     posted_at = models.DateTimeField(null=True, blank=True, editable=False)
     catatan   = models.TextField(blank=True, default="")
 
@@ -102,8 +68,8 @@ class Batch(DiauditModel):
         ordering = ["-waktu", "-id"]
         verbose_name_plural = "Batch"
         indexes = [
-            models.Index(fields=["tangki", "status"], name="ix_batch_tangki"),
-            models.Index(fields=["jenis", "status"], name="ix_batch_jenis"),
+            models.Index(fields=["tangki"], name="ix_batch_tangki"),
+            models.Index(fields=["jenis"], name="ix_batch_jenis"),
         ]
         constraints = [
             CheckConstraint(condition=Q(qty_hasil__gte=0), name="ck_batch_qty_non_negatif"),
@@ -116,11 +82,11 @@ class Batch(DiauditModel):
 
     @property
     def harga_per_kg(self):
-        """Harga WIP per kg batch ini. 0 selama masih DRAFT (qty_hasil belum terisi)."""
+        """Harga WIP per kg batch ini. 0 jika qty_hasil belum terisi."""
         return harga(self.nilai_hasil / self.qty_hasil) if self.qty_hasil > 0 else D0
 
     def delete(self, *args, **kwargs):
-        raise models.ProtectedError("Batch tidak bisa dihapus langsung. Terbitkan VOID.", [self])
+        raise models.ProtectedError("Batch tidak bisa dihapus langsung.", [self])
 
 
 class BatchInputRaw(models.Model):
@@ -135,7 +101,7 @@ class BatchInputRaw(models.Model):
     """
     batch        = models.ForeignKey(Batch, on_delete=models.PROTECT, related_name="input_raw")
     produk       = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="+")
-    qty_kg       = models.DecimalField(max_digits=18, decimal_places=3)                          # Consumed Qty
+    qty_kg       = models.DecimalField(max_digits=18, decimal_places=3)                                      # Consumed Qty
     harga_per_kg = models.DecimalField(max_digits=20, decimal_places=6, default=D0, editable=False)  # Unit Cost, snapshot
     nilai        = models.DecimalField(max_digits=20, decimal_places=2, default=D0, editable=False)  # Subtotal
 
@@ -155,7 +121,7 @@ class BatchInputRaw(models.Model):
 class TransferWip(models.Model):
     """
     Satu baris Blending = memindahkan sebagian/seluruh nilai WIP dari
-    batch sumber (POSTED) ke batch tujuan (baru). Tidak menyentuh
+    batch sumber ke batch tujuan (baru). Tidak menyentuh
     PoolResource maupun MutasiKlaim sama sekali — murni transfer nilai
     antar batch. Hanya dipakai untuk batch berjenis BLENDING.
     """

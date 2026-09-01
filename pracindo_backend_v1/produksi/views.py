@@ -3,18 +3,15 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Sum, Value
-from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from .models import Tangki, Batch, TipeProses
 from .serializers import TangkiSerializer, BatchSerializer
 from .services import (
-    buat_batch_mixing,
-    posting_mixing,
     simpan_dan_posting_mixing,
-    buat_batch_blending,
-    posting_blending,
     simpan_dan_posting_blending,
+    posting_mixing,
+    posting_blending,
     pratinjau_mixing,
     pratinjau_blending,
     GalatProduksi,
@@ -22,17 +19,17 @@ from .services import (
 )
 
 
-@api_view(["GET"])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def pratinjau_batch(request):
-    jenis = request.query_params.get("jenis", TipeProses.MIXING).upper()
-    susut_kg = request.query_params.get("susut_kg")
+    jenis = request.data.get("jenis", request.query_params.get("jenis", TipeProses.MIXING)).upper()
+    susut_kg = request.data.get("susut_kg", request.query_params.get("susut_kg"))
     
     if jenis == TipeProses.MIXING:
-        baris = request.data.get("baris", [])
+        baris = request.data.get("baris", request.data.get("materials", []))
         res = pratinjau_mixing(baris=baris, susut_kg=susut_kg)
     elif jenis == TipeProses.BLENDING:
-        baris_sumber = request.data.get("baris_sumber", [])
+        baris_sumber = request.data.get("baris_sumber", request.data.get("wip_sources", []))
         res = pratinjau_blending(baris_sumber=baris_sumber, susut_kg=susut_kg)
     else:
         return Response({"error": f"Jenis proses '{jenis}' tidak dikenal."}, status=status.HTTP_400_BAD_REQUEST)
@@ -49,19 +46,59 @@ class TangkiViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def rekap(self, request):
+        from .services import saldo_batch 
+        
         qs = self.get_queryset()
         data = []
         for t in qs:
-            vol = t.batch_aktif.aggregate(v=Coalesce(Sum("qty_kg"), Value(Decimal("0"))))["v"]
+            vol = sum((saldo_batch(b).sisa_qty for b in t.batch_set.filter(status="POSTED")), Decimal("0"))
+            
             data.append({
                 "id": t.id,
                 "kode": t.kode,
                 "nama": t.nama,
-                "kapasitas": str(t.kapasitas_kg),
+                "kapasitas": str(t.kapasitas_kg) if t.kapasitas_kg else "0",
                 "terisi": str(vol),
-                "persen": round((vol / t.kapasitas_kg) * 100, 1) if t.kapasitas_kg else 0
+                "persen": round((float(vol) / float(t.kapasitas_kg)) * 100, 1) if t.kapasitas_kg and t.kapasitas_kg > 0 else 0
             })
         return Response(data)
+
+    @action(detail=True, methods=["get"])
+    def saldo(self, request, pk=None):
+        from .services import saldo_batch
+        from decimal import Decimal
+        
+        tangki = self.get_object()
+        batches_in_tank = tangki.batch_set.filter(status="POSTED").order_by("-waktu")
+        
+        total_qty = Decimal("0")
+        total_nilai = Decimal("0")
+        batches_data = []
+        
+        for b in batches_in_tank:
+            s = saldo_batch(b)
+            if s.sisa_qty > 0:
+                total_qty += s.sisa_qty
+                total_nilai += s.sisa_nilai
+                batches_data.append({
+                    "id": b.id,
+                    "nomor": b.nomor,
+                    "nama_hasil": b.nama_hasil,
+                    "sisa_qty": str(s.sisa_qty),
+                    "harga_per_kg": str(s.harga_per_kg)
+                })
+        
+        harga_rata = (total_nilai / total_qty) if total_qty > 0 else Decimal("0")
+        harga_unik = set(b["harga_per_kg"] for b in batches_data)
+        harga_beragam = len(harga_unik) > 1
+
+        return Response({
+            "sisa_qty": str(total_qty),
+            "sisa_nilai": str(total_nilai),
+            "harga_per_kg": str(harga_rata),
+            "harga_beragam": harga_beragam,
+            "batches": batches_data
+        })
 
 
 class BatchViewSet(viewsets.ModelViewSet):
@@ -85,19 +122,15 @@ class BatchViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="mixing")
     def mixing(self, request):
         try:
-            posting = request.data.get("posting", False)
             params = {
                 "nama_hasil": request.data.get("nama_hasil"),
                 "tangki_id": request.data.get("tangki_id"),
-                "baris": request.data.get("baris", []),
+                "baris": request.data.get("baris", request.data.get("materials", [])),
                 "susut_kg": request.data.get("susut_kg"),
                 "tanggal": request.data.get("tanggal"),
                 "user": request.user,
             }
-            if posting:
-                batch = simpan_dan_posting_mixing(**params)
-            else:
-                batch = buat_batch_mixing(**params)
+            batch = simpan_dan_posting_mixing(**params)
             return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
         except (GalatProduksi, KonflikBatch) as e:
             return Response({"detail": str(e)}, status=getattr(e, "http", status.HTTP_400_BAD_REQUEST))
@@ -107,19 +140,15 @@ class BatchViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="blending")
     def blending(self, request):
         try:
-            posting = request.data.get("posting", False)
             params = {
                 "nama_hasil": request.data.get("nama_hasil"),
                 "tangki_id": request.data.get("tangki_id"),
-                "baris_sumber": request.data.get("baris_sumber", []),
+                "baris_sumber": request.data.get("baris_sumber", request.data.get("wip_sources", [])),
                 "susut_kg": request.data.get("susut_kg"),
                 "tanggal": request.data.get("tanggal"),
                 "user": request.user,
             }
-            if posting:
-                batch = simpan_dan_posting_blending(**params)
-            else:
-                batch = buat_batch_blending(**params)
+            batch = simpan_dan_posting_blending(**params)
             return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
         except (GalatProduksi, KonflikBatch) as e:
             return Response({"detail": str(e)}, status=getattr(e, "http", status.HTTP_400_BAD_REQUEST))

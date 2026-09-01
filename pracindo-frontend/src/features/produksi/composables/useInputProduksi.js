@@ -20,7 +20,6 @@ export function useInputProduksi() {
 
   const filter = reactive({
     jenis: '',
-    status: '',
     tangki: '',
     search: ''
   })
@@ -74,7 +73,6 @@ export function useInputProduksi() {
     try {
       const params = {}
       if (filter.jenis) params.jenis = filter.jenis
-      if (filter.status) params.status = filter.status
       if (filter.tangki) params.tangki = filter.tangki
       if (filter.search) params.search = filter.search
       const res = await apiBatch.daftar(params)
@@ -389,54 +387,6 @@ export function useInputProduksi() {
     }
   }
 
-  async function postingBatch(batchId) {
-    submitting.value = true
-    try {
-      await apiBatch.posting(batchId)
-      await Promise.all([muatDaftarBatch(), muatRawPool()])
-      return true
-    } catch (e) {
-      const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal posting batch. Periksa kembali saldo bahan baku.')
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
-
-  async function voidBatch(batchId, alasan) {
-    if (!alasan || !alasan.trim()) {
-      errorMsg.value = 'Alasan void wajib diisi'
-      return false
-    }
-    submitting.value = true
-    try {
-      await apiBatch.void(batchId, alasan.trim())
-      await Promise.all([muatDaftarBatch(), muatRawPool()])
-      return true
-    } catch (e) {
-      const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal membatalkan (void) batch')
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
-
-  async function hapusDraft(batchId) {
-    submitting.value = true
-    try {
-      await apiBatch.hapus(batchId)
-      await muatDaftarBatch()
-      return true
-    } catch (e) {
-      errorMsg.value = 'Gagal menghapus draft batch'
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
-
   watch(
     bomRows,
     (rows) => rows.forEach((r) => (r.subtotal = (Number(r.qty) || 0) * (Number(r.harga) || 0))),
@@ -488,9 +438,6 @@ export function useInputProduksi() {
     saatBatchWipDipilih,
     mintaPratinjau,
     simpanDraft,
-    simpanDanPosting,
-    postingBatch,
-    voidBatch,
-    hapusDraft
+    simpanDanPosting
   }
 }

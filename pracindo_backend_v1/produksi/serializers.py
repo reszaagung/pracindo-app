@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.db import transaction
 from rest_framework import serializers
 from .models import (
-    Batch, BatchInputRaw, StatusBatch, Tangki, TransferWip
+    Batch, BatchInputRaw, Tangki, TransferWip
 )
 
 QTY_MIN = Decimal("0.000")
@@ -109,10 +109,9 @@ class BatchCreateSerializer(serializers.Serializer):
                 jenis=jenis,
                 nama_hasil=validated["nama_hasil"],
                 tangki=validated["tangki_tujuan"],
-                susut_kg=validated.get("susut_kg") or Decimal("0.000"), # FIX
+                susut_kg=validated.get("susut_kg") or Decimal("0.000"),
                 catatan=validated.get("catatan", ""),
-                status=StatusBatch.DRAFT,
-                dibuat_oleh=user if getattr(user, "is_authenticated", False) else None, # FIX
+                dibuat_oleh=user if getattr(user, "is_authenticated", False) else None,
             )
 
             if raws:
@@ -141,7 +140,12 @@ class BatchSerializer(serializers.ModelSerializer):
     tangki_kode = serializers.CharField(source="tangki.kode", read_only=True)
     tangki_tujuan_nama = serializers.CharField(source="tangki.nama", read_only=True)
     batch = serializers.CharField(source="nomor", read_only=True)
-    
+    sisa_qty = serializers.SerializerMethodField()
+
     class Meta:
         model = Batch
         fields = "__all__"
+
+    def get_sisa_qty(self, obj):
+        from .services import saldo_batch
+        return str(saldo_batch(obj).sisa_qty)

@@ -9,47 +9,43 @@
     </div>
 
     <template v-else>
-      <!-- Telemetri Produksi -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 w-full overflow-hidden">
         <h3 class="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100">Telemetri Produksi (Mixing)</h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <label class="flex flex-col gap-1">
+          <label class="flex flex-col gap-1 w-full overflow-hidden">
             <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Nama Hasil</span>
             <input v-model="form.nama_hasil" type="text" placeholder="mis. SUPER WHITE SPESIAL"
-              class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </label>
 
-          <label class="flex flex-col gap-1">
+          <label class="flex flex-col gap-1 w-full overflow-hidden">
             <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Tangki Tujuan</span>
-            <div class="flex items-center gap-1.5">
-              <select v-model="form.tangki_tujuan" class="flex-1 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors">
+            <div class="flex items-center gap-2 w-full flex-nowrap">
+              <select v-model="form.tangki_tujuan" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" style="flex: 1 1 auto; min-width: 0;">
                 <option value="" disabled>Pilih tangki</option>
-                <option v-for="t in daftarTangki" :key="t.id" :value="t.id">
-                  {{ t.nama || t.kode }}
-                </option>
+                <option v-for="t in daftarTangki" :key="t.id" :value="t.id">{{ t.nama || t.kode }}</option>
               </select>
-              <button type="button" class="w-8 h-8 flex-shrink-0 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg flex items-center justify-center transition-colors font-bold shadow-sm" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
+              <button type="button" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg flex items-center justify-center font-bold shadow-sm transition-colors" style="flex: 0 0 42px; width: 42px; height: 42px;" title="Tambah tangki baru" @click="tambahTangkiBaruPrompt">+</button>
             </div>
           </label>
 
-          <label class="flex flex-col gap-1">
+          <label class="flex flex-col gap-1 w-full overflow-hidden">
             <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Batch ID</span>
-            <div class="flex items-center gap-1.5">
-              <input v-model="form.batch" type="text" placeholder="PRD-MIX-0001" class="flex-1 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
-              <button type="button" class="px-2 py-1.5 h-8 flex-shrink-0 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-lg flex items-center justify-center transition-colors shadow-sm" @click="generateNomorBatch">Auto</button>
+            <div class="flex items-center gap-2 w-full flex-nowrap">
+              <input v-model="form.batch" type="text" placeholder="PRD-MIX-0001" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" style="flex: 1 1 auto; min-width: 0;" />
+              <button type="button" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-lg flex items-center justify-center shadow-sm transition-colors" style="flex: 0 0 65px; width: 65px; height: 42px;" @click="generateNomorBatch">Auto</button>
             </div>
           </label>
 
-          <label class="flex flex-col gap-1">
+          <label class="flex flex-col gap-1 w-full overflow-hidden">
             <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Tekor / Susut (Kg)</span>
-            <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
+            <input v-model.number="form.tekor_kg" type="number" step="0.001" min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors" />
           </label>
         </div>
       </div>
 
-      <!-- Bill of Materials (BOM) -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden w-full">
         <div class="p-4 pb-3">
           <h3 class="font-bold text-slate-800 text-sm">Bill of Materials (BOM)</h3>
         </div>
@@ -103,13 +99,12 @@
         </div>
       </div>
 
-      <!-- Proyeksi Yield & Valuasi -->
-      <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-2 text-sm">
+      <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-2 text-sm text-center sm:text-left">
         <div class="text-blue-800">
           Proyeksi Yield: <strong class="text-blue-900 ml-1">{{ formatKg(proyeksiYield) }} Kg</strong>
         </div>
         <div class="text-blue-800">
-          Estimasi HPP: <strong class="text-blue-900 ml-1">{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
+          Estimasi Cost Nom: <strong class="text-blue-900 ml-1">{{ formatRupiah(proyeksiHargaRata) }} / Kg</strong>
         </div>
       </div>
 
@@ -117,7 +112,6 @@
         <PratinjauValuasi :hasil="pratinjau" />
       </div>
 
-      <!-- Actions -->
       <div class="flex flex-col sm:flex-row justify-end gap-2.5 pt-3 border-t border-slate-100">
         <button type="button" class="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-all disabled:opacity-50" @click="$emit('batal')" :disabled="submitting">Batal</button>
         <button type="button" class="px-4 py-2 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-all disabled:opacity-50" @click="mintaPratinjau" :disabled="submitting">Pratinjau</button>
@@ -186,8 +180,17 @@ async function tambahTangkiBaruPrompt() {
 }
 
 async function tanganiSimpanDanPosting() {
-  // Meneruskan props.batchId agar jika sedang Edit, dia tau ID yang diedit
   const ok = await simpanDanPosting(props.batchId)
   if (ok) emit('sukses')
+}
+
+const cekBahanDuplikat = (row) => {
+  if (!row.raw) return;
+  const jumlahMuncul = bomRows.value.filter(r => r.raw === row.raw).length;
+  if (jumlahMuncul > 1) {
+    alert('Bahan baku ini sudah dipilih di baris BOM lain! Silakan gabungkan QTY-nya.');
+    row.raw = ""; 
+    perbaruiTelemetriBom(row); 
+  }
 }
 </script>

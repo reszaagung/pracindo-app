@@ -53,36 +53,6 @@ export function useBatch() {
     }
   }
 
-  const postingBatch = async (id) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await apiProduksi.postingBatch(id)
-      currentBatch.value = response.data
-      return response.data
-    } catch (err) {
-      error.value = err.response?.data?.pesan || err.message
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const voidBatch = async (id, alasan) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await apiProduksi.voidBatch(id, { alasan })
-      currentBatch.value = response.data
-      return response.data
-    } catch (err) {
-      error.value = err.response?.data?.pesan || err.message
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
   const fetchBatchSaldo = async (id) => {
     try {
       const response = await apiProduksi.getBatchSaldo(id)
@@ -115,8 +85,6 @@ export function useBatch() {
     fetchBatches,
     fetchBatch,
     createBatch,
-    postingBatch,
-    voidBatch,
     fetchBatchSaldo,
     fetchBatchKomposisi
   }

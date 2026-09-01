@@ -7,8 +7,8 @@ ALUR: SIMPAN lalu POSTING, terpisah tapi berpasangan
                                                     sumber ikut tersimpan,
                                                     belum menyentuh pool)
     posting_mixing()/posting_blending()         -> kunci pool/batch sumber,
-                                                    hitung nilai, ubah status
-                                                    jadi POSTED
+                                                    hitung nilai, set posted_at
+                                                    (penanda batch sudah final)
 
     simpan_dan_posting_*()  memanggil keduanya berurutan TANPA @atomic di
     level dirinya sendiri. Ini disengaja: begitu buat_batch_* selesai,
@@ -17,6 +17,13 @@ ALUR: SIMPAN lalu POSTING, terpisah tapi berpasangan
     rollback. Itulah yang memungkinkan tombol "Posting Ulang" di frontend
     cukup memanggil posting_mixing(batch, user) lagi tanpa user mengulang
     isi form.
+
+STATUS BATCH
+
+Tidak ada field/enum status terpisah. "DRAFT" vs "sudah diposting" cuma
+ditentukan dari posted_at: NULL = draft, terisi = sudah final. Ini
+sengaja disederhanakan (memang tidak dipakai) — jangan tambahkan lagi
+field status di model, cukup query posted_at__isnull.
 
 KENAPA TIDAK ADA grup_bahan_id DI SINI
 
@@ -55,7 +62,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import (
-    Batch, BatchInputRaw, StatusBatch, Tangki, TipeProses, TransferWip,
+    Batch, BatchInputRaw, Tangki, TipeProses, TransferWip,
     harga, qty, rp,
 )
 
@@ -157,7 +164,7 @@ def _normalisasi_baris_blending(baris_sumber):
 def _selesaikan_posting(batch, total_qty_masuk, total_nilai_masuk, user):
     """
     Dipakai bersama oleh posting_mixing & posting_blending: terapkan susut
-    (harga/kg tetap), tutup status batch jadi POSTED, lalu dorong nilai
+    (harga/kg tetap), set posted_at (penanda batch final), lalu dorong nilai
     susut (kalau ada) ke inventory.services.bebankan_susut().
     """
     if batch.susut_kg > total_qty_masuk + TOL_QTY:
@@ -176,9 +183,8 @@ def _selesaikan_posting(batch, total_qty_masuk, total_nilai_masuk, user):
     batch.qty_hasil = qty_hasil
     batch.nilai_hasil = nilai_hasil
     batch.nilai_susut = nilai_susut
-    batch.status = StatusBatch.POSTED
     batch.posted_at = timezone.now()
-    batch.save(update_fields=["qty_hasil", "nilai_hasil", "nilai_susut", "status", "posted_at"])
+    batch.save(update_fields=["qty_hasil", "nilai_hasil", "nilai_susut", "posted_at"])
 
     if nilai_susut > 0:
         from inventory.services import bebankan_susut
@@ -212,7 +218,6 @@ def buat_batch_mixing(*, nama_hasil, tangki_id, baris, susut_kg=None, tanggal=No
         tangki=tangki,
         susut_kg=susut_kg,
         tanggal=tgl,
-        status=StatusBatch.DRAFT,
         dibuat_oleh=user,
     )
     BatchInputRaw.objects.bulk_create([
@@ -229,8 +234,8 @@ def posting_mixing(batch, user=None):
 
     if batch.jenis != TipeProses.MIXING:
         raise GalatProduksi(f"{batch.nomor} bukan batch Mixing.")
-    if batch.status != StatusBatch.DRAFT:
-        raise KonflikBatch(f"Batch {batch.nomor} sudah {batch.status}.")
+    if batch.posted_at is not None:
+        raise KonflikBatch(f"Batch {batch.nomor} sudah diposting pada {batch.posted_at:%Y-%m-%d %H:%M}.")
 
     baris = list(batch.input_raw.order_by("produk_id"))
     if not baris:
@@ -302,9 +307,9 @@ def buat_batch_blending(*, nama_hasil, tangki_id, baris_sumber, susut_kg=None, t
     if susut_kg < 0:
         raise GalatProduksi("Susut tidak boleh negatif.")
 
-    jumlah_ditemukan = Batch.objects.filter(pk__in=kebutuhan.keys(), status=StatusBatch.POSTED).count()
+    jumlah_ditemukan = Batch.objects.filter(pk__in=kebutuhan.keys(), posted_at__isnull=False).count()
     if jumlah_ditemukan != len(kebutuhan):
-        raise GalatProduksi("Salah satu batch sumber tidak ditemukan atau belum POSTED.")
+        raise GalatProduksi("Salah satu batch sumber tidak ditemukan atau belum diposting.")
 
     tgl = tanggal or timezone.localdate()
     batch = Batch.objects.create(
@@ -314,7 +319,6 @@ def buat_batch_blending(*, nama_hasil, tangki_id, baris_sumber, susut_kg=None, t
         tangki=tangki,
         susut_kg=susut_kg,
         tanggal=tgl,
-        status=StatusBatch.DRAFT,
         dibuat_oleh=user,
     )
     TransferWip.objects.bulk_create([
@@ -331,8 +335,8 @@ def posting_blending(batch, user=None):
 
     if batch.jenis != TipeProses.BLENDING:
         raise GalatProduksi(f"{batch.nomor} bukan batch Blending.")
-    if batch.status != StatusBatch.DRAFT:
-        raise KonflikBatch(f"Batch {batch.nomor} sudah {batch.status}.")
+    if batch.posted_at is not None:
+        raise KonflikBatch(f"Batch {batch.nomor} sudah diposting pada {batch.posted_at:%Y-%m-%d %H:%M}.")
 
     baris = list(batch.transfer_masuk.select_related("batch_sumber").order_by("batch_sumber_id"))
     if not baris:
@@ -349,8 +353,8 @@ def posting_blending(batch, user=None):
 
     for t in baris:
         sumber = sumber_terkunci.get(t.batch_sumber_id)
-        if sumber is None or sumber.status != StatusBatch.POSTED:
-            raise KonflikBatch(f"Batch sumber id {t.batch_sumber_id} tidak POSTED, tidak bisa dipakai untuk blending.")
+        if sumber is None or sumber.posted_at is None:
+            raise KonflikBatch(f"Batch sumber id {t.batch_sumber_id} belum diposting, tidak bisa dipakai untuk blending.")
 
         s = saldo_batch(sumber)
         if t.qty_kg > s.sisa_qty + TOL_QTY:
@@ -386,10 +390,10 @@ def saldo_batch(batch):
     """Sisa qty/nilai/harga-per-kg batch yang belum ditarik Packing atau Blending lain."""
     from inventory.models import Packing, StatusDokumen
 
-    if batch.status != StatusBatch.POSTED:
+    if batch.posted_at is None:
         return SaldoBatch(sisa_qty=D0_QTY, sisa_nilai=D0_RP, harga_per_kg=D0)
 
-    agg_pack = Packing.objects.filter(batch=batch, status=StatusDokumen.POSTED).aggregate(
+    agg_pack = Packing.objects.filter(batch=batch, status=Packing.Status.SELESAI).aggregate(
         q=Coalesce(Sum("qty_kg"), Value(D0_QTY), output_field=F_QTY),
         n=Coalesce(Sum("cost_nom"), Value(D0_RP), output_field=F_RP),
     )
@@ -400,6 +404,7 @@ def saldo_batch(batch):
 
     sisa_qty = qty(batch.qty_hasil - agg_pack["q"] - agg_wip["q"])
     sisa_nilai = rp(batch.nilai_hasil - agg_pack["n"] - agg_wip["n"])
+    
     if sisa_qty < 0:
         sisa_qty = D0_QTY
     if sisa_nilai < 0:
@@ -503,8 +508,8 @@ def pratinjau_blending(baris_sumber, susut_kg=None):
     rincian, total_qty, total_nilai, peringatan = [], D0_QTY, D0_RP, []
     for bid, q in kebutuhan.items():
         sumber = batch_map.get(bid)
-        if sumber is None or sumber.status != StatusBatch.POSTED:
-            peringatan.append(f"Batch sumber id {bid} tidak ditemukan atau belum POSTED.")
+        if sumber is None or sumber.posted_at is None:
+            peringatan.append(f"Batch sumber id {bid} tidak ditemukan atau belum diposting.")
             rincian.append({"batch_sumber_id": bid, "batch_nomor": None, "qty_kg": str(q), "cukup": False})
             continue
 

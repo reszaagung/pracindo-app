@@ -192,7 +192,6 @@ class Packing(DiauditModel):
         ]
 
     def save(self, *args, **kwargs):
-        # Hitung otomatis HPP/cost_nom jika harga per kg ada dan cost_nom masih 0
         if self.harga_per_kg > 0 and self.cost_nom == D0:
             self.cost_nom = rp(self.qty_kg * self.harga_per_kg)
 
