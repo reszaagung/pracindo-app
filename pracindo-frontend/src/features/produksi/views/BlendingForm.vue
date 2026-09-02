@@ -73,7 +73,14 @@
                 <td class="px-4 py-2">
                   <select v-model="row.batch" :disabled="!row.tangki_asal" @change="saatBatchWipDipilih(row); cekWipDuplikat(row)" class="w-full min-w-[180px] px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:opacity-50">
                     <option value="" disabled>Pilih batch</option>
-                    <option v-for="b in row.opsiBatch" :key="b.batch" :value="b.batch">{{ b.batch }}</option>
+                    <option 
+                      v-for="b in row.opsiBatch" 
+                      :key="b.batch" 
+                      :value="b.batch"
+                      :disabled="wipRows.some(w => w.batch === b.batch && w._id !== row._id)"
+                    >
+                      {{ b.batch }}
+                    </option>
                   </select>
                 </td>
                 <td class="px-4 py-2">

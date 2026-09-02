@@ -1,6 +1,6 @@
 <template>
     <div class="flex flex-col w-full relative">
-        <!-- Header (Dipadatkan) -->
+        <!-- Header -->
         <div class="mb-3 flex justify-between items-center gap-2 border-b border-slate-100 pb-3">
             <span class="bg-slate-200 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded-full tracking-wide">
                 DRAFT
@@ -19,7 +19,7 @@
             </div>
         </div>
 
-        <!-- Toggle Jenis PO (Dibuat flex-1 di HP agar tidak terpotong) -->
+        <!-- Toggle Jenis PO -->
         <div class="flex items-center gap-1 p-1 mb-4 bg-slate-50 border border-slate-200 rounded-lg w-full sm:w-max">
             <button type="button" @click="jenisPo = 'BAHAN_BAKU'"
                 :class="['flex-1 sm:flex-none justify-center px-4 py-1.5 text-[10px] md:text-xs font-bold rounded-md transition-all duration-300 flex items-center gap-1.5',
@@ -44,7 +44,7 @@
         </div>
 
         <form @submit.prevent="kirim" class="w-full">
-            <!-- Entitas Pembeli (Dikecilkan gap dan paddingnya) -->
+            <!-- Entitas Pembeli -->
             <div class="flex flex-row items-center justify-between mb-4 border-b border-slate-100 pb-3 gap-2">
                 <h3 class="text-xs font-bold text-slate-800">Entitas Pembeli</h3>
                 <div class="flex flex-wrap items-center bg-slate-50 p-0.5 rounded-lg border border-slate-200/60">
@@ -58,7 +58,7 @@
                 </div>
             </div>
 
-            <!-- Form Inputs (Tinggi input dipangkas jadi py-1.5) -->
+            <!-- Form Inputs -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                 <div class="flex flex-col gap-1">
                     <label class="text-[10px] md:text-xs font-bold text-slate-700">No. PO (Preview)</label>
@@ -88,7 +88,7 @@
                 </div>
             </div>
 
-            <!-- Tabel Detail Item (Padding sel tabel dikecilkan) -->
+            <!-- Bagian Item Pesanan (Responsive: Card untuk Mobile, Tabel untuk Desktop) -->
             <div class="w-full mb-6">
                 <div class="flex justify-between items-center mb-2 pb-2 mt-1">
                     <h3 class="text-xs font-bold text-slate-800">
@@ -100,7 +100,69 @@
                     </button>
                 </div>
 
-                <div class="overflow-x-auto pb-2 custom-scrollbar">
+                <!-- 1. TAMPILAN MOBILE: Model Baris ke Bawah (Card Stack) -->
+                <div class="block md:hidden space-y-3">
+                    <div v-for="(item, index) in draf.items" :key="'m-' + index" 
+                        class="p-3 bg-slate-50 border border-slate-200 rounded-xl relative flex flex-col gap-2.5">
+                        
+                        <!-- Tombol Hapus di pojok kanan atas card -->
+                        <div class="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Item #{{ index + 1 }}</span>
+                            <button type="button" @click="hapusItem(index)" :disabled="draf.items.length === 1"
+                                class="text-red-500 hover:text-red-700 text-xs disabled:opacity-30 p-1">
+                                <i class="pi pi-trash"></i> Hapus
+                            </button>
+                        </div>
+
+                        <!-- Pilih Produk -->
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-bold text-slate-600">
+                                {{ jenisPo === 'BAHAN_BAKU' ? 'Bahan Baku' : 'Kemasan' }}
+                            </label>
+                            <Dropdown v-model="item.produk" :options="produkBerdasarkanSuplier" optionLabel="label"
+                                appendTo="body"
+                                :placeholder="draf.suplier_id ? 'Pilih produk...' : 'Pilih supplier dulu'"
+                                class="w-full text-xs" :disabled="!draf.suplier_id" filter :loading="loadingProduk"
+                                :pt="{
+                                    root: { class: 'w-full h-[36px] bg-white border border-slate-200 rounded-md flex items-center text-xs' },
+                                    input: { class: 'text-xs p-2' }
+                                }">
+                            </Dropdown>
+                        </div>
+
+                        <!-- Qty & Harga berdampingan agar hemat tempat tapi tetap lapang -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-600">
+                                    {{ jenisPo === 'BAHAN_BAKU' ? 'Qty (Kg)' : 'Qty (Pcs)' }}
+                                </label>
+                                <input v-model.number="item.qty" type="number" min="0" step="0.01" required
+                                    class="w-full h-[36px] px-2 bg-white border border-slate-200 rounded-md text-xs text-right text-slate-800 font-semibold"
+                                    placeholder="0" />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-600">Harga Satuan</label>
+                                <div class="relative h-[36px]">
+                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">Rp</span>
+                                    <input v-model.number="item.harga_per_kg" type="number" min="0" step="1"
+                                        class="w-full h-full pl-7 pr-2 bg-white border border-slate-200 rounded-md text-xs text-right text-slate-800 font-semibold"
+                                        placeholder="0" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Subtotal per item -->
+                        <div class="flex justify-between items-center pt-2 border-t border-slate-200/60 mt-1">
+                            <span class="text-[10px] font-semibold text-slate-500">Subtotal Item:</span>
+                            <span class="font-bold text-emerald-700 text-xs">
+                                Rp {{ (subtotal(item)).toLocaleString('id-ID') }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. TAMPILAN DESKTOP: Model Tabel Rapi -->
+                <div class="hidden md:block overflow-x-auto pb-2 custom-scrollbar">
                     <table class="w-full text-left text-xs min-w-[700px]">
                         <thead class="text-slate-500 bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -116,10 +178,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(item, index) in draf.items" :key="index"
+                            <tr v-for="(item, index) in draf.items" :key="'d-' + index"
                                 class="bg-white border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
 
-                                <!-- Tinggi Dropdown ditekan jadi h-[34px] -->
                                 <td class="py-1.5 px-2 align-top">
                                     <Dropdown v-model="item.produk" :options="produkBerdasarkanSuplier" optionLabel="label"
                                         appendTo="body"
@@ -132,7 +193,6 @@
                                     </Dropdown>
                                 </td>
 
-                                <!-- Tinggi Input ditekan jadi h-[34px] -->
                                 <td class="py-1.5 px-2 align-top">
                                     <input v-model.number="item.qty" type="number" min="0" step="0.01" required
                                         class="w-full h-[34px] px-2 bg-slate-50 border border-slate-200 rounded-md text-xs text-right focus:ring-1 focus:ring-emerald-500 text-slate-800"
@@ -167,7 +227,7 @@
                 </div>
             </div>
 
-            <!-- Footer / Total Kalkulasi (Padding dipangkas) -->
+            <!-- Footer / Total Kalkulasi -->
             <div class="flex flex-col md:flex-row justify-between items-start bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-100">
                 <div class="flex flex-col gap-2 w-full md:w-auto mb-4 md:mb-0">
                     <div class="flex items-center gap-2">
@@ -209,6 +269,12 @@
                 </div>
             </div>
         </form>
+
+        <!-- Modal Tambah Suplier -->
+        <SupplierForm v-if="showModalSupplier" @close="showModalSupplier = false" @saved="handleSupplierSaved" />
+
+        <!-- Modal Tambah Produk -->
+        <ProductEntry v-if="showModalProduct" @close="showModalProduct = false" @saved="handleProductSaved" />
     </div>
 </template>
 
@@ -216,7 +282,6 @@
 import { reactive, computed, ref, watch, onMounted } from 'vue'
 import Dropdown from 'primevue/dropdown'
 import Select from 'primevue/select'
-import { CACHE_KEY, denganCache } from '@/utils/cacheService'
 import SupplierForm from '@/features/master/views/SupplierForm.vue'
 import ProductEntry from '@/features/master/views/ProductEntry.vue'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
@@ -301,10 +366,11 @@ const tarikProdukDariAPI = async (idSuplier) => {
 
     loadingProduk.value = true
     try {
-        const response = await api.get('master/master-produk/', {
+        // Menggunakan endpoint yang benar: 'master/produk/'
+        const response = await api.get('master/produk/', {
             params: {
-                suplier: idSuplier, // ✅ Filter Supplier WAJIB Menyala
-                jenis: jenisPo.value, // ✅ Format dipertahankan
+                suplier: idSuplier,
+                jenis: jenisPo.value,
                 aktif: true,
                 ringkas: 1
             }
@@ -362,13 +428,13 @@ const kirim = async () => {
         catatan: draf.catatan,
         pakai_ppn: draf.ppn_persen > 0,
         ppn_persen: draf.ppn_persen || 0,
-        kategori_po: jenisPo.value, // Sisipkan jenis PO (Bahan/Kemasan) agar tercatat ke Backend
+        kategori_po: jenisPo.value,
         items: draf.items.map(i => {
             const idSatuan = i.produk.satuan?.id || i.produk.satuan_id || i.produk.satuan;
             return {
                 produk_id: i.produk.id,
                 qty_pesan: Number(i.qty) || 0,
-                harga_per_kg: Number(i.harga_per_kg) || 0, // Backend logic tetap menerima field harga_per_kg, abaikan penamaannya
+                harga_per_kg: Number(i.harga_per_kg) || 0,
                 satuan: idSatuan
             }
         }),

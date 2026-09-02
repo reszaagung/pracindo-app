@@ -146,9 +146,6 @@
                                         <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
                                             <i class="pi pi-print text-[10px] mr-1"></i> Cetak
                                         </button>
-                                        <button @click="handleTutupPaksa(po.id)" title="Selesaikan & Tutup Paksa PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-power-off text-[10px] mr-1"></i> Tutup Paksa
-                                        </button>
                                     </template>
 
                                     <!-- AKSI SELESAI / DISETUJUI (Hanya Bisa Cetak) -->

@@ -152,6 +152,7 @@ function tutupForm() {
 }
 
 async function saatFormSukses() {
+  alert('Berhasil! ✅')
   tutupForm()
   await muatDaftarBatch()
 }

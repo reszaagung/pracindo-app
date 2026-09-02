@@ -206,7 +206,7 @@ def _pool_terpakai_sejak(pembelian):
     from produksi.models import BatchInputRaw
     return BatchInputRaw.objects.filter(
         produk_id=pembelian.produk_id,
-        batch__posted_at__isnull=False,  # <--- Ganti di sini
+        batch__posted_at__isnull=False,
         batch__posted_at__gte=pembelian.posted_at or pembelian.waktu,
     ).exists()
 
@@ -229,7 +229,7 @@ def terbitkan_pembelian_dari_penerimaan(penerimaan, user=None):
     if not baris:
         raise GalatInventory(f"Penerimaan {penerimaan.nomor} tidak punya item.")
 
-    se = _kunci_saldo(entitas.id)                     
+    se = _kunci_saldo(entitas.id)                    
     terbit = []
 
     for b in baris:
@@ -495,7 +495,7 @@ def jalankan_pemeriksaan_invarian():
         return {"cocok": False, "catatan": [str(e)], "rincian": []}
 
 def assert_invarian(raise_on_fail=True):
-    from produksi.models import Batch, StatusBatch
+    from produksi.models import Batch
     from produksi.services import saldo_batch
     
     catatan = []
@@ -506,7 +506,7 @@ def assert_invarian(raise_on_fail=True):
     pool_total = rp(pool_res_total + pool_kemasan_total)
     
     wip_total = D0_RP
-    for b in Batch.objects.filter(status=StatusBatch.POSTED):
+    for b in Batch.objects.filter(posted_at__isnull=False):
         wip_total += saldo_batch(b).sisa_nilai
         
     fisik_total = rp(pool_total + wip_total)

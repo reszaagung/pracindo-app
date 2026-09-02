@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -87,6 +86,7 @@ def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
     if laporan:
         penerimaan.ada_selisih = True
         penerimaan.save(update_fields=['ada_selisih'])
+    
     setoran = terbitkan_pembelian_dari_penerimaan(penerimaan, user=user)
 
     return penerimaan, laporan, setoran
@@ -95,7 +95,8 @@ def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
 def _simpan_item(penerimaan, b, po):
     from akunting.models import PurchaseOrderItem
 
-    po_item = PurchaseOrderItem.objects.select_for_update().get(
+    # Ditambahkan select_related('produk') agar _periksa_selisih bisa mengecek JENIS produk
+    po_item = PurchaseOrderItem.objects.select_related('produk').select_for_update().get(
         pk=b['po_item_id'], purchase_order=po)
 
     if po_item.harga_per_kg is None:
@@ -144,27 +145,42 @@ def _periksa_selisih(penerimaan, item, user):
 
         BERAT_KURANG  timbang != deklarasi   koli lengkap, isinya beda
         RUSAK         ada qty ditolak        barang tidak bisa dipakai
-
-    Keduanya klaim ke SUPLIER. Tidak satu pun menyentuh pool atau hak
-    entitas -- barang yang tidak pernah masuk tidak perlu dikeluarkan.
     """
     hasil = []
+    
+    jenis_produk = getattr(item.po_item.produk, 'jenis', 'BAHAN_BAKU')
+    satuan = 'Pcs' if jenis_produk == 'KEMASAN' else 'Kg'
 
     if item.qty_deklarasi:
         beda = item.selisih_berat
-        ambang = (item.qty_deklarasi * TOLERANSI_BERAT).quantize(Q3)
+        
+        # Kemasan harus pas (0% toleransi). Bahan baku pakai toleransi 0.5%
+        if jenis_produk == 'KEMASAN':
+            ambang = Decimal('0')
+        else:
+            ambang = (item.qty_deklarasi * TOLERANSI_BERAT).quantize(Q3)
+
         if abs(beda) > ambang:
             arah = 'kurang' if beda < 0 else 'lebih'
+            
+            # Kalimat laporan dibedakan antara Kemasan dan Bahan Baku
+            if jenis_produk == 'KEMASAN':
+                uraian = (f'Deklarasi {item.qty_deklarasi} {satuan}, aktual '
+                          f'{item.qty_diterima + item.qty_ditolak} {satuan}. '
+                          f'Selisih {beda} ({arah}).')
+            else:
+                uraian = (f'Deklarasi {item.jumlah_koli} koli '
+                          f'= {item.qty_deklarasi} Kg, timbang '
+                          f'{item.qty_diterima + item.qty_ditolak} Kg. '
+                          f'Selisih {beda} ({arah}), melebihi toleransi '
+                          f'{ambang} Kg.')
+
             hasil.append(buat_laporan(
                 penerimaan=penerimaan, item=item, user=user,
                 jenis=(JenisSelisih.BERAT_KURANG if beda < 0
                        else JenisSelisih.LEBIH_KIRIM),
                 qty_selisih=beda,
-                uraian=f'Deklarasi {item.jumlah_koli} koli '
-                       f'= {item.qty_deklarasi} Kg, timbang '
-                       f'{item.qty_diterima + item.qty_ditolak} Kg. '
-                       f'Selisih {beda} ({arah}), melebihi toleransi '
-                       f'{ambang} Kg.',
+                uraian=uraian,
             ))
 
     if item.qty_ditolak > 0:
@@ -172,20 +188,18 @@ def _periksa_selisih(penerimaan, item, user):
             penerimaan=penerimaan, item=item, user=user,
             jenis=JenisSelisih.RUSAK,
             qty_selisih=-item.qty_ditolak,
-            uraian=f'Ditolak {item.qty_ditolak} Kg. '
+            uraian=f'Ditolak {item.qty_ditolak} {satuan}. '
                    f'Alasan: {item.alasan_tolak}',
         ))
 
     return hasil
+
 
 @transaction.atomic
 def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih, uraian,
                  foto_id=None):
     """
     Berita acara ketidaksesuaian.
-
-    nilai_selisih dihitung dari harga PO, bukan diisi manusia. Gudang
-    tidak melihat rupiah -- dia menimbang dan memotret.
     """
     if item is None:
         harga = Decimal('0')          # laporan manual tanpa item
@@ -248,12 +262,7 @@ def ajukan_ke_suplier(*, laporan_id, user):
 def selesaikan_laporan(*, laporan_id, resolusi, user, nilai_klaim=None,
                        catatan=''):
     """
-    RESOLUSI menentukan konsekuensi finansialnya:
-
-        TERIMA   nilai tetap, selisih diserap sebagai beban
-        POTONG   nilai_klaim mengurangi tagihan suplier
-        SUSULAN  PO dibuka kembali, menunggu kiriman berikutnya
-        RETUR    barang dikembalikan
+    RESOLUSI menentukan konsekuensi finansialnya.
     """
     from akunting.models import StatusPO
 

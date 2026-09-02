@@ -136,10 +136,10 @@ class PackingSerializer(serializers.ModelSerializer):
         batch = data.get("batch") or getattr(inst, "batch", None)
         if ent is not None and not ent.aktif:
             raise serializers.ValidationError({"entitas": f"Entitas {ent.kode} nonaktif."})
-        if batch is not None and batch.status != StatusDokumen.POSTED:
-            raise serializers.ValidationError({
-                "batch": f"Batch {batch.nomor} belum POSTED (status saat ini: {batch.status})."
-            })
+        if batch is not None and not batch.posted_at:
+            raise serializers.ValidationError(
+                {"batch": f"Batch {batch.nomor} belum POSTED."}
+            )
         return data
 
         

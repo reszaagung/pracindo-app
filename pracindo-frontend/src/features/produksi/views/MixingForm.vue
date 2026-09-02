@@ -67,9 +67,14 @@
                 <td class="px-4 py-2">
                   <select v-model="row.raw" @change="perbaruiTelemetriBom(row); cekBahanDuplikat(row)" class="w-full min-w-[180px] px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
                     <option value="" disabled>Pilih bahan baku</option>
-                    <option v-for="r in daftarRaw" :key="r.raw" :value="r.raw">
-                      {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
-                    </option>
+                      <option 
+                        v-for="r in daftarRaw" 
+                        :key="r.raw" 
+                        :value="r.raw"
+                        :disabled="bomRows.some(b => b.raw === r.raw && b._id !== row._id)"
+                      >
+                        {{ r.produk_kode }} - {{ r.produk_nama }} ({{ formatKg(r.qty_kg) }} Kg)
+                      </option>
                   </select>
                 </td>
                 <td class="px-4 py-2">

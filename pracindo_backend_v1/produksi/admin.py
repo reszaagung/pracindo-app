@@ -28,11 +28,9 @@ class BatchAdmin(admin.ModelAdmin):
     ANGKA = ("nomor", "qty_hasil", "nilai_hasil", "nilai_susut", "posted_at")
 
     def get_readonly_fields(self, request, obj=None):
-        # Karena batch langsung otomatis ter-posting, kunci semua field jika objek sudah ada
         if obj:
             return [f.name for f in Batch._meta.fields] + ["harga_per_kg"]
         return list(self.ANGKA)
 
     def has_delete_permission(self, request, obj=None):
-        # Sesuai aturan model: Batch tidak bisa dihapus langsung
         return False

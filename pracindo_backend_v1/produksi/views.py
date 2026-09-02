@@ -4,17 +4,15 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
-from .services import hapus_batch_dan_kembalikan_stok
 
 from .models import Tangki, Batch, TipeProses
 from .serializers import TangkiSerializer, BatchSerializer
 from .services import (
     simpan_dan_posting_mixing,
     simpan_dan_posting_blending,
-    posting_mixing,
-    posting_blending,
     pratinjau_mixing,
     pratinjau_blending,
+    hapus_batch_dan_kembalikan_stok,
     GalatProduksi,
     KonflikBatch,
     _nomor_batch
@@ -25,7 +23,7 @@ from .services import (
 @permission_classes([IsAuthenticated])
 def pratinjau_batch(request):
     jenis = request.data.get("jenis", request.query_params.get("jenis", TipeProses.MIXING)).upper()
-    susut_kg = request.data.get("tekor_kg", request.query_params.get("tekor_kg", 0))  # Frontend kirim tekor_kg
+    susut_kg = request.data.get("tekor_kg", request.query_params.get("tekor_kg", 0))
     
     if jenis == TipeProses.MIXING:
         baris = request.data.get("materials", [])
@@ -71,7 +69,6 @@ class TangkiViewSet(viewsets.ModelViewSet):
         from decimal import Decimal
         
         tangki = self.get_object()
-        # Perbaikan: hanya mencari batch yang punya yield (artinya sudah selesai diposting)
         batches_in_tank = tangki.batch_set.filter(qty_hasil__gt=0).order_by("-waktu")
         
         total_qty = Decimal("0")
@@ -123,16 +120,15 @@ class BatchViewSet(viewsets.ModelViewSet):
         return Response({"nomor": nomor})
 
     def create(self, request, *args, **kwargs):
-        # Frontend mengirim batch ini: POST /api/v1/produksi/batch/
         try:
             jenis = request.data.get("jenis", TipeProses.MIXING).upper()
             params = {
                 "nama_hasil": request.data.get("nama_hasil"),
-                "tangki_id": request.data.get("tangki_tujuan"), # Frontend pakai tangki_tujuan
-                "susut_kg": request.data.get("tekor_kg"), # Frontend pakai tekor_kg
+                "tangki_id": request.data.get("tangki_tujuan"),
+                "susut_kg": request.data.get("tekor_kg"),
                 "tanggal": timezone.localdate(),
                 "user": request.user,
-                "nomor_custom": request.data.get("batch") # Untuk bypass nomor-baru 
+                "nomor_custom": request.data.get("batch") 
             }
             
             if jenis == TipeProses.MIXING:
@@ -148,11 +144,10 @@ class BatchViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
     @action(detail=True, methods=['delete'])
-        def hapus_dengan_kembali_stok(self, request, pk=None):
-            try:
-                hasil = hapus_batch_dan_kembalikan_stok(pk, request.user)
-                return Response(hasil, status=200)
-            except Exception as e:
-                return Response({"pesan": str(e)}, status=400)
+    def hapus_dengan_kembali_stok(self, request, pk=None):
+        try:
+            hasil = hapus_batch_dan_kembalikan_stok(pk, request.user)
+            return Response(hasil, status=200)
+        except Exception as e:
+            return Response({"pesan": str(e)}, status=400)
