@@ -203,10 +203,10 @@ def void_pembelian(pembelian, alasan, user=None):
     return pembelian
 
 def _pool_terpakai_sejak(pembelian):
-    from produksi.models import BatchInputRaw, StatusBatch
+    from produksi.models import BatchInputRaw
     return BatchInputRaw.objects.filter(
         produk_id=pembelian.produk_id,
-        batch__status=StatusBatch.POSTED,
+        batch__posted_at__isnull=False,  # <--- Ganti di sini
         batch__posted_at__gte=pembelian.posted_at or pembelian.waktu,
     ).exists()
 

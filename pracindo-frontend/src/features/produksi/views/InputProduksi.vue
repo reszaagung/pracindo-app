@@ -3,13 +3,13 @@
     <header class="ip-header hidden lg:block">
       <h1>Modul Produksi (Mixing &amp; Blending)</h1>
       <p v-if="mode === 'form'" class="ip-subtitle">
-        {{ editingBatchId ? 'Ubah Draft Batch' : 'Buat Batch Baru' }}
+        {{ editingBatchId ? 'Ubah Batch' : 'Buat Batch Baru' }}
         {{ jenisProduksi === JENIS.MIXING ? 'Mixing' : 'Blending' }}
       </p>
     </header>
-
+    
     <p v-if="errorMsg" class="ip-alert ip-alert--error">{{ errorMsg }}</p>
-
+    
     <section v-if="mode === 'list'" class="ip-list">
       <div class="ip-toolbar">
         <div class="ip-filter">
@@ -18,12 +18,7 @@
             <option value="MIXING">Mixing</option>
             <option value="BLENDING">Blending</option>
           </select>
-          <select v-model="filter.status" @change="muatDaftarBatch">
-            <option value="">Semua Status</option>
-            <option value="DRAFT">Draft</option>
-            <option value="POSTED">Posted</option>
-            <option value="VOID">Void</option>
-          </select>
+          <!-- Filter status dihapus dari sini -->
           <input
             v-model="filter.search"
             type="text"
@@ -37,7 +32,7 @@
           <button class="btn btn--secondary" @click="bukaFormBaru(JENIS.BLENDING)">+ Batch Blending</button>
         </div>
       </div>
-
+      
       <div class="ip-table-wrap">
         <table class="ip-table">
           <thead>
@@ -48,9 +43,9 @@
               <th>Tangki Tujuan</th>
               <th>Nama Hasil</th>
               <th>Yield (Kg)</th>
-              <th>Sisa (Kg)</th> 
-              <th>Cost Nom</th>    
-              <th>Status</th>
+              <th>Sisa (Kg)</th>
+              <th>Cost Nom</th>
+              <th>Status</th> <!-- Kolom Aksi dihapus -->
             </tr>
           </thead>
           <tbody>
@@ -61,17 +56,20 @@
               <td colspan="9" class="ip-empty">Belum ada batch produksi.</td>
             </tr>
             <tr v-for="b in daftarBatch" :key="b.id">
-              <td class="mono">{{ b.batch }}</td>
+              <td class="mono font-medium text-slate-800">{{ b.batch }}</td>
               <td>{{ formatTanggal(b.waktu || b.tanggal) }}</td>
               <td>{{ b.jenis === 'BLENDING' ? 'Blending' : 'Mixing' }}</td>
               <td>{{ b.tangki_tujuan_nama || b.tangki_tujuan }}</td>
               <td>{{ b.nama_hasil }}</td>
               <td class="num">{{ formatKg(b.qty_hasil) }}</td>
               <td class="num font-bold text-blue-600">{{ formatKg(b.sisa_qty) }}</td>
-              <td class="num">{{ formatRupiah(b.harga_per_kg || b.harga_rata) }}</td>
+              <td class="num font-semibold text-slate-700">
+                {{ formatRupiah(Number(b.qty_hasil) > 0 ? Number(b.nilai_hasil) / Number(b.qty_hasil) : 0) }}
+              </td>
               <td>
-                <span class="status" :class="`status--${(b.status || 'draft').toLowerCase()}`">
-                  {{ b.status || 'DRAFT' }}
+                <!-- Logika Status Baru: PROSES vs SELESAI -->
+                <span class="status" :class="Number(b.qty_hasil) > 0 ? 'status--selesai' : 'status--proses'">
+                  {{ Number(b.qty_hasil) > 0 ? 'SELESAI' : 'PROSES' }}
                 </span>
               </td>
             </tr>
@@ -79,7 +77,7 @@
         </table>
       </div>
     </section>
-
+    
     <section v-else class="ip-form">
       <div class="ip-tabs" v-if="!editingBatchId">
         <button
@@ -93,7 +91,6 @@
           @click="jenisProduksi = JENIS.BLENDING"
         >2. Blending (WIP Tangki + Bahan &rarr; Tangki)</button>
       </div>
-
       <MixingForm
         v-if="jenisProduksi === JENIS.MIXING"
         :batch-id="editingBatchId"
@@ -111,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { useInputProduksi } from '../composables/useInputProduksi'
 import MixingForm from './MixingForm.vue'
 import BlendingForm from './BlendingForm.vue'
@@ -119,14 +116,10 @@ import BlendingForm from './BlendingForm.vue'
 const {
   JENIS,
   loadingList,
-  submitting,
   errorMsg,
   daftarBatch,
   filter,
-  muatDaftarBatch,
-  postingBatch,
-  voidBatch,
-  hapusDraft
+  muatDaftarBatch
 } = useInputProduksi()
 
 const mode = ref('list')
@@ -185,13 +178,9 @@ async function saatFormSukses() {
 .btn--primary:hover { background: var(--primary-dark); }
 .btn--secondary { background: var(--primary-soft); border-color: transparent; color: var(--primary-dark); }
 .btn--secondary:hover { background: var(--primary-light); }
-.btn--success { background: var(--success-soft); border-color: transparent; color: #15803D; }
-.btn--success:hover { background: #D3F3DD; }
-.btn--danger { background: var(--danger-soft); border-color: transparent; color: #DC2626; }
-.btn--danger:hover { background: #FBD5D5; }
 .btn--ghost { background: transparent; border-color: var(--border-color); color: var(--text-secondary); }
 .btn--ghost:hover { background: var(--bg-input); color: var(--text-primary); }
-.btn--sm { padding: 0.35rem 0.7rem; font-size: 0.75rem; margin-right: 4px; border-radius: var(--radius-full); }
+.btn--sm { padding: 0.35rem 0.7rem; font-size: 0.75rem; border-radius: var(--radius-full); }
 .ip-table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card); }
 .ip-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .ip-table th, .ip-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
@@ -203,14 +192,16 @@ async function saatFormSukses() {
 .num { text-align: right; font-family: var(--font-mono); }
 .mono { font-family: var(--font-mono); }
 .status { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: var(--radius-full); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
-.status--draft { background: var(--warning-soft); color: #B45309; }
-.status--posted { background: var(--success-soft); color: #15803D; }
-.status--void { background: var(--danger-soft); color: #DC2626; }
-.ip-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Warna Status Baru */
+.status--proses { background: var(--warning-soft); color: #B45309; }
+.status--selesai { background: var(--success-soft); color: #15803D; }
+
 .ip-tabs { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); overflow-x: auto; }
 .ip-tab { padding: 0.7rem 1.1rem; border: 1.5px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary); border-radius: var(--radius-full); cursor: pointer; font-size: 0.82rem; font-weight: 700; white-space: nowrap; transition: all var(--transition); }
 .ip-tab:hover { border-color: var(--border-strong); }
 .ip-tab--active { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--shadow-btn); }
+
 @media (max-width: 768px) {
   .input-produksi { padding: var(--space-md); }
   .ip-toolbar { flex-direction: column; align-items: stretch; }

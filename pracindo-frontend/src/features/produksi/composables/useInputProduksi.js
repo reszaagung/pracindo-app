@@ -334,7 +334,7 @@ export function useInputProduksi() {
     }
   }
 
-  async function simpanDraft() {
+  async function simpanDanPosting() {
     errorMsg.value = validasiForm()
     if (errorMsg.value) return false
     submitting.value = true
@@ -345,42 +345,16 @@ export function useInputProduksi() {
       } else {
         await apiBatch.buat(payload)
       }
-      await muatDaftarBatch()
-      tutupForm()
-      return true
-    } catch (e) {
-      const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal menyimpan draft batch')
-      return false
-    } finally {
-      submitting.value = false
-    }
-  }
-
-  async function simpanDanPosting() {
-    errorMsg.value = validasiForm()
-    if (errorMsg.value) return false
-    submitting.value = true
-    try {
-      const payload = susunPayload()
-      let targetBatchId = editingBatchId.value
-      if (targetBatchId) {
-        await apiBatch.ubah(targetBatchId, payload)
-      } else {
-        const res = await apiBatch.buat(payload)
-        targetBatchId = res?.id ?? res?.data?.id ?? res
-      }
-      if (targetBatchId) {
-        await apiBatch.posting(targetBatchId)
-      } else {
-        throw new Error('ID Batch tidak ditemukan dari respons server.')
-      }
+      
+      // Karena backend sudah auto-posting pada saat 'buat' atau 'ubah',
+      // kita tidak perlu lagi memanggil endpoint apiBatch.posting().
+      // Langsung refresh data dan tutup form.
       await Promise.all([muatDaftarBatch(), muatRawPool()])
       tutupForm()
       return true
     } catch (e) {
       const data = e?.response?.data
-      errorMsg.value = data?.detail || data?.pesan || e.message || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal memposting batch secara langsung')
+      errorMsg.value = data?.detail || data?.pesan || e.message || (typeof data === 'object' ? Object.values(data)[0] : 'Gagal menyimpan batch produksi')
       return false
     } finally {
       submitting.value = false
@@ -437,7 +411,6 @@ export function useInputProduksi() {
     saatTangkiAsalDipilih,
     saatBatchWipDipilih,
     mintaPratinjau,
-    simpanDraft,
     simpanDanPosting
   }
 }

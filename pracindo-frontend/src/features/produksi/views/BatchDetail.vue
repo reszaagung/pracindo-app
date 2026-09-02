@@ -13,16 +13,14 @@
           <p class="text-sm text-slate-500 mt-1 font-mono">{{ batch?.batch || batch?.nomor || 'Memuat...' }}</p>
         </div>
       </div>
+      
+      <!-- Badge Status Dinamis (Otomatis tanpa data dari database) -->
       <span
         v-if="batch"
         class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold border"
-        :class="{
-          'bg-amber-50 text-amber-700 border-amber-200': batch.status === 'DRAFT',
-          'bg-emerald-50 text-emerald-700 border-emerald-200': batch.status === 'POSTED',
-          'bg-red-50 text-red-700 border-red-200': batch.status === 'VOID'
-        }"
+        :class="Number(batch.qty_hasil) > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'"
       >
-        {{ batch.status }}
+        {{ Number(batch.qty_hasil) > 0 ? 'SELESAI' : 'PROSES' }}
       </span>
     </div>
 
@@ -166,7 +164,6 @@ import { apiBatch } from '../api'
 
 const route = useRoute()
 const router = useRouter()
-
 const loading = ref(true)
 const errorMsg = ref('')
 const batch = ref(null)
@@ -205,11 +202,11 @@ async function muatDetail() {
 
   loading.value = true
   errorMsg.value = ''
-
+  
   try {
     const resDetail = await apiBatch.detail(id)
     batch.value = resDetail
-
+    
     try {
       const resKomp = await apiBatch.komposisi(id)
       komposisi.value = resKomp

@@ -16,9 +16,7 @@ export const apiBatch = {
   detail: (id) => http.get(`${P}/batch/${id}/`).then((r) => r.data),
   buat: (payload) => http.post(`${P}/batch/`, payload).then((r) => r.data),
   ubah: (id, payload) => http.patch(`${P}/batch/${id}/`, payload).then((r) => r.data),
-  hapus: (id) => http.delete(`${P}/batch/${id}/`),
-  posting: (id) => http.post(`${P}/batch/${id}/post/`).then((r) => r.data),
-  void: (id, alasan) => http.post(`${P}/batch/${id}/void/`, { alasan }).then((r) => r.data),
+  
   saldo: (id) => http.get(`${P}/batch/${id}/saldo/`).then((r) => r.data),
   nomorBaru: (jenis) => http.get(`${P}/batch/nomor-baru/`, { params: { jenis } }).then((r) => r.data),
 
@@ -36,10 +34,8 @@ export const apiProduksi = {
   getBatches: apiBatch.daftar,
   getBatch: apiBatch.detail,
   createBatch: apiBatch.buat,
-  postingBatch: apiBatch.posting,
-  voidBatch: apiBatch.void,
   getTangkis: apiTangki.daftar,
-  getTangki: apiTangki.detail, // PERBAIKAN 3: Sebelumnya mengarah ke apiTangki.saldo, diubah ke apiTangki.detail
+  getTangki: apiTangki.detail,
   getTangkiSaldo: apiTangki.saldo,
   pratinjauBatch: apiPratinjau
 }

@@ -4,6 +4,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
+from .services import hapus_batch_dan_kembalikan_stok
 
 from .models import Tangki, Batch, TipeProses
 from .serializers import TangkiSerializer, BatchSerializer
@@ -15,7 +16,8 @@ from .services import (
     pratinjau_mixing,
     pratinjau_blending,
     GalatProduksi,
-    KonflikBatch
+    KonflikBatch,
+    _nomor_batch
 )
 
 
@@ -23,13 +25,13 @@ from .services import (
 @permission_classes([IsAuthenticated])
 def pratinjau_batch(request):
     jenis = request.data.get("jenis", request.query_params.get("jenis", TipeProses.MIXING)).upper()
-    susut_kg = request.data.get("susut_kg", request.query_params.get("susut_kg"))
+    susut_kg = request.data.get("tekor_kg", request.query_params.get("tekor_kg", 0))  # Frontend kirim tekor_kg
     
     if jenis == TipeProses.MIXING:
-        baris = request.data.get("baris", request.data.get("materials", []))
+        baris = request.data.get("materials", [])
         res = pratinjau_mixing(baris=baris, susut_kg=susut_kg)
     elif jenis == TipeProses.BLENDING:
-        baris_sumber = request.data.get("baris_sumber", request.data.get("wip_sources", []))
+        baris_sumber = request.data.get("wip_sources", [])
         res = pratinjau_blending(baris_sumber=baris_sumber, susut_kg=susut_kg)
     else:
         return Response({"error": f"Jenis proses '{jenis}' tidak dikenal."}, status=status.HTTP_400_BAD_REQUEST)
@@ -69,7 +71,8 @@ class TangkiViewSet(viewsets.ModelViewSet):
         from decimal import Decimal
         
         tangki = self.get_object()
-        batches_in_tank = tangki.batch_set.filter(status="POSTED").order_by("-waktu")
+        # Perbaikan: hanya mencari batch yang punya yield (artinya sudah selesai diposting)
+        batches_in_tank = tangki.batch_set.filter(qty_hasil__gt=0).order_by("-waktu")
         
         total_qty = Decimal("0")
         total_nilai = Decimal("0")
@@ -111,60 +114,45 @@ class BatchViewSet(viewsets.ModelViewSet):
         jenis = self.request.query_params.get("jenis")
         if jenis:
             qs = qs.filter(jenis=jenis)
-        status_batch = self.request.query_params.get("status")
-        if status_batch:
-            qs = qs.filter(status=status_batch)
         return qs
+        
+    @action(detail=False, methods=["get"], url_path="nomor-baru")
+    def nomor_baru(self, request):
+        jenis = request.query_params.get("jenis", TipeProses.MIXING).upper()
+        nomor = _nomor_batch(jenis, timezone.localdate())
+        return Response({"nomor": nomor})
 
-    def perform_create(self, serializer):
-        serializer.save(dibuat_oleh=self.request.user)
-
-    @action(detail=False, methods=["post"], url_path="mixing")
-    def mixing(self, request):
+    def create(self, request, *args, **kwargs):
+        # Frontend mengirim batch ini: POST /api/v1/produksi/batch/
         try:
+            jenis = request.data.get("jenis", TipeProses.MIXING).upper()
             params = {
                 "nama_hasil": request.data.get("nama_hasil"),
-                "tangki_id": request.data.get("tangki_id"),
-                "baris": request.data.get("baris", request.data.get("materials", [])),
-                "susut_kg": request.data.get("susut_kg"),
-                "tanggal": request.data.get("tanggal"),
+                "tangki_id": request.data.get("tangki_tujuan"), # Frontend pakai tangki_tujuan
+                "susut_kg": request.data.get("tekor_kg"), # Frontend pakai tekor_kg
+                "tanggal": timezone.localdate(),
                 "user": request.user,
+                "nomor_custom": request.data.get("batch") # Untuk bypass nomor-baru 
             }
-            batch = simpan_dan_posting_mixing(**params)
-            return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
-        except (GalatProduksi, KonflikBatch) as e:
-            return Response({"detail": str(e)}, status=getattr(e, "http", status.HTTP_400_BAD_REQUEST))
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False, methods=["post"], url_path="blending")
-    def blending(self, request):
-        try:
-            params = {
-                "nama_hasil": request.data.get("nama_hasil"),
-                "tangki_id": request.data.get("tangki_id"),
-                "baris_sumber": request.data.get("baris_sumber", request.data.get("wip_sources", [])),
-                "susut_kg": request.data.get("susut_kg"),
-                "tanggal": request.data.get("tanggal"),
-                "user": request.user,
-            }
-            batch = simpan_dan_posting_blending(**params)
-            return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
-        except (GalatProduksi, KonflikBatch) as e:
-            return Response({"detail": str(e)}, status=getattr(e, "http", status.HTTP_400_BAD_REQUEST))
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=["post"], url_path="posting")
-    def posting(self, request, pk=None):
-        try:
-            batch = self.get_object()
-            if batch.jenis == TipeProses.MIXING:
-                hasil = posting_mixing(batch, user=request.user)
+            
+            if jenis == TipeProses.MIXING:
+                params["baris"] = request.data.get("materials", [])
+                batch = simpan_dan_posting_mixing(**params)
             else:
-                hasil = posting_blending(batch, user=request.user)
-            return Response(BatchSerializer(hasil).data)
+                params["baris_sumber"] = request.data.get("wip_sources", [])
+                batch = simpan_dan_posting_blending(**params)
+                
+            return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
         except (GalatProduksi, KonflikBatch) as e:
             return Response({"detail": str(e)}, status=getattr(e, "http", status.HTTP_400_BAD_REQUEST))
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+    @action(detail=True, methods=['delete'])
+        def hapus_dengan_kembali_stok(self, request, pk=None):
+            try:
+                hasil = hapus_batch_dan_kembalikan_stok(pk, request.user)
+                return Response(hasil, status=200)
+            except Exception as e:
+                return Response({"pesan": str(e)}, status=400)
