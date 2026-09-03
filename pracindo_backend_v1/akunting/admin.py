@@ -1,16 +1,26 @@
 from django.contrib import admin
 
+from import_export.admin import ExportMixin, ImportExportModelAdmin
+
 from .models import (
     Akun, FakturPembelian, JurnalDetail, JurnalUmum, KartuHutang,
     PurchaseOrder, PurchaseOrderItem, SaldoAkunBulanan, UangMukaSuplier,
     FakturPenjualan, KartuPiutang ,PembelianKemasan, 
     PurchaseOrderKemasanItem
 )
+from .resources import (
+    AkunResource, SaldoAkunBulananResource, JurnalUmumResource,
+    PurchaseOrderResource, PurchaseOrderItemResource,
+    FakturPembelianResource, UangMukaSuplierResource,
+    FakturPenjualanResource, PembelianKemasanResource,
+    PurchaseOrderKemasanItemResource,
+)
 
 # ---------------- Bagan akun ----------------
 
 @admin.register(Akun)
-class AkunAdmin(admin.ModelAdmin):
+class AkunAdmin(ImportExportModelAdmin):
+    resource_classes = [AkunResource]
     list_display = ('kode', 'nama', 'tipe', 'saldo_normal', 'parent',
                     'boleh_diposting', 'aktif')
     list_filter = ('tipe', 'boleh_diposting', 'aktif')
@@ -23,7 +33,8 @@ class AkunAdmin(admin.ModelAdmin):
 
 
 @admin.register(SaldoAkunBulanan)
-class SaldoAkunBulananAdmin(admin.ModelAdmin):
+class SaldoAkunBulananAdmin(ImportExportModelAdmin):
+    resource_classes = [SaldoAkunBulananResource]
     list_display = ('akun', 'entitas', 'tahun', 'bulan',
                     'saldo_awal', 'total_debit', 'total_kredit', 'saldo_akhir')
     list_filter = ('entitas', 'tahun', 'bulan')
@@ -44,7 +55,8 @@ class JurnalDetailInline(admin.TabularInline):
 
 
 @admin.register(JurnalUmum)
-class JurnalUmumAdmin(admin.ModelAdmin):
+class JurnalUmumAdmin(ExportMixin, admin.ModelAdmin):
+    resource_classes = [JurnalUmumResource]
     list_display = ('nomor', 'tanggal', 'entitas', 'kejadian', 'referensi',
                     'total_debit', 'seimbang', 'sudah_dibalik')
     list_filter = ('entitas', 'kejadian', 'tanggal')
@@ -81,7 +93,8 @@ class PurchaseOrderItemInline(admin.TabularInline):
         return obj.sisa_qty if obj.pk else '-'
 
 @admin.register(PurchaseOrder)
-class PurchaseOrderAdmin(admin.ModelAdmin):
+class PurchaseOrderAdmin(ImportExportModelAdmin):
+    resource_classes = [PurchaseOrderResource]
     list_display = ('no_po', 'tanggal', 'entitas', 'suplier', 'status',
                     'subtotal', 'dibuat_oleh') 
     list_filter = ('entitas', 'status', 'tanggal')
@@ -93,21 +106,26 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).dengan_total()
 
-    def has_delete_permission(self, request, obj=None):
-        return True
-
     @admin.display(description='Subtotal')
     def subtotal(self, obj):
         return obj.subtotal
+
     def save_model(self, request, obj, form, change):
         if getattr(obj, 'dibuat_oleh', None) is None:
             obj.dibuat_oleh = request.user
         super().save_model(request, obj, form, change)
+
+    def get_import_resource_kwargs(self, request, *args, **kwargs):
+        kwargs = super().get_import_resource_kwargs(request, *args, **kwargs)
+        kwargs['user'] = request.user
+        return kwargs
+
     def has_delete_permission(self, request, obj=None):
         return False
 
 @admin.register(PurchaseOrderItem)
-class PurchaseOrderItemAdmin(admin.ModelAdmin):
+class PurchaseOrderItemAdmin(ImportExportModelAdmin):
+    resource_classes = [PurchaseOrderItemResource]
     list_display = ('purchase_order', 'nama_item', 'qty_pesan',
                     'qty_diterima', 'harga_per_kg', 'amount')
     search_fields = ('nama_item', 'purchase_order__no_po')
@@ -126,7 +144,8 @@ class KartuHutangInline(admin.TabularInline):
         return False
 
 @admin.register(FakturPembelian)
-class FakturPembelianAdmin(admin.ModelAdmin):
+class FakturPembelianAdmin(ImportExportModelAdmin):
+    resource_classes = [FakturPembelianResource]
     list_display = ('nomor_faktur', 'tanggal_faktur', 'entitas', 'suplier',
                     'jenis', 'tanggal_jatuh_tempo', 'total_tagihan',
                     'sisa_hutang', 'status', 'terlambat')
@@ -147,11 +166,17 @@ class FakturPembelianAdmin(admin.ModelAdmin):
             obj.dibuat_oleh = request.user
         super().save_model(request, obj, form, change)
 
+    def get_import_resource_kwargs(self, request, *args, **kwargs):
+        kwargs = super().get_import_resource_kwargs(request, *args, **kwargs)
+        kwargs['user'] = request.user
+        return kwargs
+
     def has_delete_permission(self, request, obj=None):
         return False
 
 @admin.register(UangMukaSuplier)
-class UangMukaSuplierAdmin(admin.ModelAdmin):
+class UangMukaSuplierAdmin(ImportExportModelAdmin):
+    resource_classes = [UangMukaSuplierResource]
     list_display = ('tanggal', 'entitas', 'suplier', 'nominal', 'sisa')
     list_filter = ('entitas',)
     search_fields = ('suplier__nama', 'referensi')
@@ -171,7 +196,8 @@ class KartuPiutangInline(admin.TabularInline):
         return False
 
 @admin.register(FakturPenjualan)
-class FakturPenjualanAdmin(admin.ModelAdmin):
+class FakturPenjualanAdmin(ImportExportModelAdmin):
+    resource_classes = [FakturPenjualanResource]
     list_display = ('nomor_faktur', 'tanggal_faktur', 'entitas', 'pelanggan',
                     'tanggal_jatuh_tempo', 'total_tagihan', 'sisa_piutang', 'status')
     list_filter = ('entitas', 'status', 'tanggal_jatuh_tempo')
@@ -186,19 +212,14 @@ class FakturPenjualanAdmin(admin.ModelAdmin):
             obj.dibuat_oleh = request.user
         super().save_model(request, obj, form, change)
 
+    def get_import_resource_kwargs(self, request, *args, **kwargs):
+        kwargs = super().get_import_resource_kwargs(request, *args, **kwargs)
+        kwargs['user'] = request.user
+        return kwargs
+
     def has_delete_permission(self, request, obj=None):
         return False
 
-
-class PurchaseOrderKemasanItemInline(admin.TabularInline):
-    model = PurchaseOrderKemasanItem
-    extra = 0 
-    readonly_fields = ('qty_diterima', 'amount', 'sisa_qty')
-    autocomplete_fields = ('kemasan',) 
-
-    @admin.display(description='Sisa (Pcs/Unit)')
-    def sisa_qty(self, obj):
-        return obj.sisa_qty if obj.pk else '-'
 
 class PurchaseOrderKemasanItemInline(admin.TabularInline):
     model = PurchaseOrderKemasanItem
@@ -212,7 +233,8 @@ class PurchaseOrderKemasanItemInline(admin.TabularInline):
 
 # KOREKSI: Gunakan PembelianKemasan
 @admin.register(PembelianKemasan)
-class PembelianKemasanAdmin(admin.ModelAdmin):
+class PembelianKemasanAdmin(ImportExportModelAdmin):
+    resource_classes = [PembelianKemasanResource]
     # KOREKSI: Menghilangkan 'suplier' dan 'subtotal' karena belum ada di model
     list_display = ('no_po', 'tanggal', 'entitas', 'status', 'dibuat_oleh') 
     list_filter = ('entitas', 'status', 'tanggal')
@@ -225,12 +247,18 @@ class PembelianKemasanAdmin(admin.ModelAdmin):
         if getattr(obj, 'dibuat_oleh', None) is None:
             obj.dibuat_oleh = request.user
         super().save_model(request, obj, form, change)
+
+    def get_import_resource_kwargs(self, request, *args, **kwargs):
+        kwargs = super().get_import_resource_kwargs(request, *args, **kwargs)
+        kwargs['user'] = request.user
+        return kwargs
         
     def has_delete_permission(self, request, obj=None):
         return False
 
 @admin.register(PurchaseOrderKemasanItem)
-class PurchaseOrderKemasanItemAdmin(admin.ModelAdmin):
+class PurchaseOrderKemasanItemAdmin(ImportExportModelAdmin):
+    resource_classes = [PurchaseOrderKemasanItemResource]
     list_display = ('purchase_order', 'kemasan', 'qty_pesan',
                     'qty_diterima', 'harga_per_pcs', 'amount')
     search_fields = ('kemasan__nama', 'purchase_order__no_po')

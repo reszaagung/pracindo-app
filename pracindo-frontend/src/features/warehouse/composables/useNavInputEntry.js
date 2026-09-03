@@ -22,26 +22,12 @@ export function useNavInputEntry() {
             activate: true
         },
         {
-            id: 'log-packaging',
-            label: 'Riwayat Packing',
-            ikon: 'pi-history',
-            rute: '/warehouse/input/packaging/log',
-            activate: true
-        },
-        {
             id: 'discrepancy',
             label: 'Selisih / Retur',
             ikon: 'pi-exclamation-triangle',
             rute: '/warehouse/input/discrepancy',
             activate: true
         },
-        {
-            id: 'quality-control',
-            label: 'Inspeksi QC',
-            ikon: 'pi-check-square',
-            rute: '/warehouse/input/qc',
-            activate: false
-        }
     ]
 
     const aktif = (path) => {

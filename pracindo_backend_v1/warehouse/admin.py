@@ -1,12 +1,9 @@
 from django.contrib import admin
 
-from .models import LaporanSelisih, Packaging, PenerimaanBarang, PenerimaanItem
-
 from .models import (
     LaporanSelisih, Packaging, PenerimaanBarang, PenerimaanItem,
-    DeliveryOrder, DeliveryOrderItem 
+    DeliveryOrder, DeliveryOrderItem, MutasiStokBarangJadi, StokBarangJadi
 )
-
 
 class PenerimaanItemInline(admin.TabularInline):
     model = PenerimaanItem
@@ -18,7 +15,6 @@ class PenerimaanItemInline(admin.TabularInline):
     def selisih_berat(self, obj):
         return obj.selisih_berat if obj.pk else '-'
 
-
 class LaporanSelisihInline(admin.TabularInline):
     model = LaporanSelisih
     extra = 0
@@ -29,7 +25,6 @@ class LaporanSelisihInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         return False
-
 
 @admin.register(PenerimaanBarang)
 class PenerimaanBarangAdmin(admin.ModelAdmin):
@@ -43,7 +38,6 @@ class PenerimaanBarangAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return True
-
 
 @admin.register(LaporanSelisih)
 class LaporanSelisihAdmin(admin.ModelAdmin):
@@ -63,7 +57,6 @@ class LaporanSelisihAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-
 @admin.register(Packaging)
 class PackagingAdmin(admin.ModelAdmin):
     list_display = ('tanggal', 'produk', 'grup_bahan', 'qty_curah',
@@ -71,9 +64,7 @@ class PackagingAdmin(admin.ModelAdmin):
     list_filter = ('grup_bahan', 'tanggal')
     search_fields = ('produk__kode', 'produk__nama')
     list_select_related = ('produk', 'grup_bahan')
-# =========================================================
-# OUTBOUND / SURAT JALAN (DELIVERY ORDER)
-# =========================================================
+
 class DeliveryOrderItemInline(admin.TabularInline):
     model = DeliveryOrderItem
     extra = 0
@@ -92,4 +83,35 @@ class DeliveryOrderAdmin(admin.ModelAdmin):
         if obj and obj.status != 'DRAFT':
             return False
         return super().has_delete_permission(request, obj)
+
+@admin.register(MutasiStokBarangJadi)
+class MutasiStokBarangJadiAdmin(admin.ModelAdmin):
+    list_display = ('waktu', 'entitas', 'item', 'kemasan', 'arah', 'qty_unit', 'qty_kg', 'tipe')
+    list_filter = ('tipe', 'kemasan', 'entitas', 'waktu')
+    search_fields = ('item__kode', 'item__nama')
+    list_select_related = ('entitas', 'item')
     
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in MutasiStokBarangJadi._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+@admin.register(StokBarangJadi)
+class StokBarangJadiAdmin(admin.ModelAdmin):
+    list_display = ('entitas', 'item', 'kemasan', 'qty_unit', 'qty_kg')
+    list_filter = ('entitas', 'kemasan')
+    search_fields = ('item__kode', 'item__nama')
+    list_select_related = ('entitas', 'item')
+    
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in StokBarangJadi._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

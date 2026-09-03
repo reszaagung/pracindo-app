@@ -6,7 +6,6 @@ from django.db.models import CheckConstraint, Q, UniqueConstraint
 from django.utils import timezone
 from django.db import transaction
 from core.models import DiauditModel, TimeStampedModel
-
 D0 = Decimal("0")
 Q_RP = Decimal("0.01")
 Q_QTY = Decimal("0.001")

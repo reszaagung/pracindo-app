@@ -23,10 +23,6 @@ from .models import (
 )
 
 
-# =========================================================
-# PO — TAMPILAN GUDANG (TANPA HARGA)
-# =========================================================
-
 class POItemGudangSerializer(serializers.ModelSerializer):
     produk_kode = serializers.CharField(source='produk.kode', read_only=True)
     sisa_qty = serializers.DecimalField(max_digits=14, decimal_places=3,
@@ -45,15 +41,10 @@ class POGudangSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseOrder
-        # total_nilai TIDAK ADA.
         fields = ['id', 'no_po', 'tanggal', 'entitas_kode', 'suplier',
                   'suplier_nama', 'status', 'tanggal_kirim_diminta',
                   'catatan', 'item']
 
-
-# =========================================================
-# PENERIMAAN
-# =========================================================
 
 class PenerimaanItemSerializer(serializers.ModelSerializer):
     nama_item = serializers.CharField(source='po_item.nama_item', read_only=True)
@@ -73,11 +64,6 @@ class PenerimaanItemSerializer(serializers.ModelSerializer):
 
 
 class LaporanSelisihGudangSerializer(serializers.ModelSerializer):
-    """
-    Tampilan gudang. nilai_selisih dan nilai_klaim SENGAJA tidak ada --
-    gudang melaporkan fakta fisik, akunting yang menilai rupiahnya.
-    """
-
     penerimaan_nomor = serializers.CharField(source='penerimaan.nomor',
                                              read_only=True)
     jenis_label  = serializers.CharField(source='get_jenis_display', read_only=True)
@@ -125,8 +111,6 @@ class PenerimaanListSerializer(serializers.ModelSerializer):
 
 
 class BarisTerimaSerializer(serializers.Serializer):
-    # grup_bahan dan tangki TIDAK diminta dari klien -- keduanya
-    # diturunkan di server dari entitas PO.
     po_item_id    = serializers.IntegerField()
     jenis_kemasan = serializers.ChoiceField(choices=JenisKemasan.choices,
                                             default=JenisKemasan.CURAH)
@@ -163,13 +147,7 @@ class TerimaBarangSerializer(serializers.Serializer):
     baris          = BarisTerimaSerializer(many=True)
 
 
-# =========================================================
-# LAPORAN SELISIH — SISI AKUNTING
-# =========================================================
-
 class LaporanSelisihAkuntingSerializer(LaporanSelisihGudangSerializer):
-    """Menambahkan nilai rupiah. Hanya untuk modul akunting."""
-
     suplier_nama = serializers.CharField(source='suplier.nama', read_only=True)
     resolusi_label = serializers.CharField(source='get_resolusi_display',
                                            read_only=True, default=None)

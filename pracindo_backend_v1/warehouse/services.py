@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import F, Sum
 from django.utils import timezone
 
@@ -9,7 +9,7 @@ from core.services import pastikan_periode_terbuka
 
 from .models import (
     JenisKemasan, JenisSelisih, LaporanSelisih, PenerimaanBarang,
-    PenerimaanItem, Resolusi, StatusSelisih,
+    PenerimaanItem, Resolusi, StatusSelisih, DeliveryOrder
 )
 
 Q3 = Decimal('0.001')
@@ -18,23 +18,12 @@ TOLERANSI_BERAT = Decimal('0.005')
 
 
 def ambang_toleransi():
-    """Dipakai serializer/endpoint config supaya frontend tidak menebak."""
     return {"toleransi_berat_persen": str(TOLERANSI_BERAT * 100)}
 
 
 @transaction.atomic
 def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
                   dokumen_id=None, catatan=''):
-    """
-    Menerima kiriman suplier.
-
-    Mengembalikan (penerimaan, laporan_selisih, setoran).
-
-    Titik otorisasinya di sini: barang belum jadi milik siapa pun sampai
-    staf gudang menimbang dan menyimpan. Purchasing menerbitkan PO,
-    suplier mengirim, tapi hak baru lahir saat ada orang yang
-    menandatangani.
-    """
     from akunting.models import PurchaseOrder, StatusPO
     from inventory.services import terbitkan_pembelian_dari_penerimaan
 
@@ -95,7 +84,6 @@ def terima_barang(*, po_id, baris, no_surat_jalan, tanggal, user,
 def _simpan_item(penerimaan, b, po):
     from akunting.models import PurchaseOrderItem
 
-    # Ditambahkan select_related('produk') agar _periksa_selisih bisa mengecek JENIS produk
     po_item = PurchaseOrderItem.objects.select_related('produk').select_for_update().get(
         pk=b['po_item_id'], purchase_order=po)
 
@@ -140,12 +128,6 @@ def _simpan_item(penerimaan, b, po):
 
 
 def _periksa_selisih(penerimaan, item, user):
-    """
-    Dua jenis selisih dengan makna berbeda:
-
-        BERAT_KURANG  timbang != deklarasi   koli lengkap, isinya beda
-        RUSAK         ada qty ditolak        barang tidak bisa dipakai
-    """
     hasil = []
     
     jenis_produk = getattr(item.po_item.produk, 'jenis', 'BAHAN_BAKU')
@@ -154,7 +136,6 @@ def _periksa_selisih(penerimaan, item, user):
     if item.qty_deklarasi:
         beda = item.selisih_berat
         
-        # Kemasan harus pas (0% toleransi). Bahan baku pakai toleransi 0.5%
         if jenis_produk == 'KEMASAN':
             ambang = Decimal('0')
         else:
@@ -163,7 +144,6 @@ def _periksa_selisih(penerimaan, item, user):
         if abs(beda) > ambang:
             arah = 'kurang' if beda < 0 else 'lebih'
             
-            # Kalimat laporan dibedakan antara Kemasan dan Bahan Baku
             if jenis_produk == 'KEMASAN':
                 uraian = (f'Deklarasi {item.qty_deklarasi} {satuan}, aktual '
                           f'{item.qty_diterima + item.qty_ditolak} {satuan}. '
@@ -198,11 +178,8 @@ def _periksa_selisih(penerimaan, item, user):
 @transaction.atomic
 def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih, uraian,
                  foto_id=None):
-    """
-    Berita acara ketidaksesuaian.
-    """
     if item is None:
-        harga = Decimal('0')          # laporan manual tanpa item
+        harga = Decimal('0')
     else:
         harga = item.po_item.harga_per_kg
         if harga is None:
@@ -226,7 +203,6 @@ def buat_laporan(*, penerimaan, item, user, jenis, qty_selisih, uraian,
 @transaction.atomic
 def laporan_manual(*, penerimaan_id, jenis, qty_selisih, uraian, user,
                    penerimaan_item_id=None, foto_id=None):
-    """Temuan yang muncul belakangan, setelah barang sudah diterima."""
     penerimaan = PenerimaanBarang.objects.get(pk=penerimaan_id)
     item = (PenerimaanItem.objects.select_related('po_item')
             .get(pk=penerimaan_item_id) if penerimaan_item_id else None)
@@ -261,9 +237,6 @@ def ajukan_ke_suplier(*, laporan_id, user):
 @transaction.atomic
 def selesaikan_laporan(*, laporan_id, resolusi, user, nilai_klaim=None,
                        catatan=''):
-    """
-    RESOLUSI menentukan konsekuensi finansialnya.
-    """
     from akunting.models import StatusPO
 
     lap = (LaporanSelisih.objects.select_for_update()
@@ -307,7 +280,6 @@ def selesaikan_laporan(*, laporan_id, resolusi, user, nilai_klaim=None,
 
 @transaction.atomic
 def tutup_laporan(*, laporan_id, user, alasan):
-    """Ditutup tanpa klaim. Selisihnya diserap sebagai beban."""
     lap = LaporanSelisih.objects.select_for_update().get(pk=laporan_id)
     if lap.status in (StatusSelisih.DISELESAIKAN, StatusSelisih.DITUTUP):
         raise ValidationError(f'Laporan sudah {lap.get_status_display()}.')
@@ -389,11 +361,8 @@ def ringkasan_penerimaan(penerimaan_id):
         } for l in p.laporan_selisih.all()],
     }
 
-from .models import DeliveryOrder
 
 def distribusi_siap_kirim(entitas_id=None):
-    """Mengembalikan daftar DO asli dari database yang berstatus DRAFT."""
-    
     dos = DeliveryOrder.objects.filter(status='DRAFT').order_by('tanggal')
     
     hasil = []
@@ -409,8 +378,8 @@ def distribusi_siap_kirim(entitas_id=None):
         })
     return hasil
 
+
 def rincian_distribusi(distribusi_id):
-    """Mengembalikan detail DO beserta baris produknya dari database."""
     try:
         do = DeliveryOrder.objects.prefetch_related('item__produk').get(id=distribusi_id)
     except DeliveryOrder.DoesNotExist:
@@ -431,19 +400,36 @@ def rincian_distribusi(distribusi_id):
         hasil['baris'].append({
             'produk_kode': getattr(itm.produk, 'kode', '-'),
             'produk_nama': getattr(itm.produk, 'nama', '-'),
-            'stiker': '-', # Fitur stiker belum ada di model DeliveryOrderItem
+            'stiker': '-',
             'qty': itm.qty,
             'unit': 'KG'
         })
     return hasil
 
+
 def tandai_terkirim(distribusi_id, waktu, oleh):
-    """Mengubah status Delivery Order nyata di database."""
     DeliveryOrder.objects.filter(id=distribusi_id).update(status='SELESAI')
 
+
 def kembalikan_stok(distribusi_id, alasan, oleh):
-    """
-    Mengubah status retur. 
-    (Logika penambahan stok fisik nanti diletakkan di sini).
-    """
     DeliveryOrder.objects.filter(id=distribusi_id).update(status='RETUR')
+
+
+def catat_mutasi_stok_pabrik(*, produk, isi_per_kemasan, tipe, arah, qty_kemasan,
+                              ref_type, ref_id, dibuat_oleh,
+                              grup_bahan=None, waktu=None, keterangan=''):
+    total_isi = (Decimal(qty_kemasan) * isi_per_kemasan).quantize(Decimal('0.001'))
+
+    with transaction.atomic():
+        MutasiStokItemsPabrik.objects.create(
+            produk=produk, grup_bahan=grup_bahan, isi_per_kemasan=isi_per_kemasan,
+            tipe=tipe, arah=arah, qty_kemasan=qty_kemasan, total_isi=total_isi,
+            ref_type=ref_type, ref_id=ref_id,
+            waktu=waktu or timezone.now(), keterangan=keterangan, dibuat_oleh=dibuat_oleh,
+        )
+        saldo, _ = StokItemsPabrik.objects.select_for_update().get_or_create(
+            produk=produk, isi_per_kemasan=isi_per_kemasan,
+        )
+        saldo.qty_kemasan = models.F('qty_kemasan') + (arah * qty_kemasan)
+        saldo.total_isi = models.F('total_isi') + (arah * total_isi)
+        saldo.save(update_fields=['qty_kemasan', 'total_isi'])

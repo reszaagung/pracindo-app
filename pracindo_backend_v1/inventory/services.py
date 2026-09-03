@@ -559,3 +559,4 @@ def get_barang_jadi(grup=None):
         } 
         for p in pools
     ]
+    

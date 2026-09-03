@@ -35,18 +35,7 @@ def _galat(e):
     return Response(isi, status=status.HTTP_400_BAD_REQUEST)
 
 
-# =========================================================
-# PO SIAP TERIMA
-# =========================================================
-
 class POSiapTerimaViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Daftar PO yang menunggu barang, untuk layar Received.
-
-    Serializer-nya POGudangSerializer -- tanpa harga_per_kg, tanpa amount,
-    tanpa total_nilai.
-    """
-
     modul = 'warehouse'
     permission_classes = [AksesModul]
     serializer_class = POGudangSerializer
@@ -61,10 +50,6 @@ class POSiapTerimaViewSet(viewsets.ReadOnlyModelViewSet):
                              queryset=PurchaseOrderItem.objects.select_related('produk')))
                 .order_by('tanggal'))
 
-
-# =========================================================
-# PENERIMAAN
-# =========================================================
 
 class PenerimaanViewSet(viewsets.ModelViewSet):
     modul = 'warehouse'
@@ -85,20 +70,11 @@ class PenerimaanViewSet(viewsets.ModelViewSet):
         return PenerimaanBarangSerializer
 
     def create(self, request):
-        """
-        Satu transaksi atomik: catat penerimaan, naikkan stok RAW, posting
-        Dr Persediaan / Cr GRNI, terbitkan laporan selisih otomatis.
-        Gagal satu, batal semua.
-
-        Unggah surat jalan HARUS dilakukan lebih dulu lewat modul dokumen,
-        lalu dokumen_id dikirim di payload ini. Penulisan berkas di dalam
-        transaksi meninggalkan berkas yatim kalau terjadi rollback.
-        """
         s = TerimaBarangSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
         try:
-            penerimaan, laporan ,setoran = services.terima_barang(
+            penerimaan, laporan, setoran = services.terima_barang(
                 user=request.user, **d,
             )
         except DjangoValidationError as e:
@@ -136,14 +112,8 @@ class PenerimaanViewSet(viewsets.ModelViewSet):
     def ringkasan(self, request, pk=None):
         return Response(services.ringkasan_penerimaan(pk))
 
+
 class LaporanSelisihViewSet(viewsets.ModelViewSet):
-    """
-    Dua tampilan dari objek yang sama, dipilih dari query param ?sisi=.
-
-    Default `gudang` -- tanpa nilai rupiah. Sisi `akunting` hanya terbuka
-    untuk pengguna yang boleh masuk modul akunting.
-    """
-
     modul = 'warehouse'
     permission_classes = [AksesModul]
     filterset_fields = ['penerimaan', 'jenis', 'status', 'resolusi']
@@ -165,7 +135,6 @@ class LaporanSelisihViewSet(viewsets.ModelViewSet):
         return LaporanSelisihGudangSerializer
 
     def create(self, request):
-        """Laporan manual untuk temuan yang muncul setelah barang diterima."""
         s = LaporanManualSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         try:
@@ -190,10 +159,6 @@ class LaporanSelisihViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def terbuka(self, request):
-        """
-        Klaim yang belum diselesaikan. Dipakai akunting sebelum menerbitkan
-        faktur -- jangan bayar penuh kalau masih ada klaim menggantung.
-        """
         qs = services.klaim_belum_diselesaikan(
             suplier_id=request.query_params.get('suplier'),
             entitas_id=request.query_params.get('entitas'),
@@ -212,10 +177,6 @@ class LaporanSelisihViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def selesaikan(self, request, pk=None):
-        """
-        Menetapkan resolusi. Ini keputusan finansial, jadi hanya untuk
-        pengguna yang boleh masuk modul akunting.
-        """
         if not request.user.bisa_akses_modul('akunting'):
             return Response(
                 {'detail': 'Resolusi selisih ditetapkan modul akunting.'},
