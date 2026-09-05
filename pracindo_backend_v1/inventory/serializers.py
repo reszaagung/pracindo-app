@@ -106,45 +106,54 @@ class PackingSerializer(serializers.ModelSerializer):
     )
     produk_nama = serializers.CharField(source="nama_hasil.nama_item", read_only=True)
     kemasan_nama = serializers.CharField(source="kemasan.produk.nama", read_only=True)
+    kemasan_dalam_nama = serializers.CharField(source="kemasan_dalam.produk.nama", read_only=True, default=None)
+    
     class Meta:
         model = Packing
         fields = [
             "id", "nomor", "entitas", "entitas_kode",
-            "entitas", 
             "batch", "batch_nomor", "batch_hasil",
             "produk", "produk_nama",
-            "kemasan", "kemasan_nama",
-            "total_unit", "qty_kg", "harga_per_kg", "cost_nom",
-            "menghabiskan", "tanggal", "waktu", "status",
-            "dibuat_oleh", "dibuat_pada", "posted_at",
+            "kemasan", "kemasan_nama", "total_unit",
+            "kemasan_dalam", "kemasan_dalam_nama", "qty_kemasan_dalam",
+            "qty_kg", "harga_per_kg", "cost_nom",
+            "menghabiskan", "tanggal", "waktu",
+            "dibuat_oleh", "dibuat_pada",
         ]
         read_only_fields = [
             "nomor", "harga_per_kg", "cost_nom",
-            "menghabiskan", "status", "dibuat_oleh",
-            "dibuat_pada", "posted_at"
+            "menghabiskan", "dibuat_oleh", "dibuat_pada"
         ]
+
     def validate(self, data):
         inst = self.instance
-        if inst and inst.status != StatusDokumen.DRAFT:
-            raise serializers.ValidationError({
-                "kode": "DOKUMEN_TERKUNCI",
-                "pesan": f"Packing {inst.nomor} sudah {inst.status}.",
-            })
+        
         for f in ("qty_kg", "total_unit"):
             v = data.get(f, getattr(inst, f, None))
             if v is not None and v <= 0:
                 raise serializers.ValidationError({f: f"{f} harus lebih dari 0."})
+        
+        # Validasi logika kemasan dalam (Wajib diisi jika kemasan_dalam dipilih)
+        kd = data.get("kemasan_dalam", getattr(inst, "kemasan_dalam", None))
+        qty_kd = data.get("qty_kemasan_dalam", getattr(inst, "qty_kemasan_dalam", 0))
+        if kd and qty_kd <= 0:
+            raise serializers.ValidationError({
+                "qty_kemasan_dalam": "Qty kemasan dalam wajib diisi lebih dari 0 karena memakai kemasan dalam."
+            })
+
         ent = data.get("entitas") or getattr(inst, "entitas", None)
         batch = data.get("batch") or getattr(inst, "batch", None)
+        
         if ent is not None and not ent.aktif:
             raise serializers.ValidationError({"entitas": f"Entitas {ent.kode} nonaktif."})
-        if batch is not None and not batch.posted_at:
-            raise serializers.ValidationError(
-                {"batch": f"Batch {batch.nomor} belum POSTED."}
-            )
-        return data
-
         
+        # Asumsi validasi posted_at untuk batch (tergantung apakah lu pakai field ini di model Batch lu)
+        if batch is not None and not getattr(batch, 'posted_at', None):
+            raise serializers.ValidationError(
+                {"batch": f"Batch {batch.nomor} belum diposting."}
+            )
+            
+        return data
 
 class MutasiKlaimSerializer(serializers.ModelSerializer):
     entitas_kode = serializers.CharField(source="entitas.kode", read_only=True)

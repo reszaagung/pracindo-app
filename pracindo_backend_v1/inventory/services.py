@@ -289,82 +289,68 @@ def terbitkan_pembelian_dari_penerimaan(penerimaan, user=None):
     return terbit
 
 @transaction.atomic
-def posting_packing(packing, user=None):
+def eksekusi_packing_langsung(packing, user):
     from produksi.models import Batch
     from produksi.services import saldo_batch
-
-    user = _wajib_user(user)
-
-    packing = (
-        Packing.objects
-        .select_for_update()
-        .select_related("entitas", "kemasan")
-        .get(pk=packing.pk)
-    )
-
-    if packing.status != StatusDokumen.DRAFT:
-        raise KonflikSaldo(f"Packing {packing.nomor} sudah {packing.status}.")
-
-    if not packing.entitas.aktif:
-        raise GalatInventory(f"Entitas {packing.entitas.kode} nonaktif.")
+    from .models import StokBarangJadi, Kemasan
 
     _pastikan_periode_terbuka(packing.entitas, packing.tanggal)
 
     batch = Batch.objects.select_for_update().get(pk=packing.batch_id)
     s = saldo_batch(batch)
-
-    if s.sisa_qty <= 0:
-        raise KonflikSaldo(f"Batch {batch.nomor} sudah kosong.")
-
     if packing.qty_kg > s.sisa_qty + TOL_QTY:
-        raise KonflikSaldo(f"Batch {batch.nomor} tinggal {s.sisa_qty:,.3f} Kg. Anda mengambil {packing.qty_kg:,.3f} Kg.")
-
+        raise KonflikSaldo(f"Sisa batch kurang.")
+    
     menghabiskan = abs(packing.qty_kg - s.sisa_qty) <= TOL_QTY
+    cost_nom_bahan = s.sisa_nilai if menghabiskan else rp(packing.qty_kg * s.harga_per_kg)
 
-    if menghabiskan:
-        cost_nom_bahan = s.sisa_nilai
-    else:
-        cost_nom_bahan = rp(packing.qty_kg * s.harga_per_kg)
+    pool_kem_luar = PoolKemasan.objects.select_for_update().get(pk=packing.kemasan_id)
+    if pool_kem_luar.qty_unit < packing.total_unit:
+        raise KonflikSaldo(f"Stok {pool_kem_luar.produk.nama} kurang.")
+    nilai_kemasan_luar = rp(pool_kem_luar.harga_satuan * packing.total_unit)
+    potong_dari_pool_kemasan(pool_kem_luar.produk_id, packing.total_unit, nilai_kemasan_luar)
 
-    pool_kem = PoolKemasan.objects.select_for_update().select_related("produk").get(pk=packing.kemasan_id)
+    nilai_kemasan_dalam = D0
+    if packing.kemasan_dalam_id and packing.qty_kemasan_dalam > 0:
+        total_unit_dalam = packing.total_unit * packing.qty_kemasan_dalam
+        pool_kem_dalam = PoolKemasan.objects.select_for_update().get(pk=packing.kemasan_dalam_id)
+        if pool_kem_dalam.qty_unit < total_unit_dalam:
+            raise KonflikSaldo(f"Stok kemasan dalam {pool_kem_dalam.produk.nama} kurang.")
+        nilai_kemasan_dalam = rp(pool_kem_dalam.harga_satuan * total_unit_dalam)
+        potong_dari_pool_kemasan(pool_kem_dalam.produk_id, total_unit_dalam, nilai_kemasan_dalam)
 
-    if pool_kem.qty_unit < packing.total_unit:
-        raise KonflikSaldo(f"Stok {pool_kem.produk.nama} di Pool hanya sisa {pool_kem.qty_unit} Unit. Anda butuh {packing.total_unit} Unit.")
+    total_cost_nom = rp(cost_nom_bahan + nilai_kemasan_luar + nilai_kemasan_dalam)
 
-    nilai_kemasan = rp(pool_kem.harga_satuan * packing.total_unit)
+    isi_per_kemasan = (packing.qty_kg / Decimal(str(packing.total_unit))).quantize(Decimal("0.001"))
+    kemasan_cocok = Kemasan.objects.filter(aktif=True).filter(
+        bobot_kg__gte=isi_per_kemasan - Decimal("0.001"),
+        bobot_kg__lte=isi_per_kemasan + Decimal("0.001")
+    ).first()
 
-    potong_dari_pool_kemasan(pool_kem.produk_id, packing.total_unit, nilai_kemasan)
-
-    total_cost_nom = rp(cost_nom_bahan + nilai_kemasan)
+    if kemasan_cocok:
+        stok_jadi, _ = StokBarangJadi.objects.select_for_update().get_or_create(
+            entitas_id=packing.entitas_id,
+            grup_bahan_id=packing.entitas.grup_bahan_id,
+            item_id=packing.nama_hasil_id,
+            kemasan=kemasan_cocok,
+            defaults={'qty_unit': 0, 'qty_kg': D0}
+        )
+        stok_jadi.qty_unit += packing.total_unit
+        stok_jadi.qty_kg += packing.qty_kg
+        stok_jadi.save(update_fields=['qty_unit', 'qty_kg'])
 
     packing.harga_per_kg = s.harga_per_kg
     packing.cost_nom = total_cost_nom
     packing.menghabiskan = menghabiskan
-    packing.status = StatusDokumen.POSTED
-    packing.posted_at = timezone.now()
-
-    packing.save(
-        update_fields=[
-            "harga_per_kg",
-            "cost_nom",
-            "menghabiskan",
-            "status",
-            "posted_at",
-        ]
-    )
+    packing.save(update_fields=["harga_per_kg", "cost_nom", "menghabiskan"])
 
     MutasiKlaim.objects.create(
-        entitas=packing.entitas,
-        grup_bahan=packing.entitas.grup_bahan,
-        tipe=TipeMutasi.TARIK,
-        arah=-1,
-        qty_kg=packing.qty_kg,
-        nilai=total_cost_nom,
-        ref_type="Packing",
-        ref_id=packing.id,
-        keterangan=f"{packing.nomor} - {batch.nomor} - {pool_kem.produk.nama}",
-        waktu=packing.waktu,
-        dibuat_oleh=user,
+        entitas=packing.entitas, grup_bahan=packing.entitas.grup_bahan,
+        tipe=TipeMutasi.TARIK, arah=-1,
+        qty_kg=packing.qty_kg, nilai=total_cost_nom,
+        ref_type="Packing", ref_id=packing.id,
+        keterangan=f"Packing {packing.nomor}",
+        waktu=packing.waktu, dibuat_oleh=user,
     )
 
     se = _kunci_saldo(packing.entitas_id)
@@ -372,6 +358,130 @@ def posting_packing(packing, user=None):
     se.qty_tarik = qty(se.qty_tarik + packing.qty_kg)
     se.saldo = rp(se.saldo - total_cost_nom)
     se.save(update_fields=["total_tarik", "qty_tarik", "saldo"])
+
+    assert_invarian()
+    return packing
+
+
+@transaction.atomic
+def rollback_hapus_packing(packing, user):
+    from .models import StokBarangJadi, Kemasan
+    
+    _pastikan_periode_terbuka(packing.entitas, timezone.localdate())
+
+    isi_per_kemasan = (packing.qty_kg / Decimal(str(packing.total_unit))).quantize(Decimal("0.001"))
+    kemasan_cocok = Kemasan.objects.filter(aktif=True).filter(
+        bobot_kg__gte=isi_per_kemasan - Decimal("0.001"),
+        bobot_kg__lte=isi_per_kemasan + Decimal("0.001")
+    ).first()
+
+    if kemasan_cocok:
+        stok_jadi = StokBarangJadi.objects.select_for_update().filter(
+            entitas_id=packing.entitas_id,
+            grup_bahan_id=packing.entitas.grup_bahan_id,
+            item_id=packing.nama_hasil_id,
+            kemasan=kemasan_cocok
+        ).first()
+        if stok_jadi:
+            stok_jadi.qty_unit -= packing.total_unit
+            stok_jadi.qty_kg -= packing.qty_kg
+            if stok_jadi.qty_unit < 0: stok_jadi.qty_unit = 0
+            if stok_jadi.qty_kg < 0: stok_jadi.qty_kg = D0
+            stok_jadi.save(update_fields=['qty_unit', 'qty_kg'])
+
+    pool_kem_luar = PoolKemasan.objects.select_for_update().get(pk=packing.kemasan_id)
+    nilai_kemasan_luar = rp(pool_kem_luar.harga_satuan * packing.total_unit)
+    tambah_ke_pool_kemasan(pool_kem_luar.produk_id, packing.total_unit, nilai_kemasan_luar)
+
+    if packing.kemasan_dalam_id and packing.qty_kemasan_dalam > 0:
+        total_unit_dalam = packing.total_unit * packing.qty_kemasan_dalam
+        pool_kem_dalam = PoolKemasan.objects.select_for_update().get(pk=packing.kemasan_dalam_id)
+        nilai_kemasan_dalam = rp(pool_kem_dalam.harga_satuan * total_unit_dalam)
+        tambah_ke_pool_kemasan(pool_kem_dalam.produk_id, total_unit_dalam, nilai_kemasan_dalam)
+
+    MutasiKlaim.objects.create(
+        entitas=packing.entitas, grup_bahan=packing.entitas.grup_bahan,
+        tipe=TipeMutasi.PENYESUAIAN, arah=1,
+        qty_kg=packing.qty_kg, nilai=packing.cost_nom,
+        ref_type="RollbackPacking", ref_id=packing.id,
+        keterangan=f"Penghapusan Packing {packing.nomor}",
+        waktu=timezone.now(), dibuat_oleh=user
+    )
+
+    se = _kunci_saldo(packing.entitas_id)
+    se.total_tarik = rp(se.total_tarik - packing.cost_nom)
+    se.qty_tarik = qty(se.qty_tarik - packing.qty_kg)
+    se.saldo = rp(se.saldo + packing.cost_nom)
+    se.save(update_fields=["total_tarik", "qty_tarik", "saldo"])
+    
+    assert_invarian()
+
+@transaction.atomic
+def void_packing(packing, alasan, user=None):
+    from .models import StokBarangJadi, Kemasan
+
+    user = _wajib_user(user)
+    packing = Packing.objects.select_for_update().get(pk=packing.pk)
+
+    if packing.voided_at is not None:
+        raise KonflikSaldo(f"Packing {packing.nomor} sudah di-VOID sebelumnya.")
+    if not alasan or not alasan.strip():
+        raise GalatInventory("Alasan VOID wajib diisi.")
+
+    _pastikan_periode_terbuka(packing.entitas, timezone.localdate())
+
+    isi_per_kemasan = (packing.qty_kg / Decimal(str(packing.total_unit))).quantize(Decimal("0.001"))
+    kemasan_cocok = Kemasan.objects.filter(aktif=True).filter(
+        bobot_kg__gte=isi_per_kemasan - Decimal("0.001"),
+        bobot_kg__lte=isi_per_kemasan + Decimal("0.001")
+    ).first()
+
+    if kemasan_cocok:
+        stok_jadi = StokBarangJadi.objects.select_for_update().filter(
+            entitas_id=packing.entitas_id,
+            grup_bahan_id=packing.entitas.grup_bahan_id,
+            item_id=packing.nama_hasil_id,
+            kemasan=kemasan_cocok
+        ).first()
+        if stok_jadi:
+            stok_jadi.qty_unit -= packing.total_unit
+            stok_jadi.qty_kg -= packing.qty_kg
+            if stok_jadi.qty_unit < 0: stok_jadi.qty_unit = 0
+            if stok_jadi.qty_kg < 0: stok_jadi.qty_kg = D0
+            stok_jadi.save(update_fields=['qty_unit', 'qty_kg'])
+
+    pool_kem_luar = PoolKemasan.objects.select_for_update().select_related("produk").get(pk=packing.kemasan_id)
+    nilai_kemasan_luar = rp(pool_kem_luar.harga_satuan * packing.total_unit)
+    tambah_ke_pool_kemasan(pool_kem_luar.produk_id, packing.total_unit, nilai_kemasan_luar)
+
+    if packing.kemasan_dalam_id and packing.qty_kemasan_dalam > 0:
+        total_unit_dalam = packing.total_unit * packing.qty_kemasan_dalam
+        pool_kem_dalam = PoolKemasan.objects.select_for_update().get(pk=packing.kemasan_dalam_id)
+        nilai_kemasan_dalam = rp(pool_kem_dalam.harga_satuan * total_unit_dalam)
+        tambah_ke_pool_kemasan(pool_kem_dalam.produk_id, total_unit_dalam, nilai_kemasan_dalam)
+
+    MutasiKlaim.objects.create(
+        entitas=packing.entitas,
+        grup_bahan=packing.entitas.grup_bahan,
+        tipe=TipeMutasi.PENYESUAIAN,
+        arah=1,
+        qty_kg=packing.qty_kg,
+        nilai=packing.cost_nom,
+        ref_type="VoidPacking",
+        ref_id=packing.id,
+        keterangan=f"VOID {packing.nomor}: {alasan}",
+        waktu=timezone.now(),
+        dibuat_oleh=user
+    )
+
+    se = _kunci_saldo(packing.entitas_id)
+    se.total_tarik = rp(se.total_tarik - packing.cost_nom)
+    se.qty_tarik = qty(se.qty_tarik - packing.qty_kg)
+    se.saldo = rp(se.saldo + packing.cost_nom)
+    se.save(update_fields=["total_tarik", "qty_tarik", "saldo"])
+
+    packing.voided_at = timezone.now()
+    packing.save(update_fields=["voided_at"])
 
     assert_invarian()
     return packing
@@ -546,17 +656,26 @@ def get_rekap_klaim(grup_id=None):
     }
 
 def get_barang_jadi(grup=None):
-    pools = PoolResource.objects.all()
+    from .models import StokBarangJadi
+
+    qs = StokBarangJadi.objects.select_related("entitas", "item", "kemasan").all()
     if grup:
-        pools = pools.filter(produk_id__icontains=grup)
-    
-    return [
+        qs = qs.filter(grup_bahan_id=grup)
+
+    rincian = [
         {
-            "produk_id": p.produk_id,
-            "qty_kg": str(p.qty_kg),
-            "nilai": str(p.nilai),
-            "grup": grup or "UMUM"
-        } 
-        for p in pools
+            "entitas_id": s.entitas_id,
+            "entitas_kode": s.entitas.kode,
+            "item_id": s.item_id,
+            "item_nama": s.item.nama_item,
+            "kemasan_id": s.kemasan_id,
+            "kemasan_nama": s.kemasan.nama,
+            "qty_unit": s.qty_unit,
+            "qty_kg": str(s.qty_kg),
+        }
+        for s in qs
     ]
-    
+    # StokBarangJadi belum melacak nilai rupiah -> total_nilai sementara 0.
+    # Kalau butuh valuasi, tambah kolom `nilai` di model + update
+    # eksekusi_packing_langsung/rollback_hapus_packing/void_packing buat akumulasi.
+    return {"rincian": rincian, "total_nilai": "0.00"}

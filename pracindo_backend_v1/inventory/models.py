@@ -6,6 +6,7 @@ from django.db.models import CheckConstraint, Q, UniqueConstraint
 from django.utils import timezone
 from django.db import transaction
 from core.models import DiauditModel, TimeStampedModel
+
 D0 = Decimal("0")
 Q_RP = Decimal("0.01")
 Q_QTY = Decimal("0.001")
@@ -38,8 +39,6 @@ class SumberPembelian(models.TextChoices):
 class PoolResource(TimeStampedModel):
     """
     Stok Fisik Raw Material (Pool Patungan).
-    Tidak memiliki relasi ke entitas atau grup bahan. 
-    Semua stok fisik untuk satu produk menyatu di sini.
     """
     produk = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="pool_resource")
     qty_kg = models.DecimalField(max_digits=18, decimal_places=3, default=D0)
@@ -119,43 +118,22 @@ class Kemasan(TimeStampedModel):
     def __str__(self):
         return self.nama
 
+
 class Packing(DiauditModel):
-    class Status(models.TextChoices):
-        PROGRESS = "PROCESSING", "PROCESSING"
-        SELESAI  = "SELESAI",  "Selesai"
+    nomor = models.CharField(max_length=48, unique=True, editable=False)
+    entitas = models.ForeignKey("core.Entitas", on_delete=models.PROTECT, related_name="packing")
+    batch = models.ForeignKey("produksi.Batch", on_delete=models.PROTECT, related_name="packing_set")
+    nama_hasil = models.ForeignKey("master.MasterProduk", on_delete=models.PROTECT, related_name="packing_hasil")
 
-
-    nomor = models.CharField(
-        max_length=48,
-        unique=True,
-        editable=False,
-    )
-
-    entitas = models.ForeignKey(
-        "core.Entitas",
-        on_delete=models.PROTECT,
-        related_name="packing",
-    )
-
-    batch = models.ForeignKey(
-        "produksi.Batch",
-        on_delete=models.PROTECT,
-        related_name="packing_set",
-    )
-
-    nama_hasil = models.ForeignKey(
-        "master.MasterProduk",
-        on_delete=models.PROTECT,
-        related_name="packing_hasil",
-    )
-
-    kemasan = models.ForeignKey(
-        "PoolKemasan",
-        on_delete=models.PROTECT,
-        related_name="packing",
-    )
-
+    kemasan = models.ForeignKey("PoolKemasan", on_delete=models.PROTECT, related_name="packing_luar")
     total_unit = models.IntegerField()
+
+    kemasan_dalam = models.ForeignKey(
+        "PoolKemasan", on_delete=models.PROTECT, related_name="packing_dalam",
+        null=True, blank=True
+    )
+    qty_kemasan_dalam = models.IntegerField(default=0)
+
     qty_kg = models.DecimalField(max_digits=18, decimal_places=3)
     harga_per_kg = models.DecimalField(max_digits=20, decimal_places=6, default=D0)
     cost_nom = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
@@ -164,26 +142,15 @@ class Packing(DiauditModel):
     tanggal = models.DateField(default=timezone.localdate, db_index=True)
     waktu = models.DateTimeField(default=timezone.now, db_index=True)
 
-    status = models.CharField(
-        max_length=10,
-        choices=StatusDokumen.choices,
-        default=StatusDokumen.DRAFT,
-        db_index=True,
-    )
-
-    posted_at = models.DateTimeField(null=True, blank=True, editable=False)
-
     class Meta:
         db_table = "inventory_packing"
         ordering = ["-waktu", "-id"]
         verbose_name_plural = "Packing"
-
         indexes = [
-            models.Index(fields=["batch", "status"], name="ix_pack_batch"),
+            models.Index(fields=["batch"], name="ix_pack_batch_baru"),
             models.Index(fields=["entitas", "waktu"], name="ix_pack_entitas"),
-            models.Index(fields=["nama_hasil", "status"], name="ix_pack_hasil"),
+            models.Index(fields=["nama_hasil"], name="ix_pack_hasil_baru"),
         ]
-
         constraints = [
             CheckConstraint(condition=Q(qty_kg__gt=0), name="ck_pack_qty_positif"),
             CheckConstraint(condition=Q(total_unit__gt=0), name="ck_pack_unit_positif"),
@@ -265,9 +232,6 @@ class MutasiKlaim(models.Model):
 
 
 class SaldoEntitas(TimeStampedModel):
-    """
-    Pencatatan finansial hak/klaim per entitas terhadap total aset pool.
-    """
     entitas     = models.OneToOneField("core.Entitas", on_delete=models.CASCADE, related_name="saldo_klaim")
     total_setor = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
     total_tarik = models.DecimalField(max_digits=20, decimal_places=2, default=D0)
@@ -283,11 +247,10 @@ class SaldoEntitas(TimeStampedModel):
     def __str__(self):
         return f"{self.entitas.kode}: {self.saldo}"
 
+
 class PoolKemasan(TimeStampedModel):
     """
     Stok Fisik Kemasan (Pool Patungan).
-    Menyimpan stok fisik packaging (botol, jerigen, kardus, dll) lintas entitas.
-    Semua stok fisik untuk satu produk kemasan menyatu di sini.
     """
     produk = models.ForeignKey("master.Produk", on_delete=models.PROTECT, related_name="pool_kemasan")
     qty_unit = models.IntegerField(default=0)
@@ -310,3 +273,48 @@ class PoolKemasan(TimeStampedModel):
     @property
     def harga_satuan(self):
         return harga(self.nilai / Decimal(self.qty_unit)) if self.qty_unit > 0 else D0
+
+
+# ==========================================
+# MODEL STOK BARANG JADI & ITEMS PABRIK
+# ==========================================
+
+class StokBarangJadi(TimeStampedModel):
+    entitas = models.ForeignKey("core.Entitas", on_delete=models.PROTECT, related_name="stok_barang_jadi")
+    grup_bahan = models.ForeignKey("core.GrupBahan", on_delete=models.PROTECT, related_name="stok_barang_jadi")
+    item = models.ForeignKey("master.MasterProduk", on_delete=models.PROTECT, related_name="stok_barang_jadi")
+    kemasan = models.ForeignKey("Kemasan", on_delete=models.PROTECT, related_name="stok_barang_jadi")
+    
+    qty_unit = models.IntegerField(default=0)
+    qty_kg = models.DecimalField(max_digits=18, decimal_places=3, default=D0)
+
+    class Meta:
+        db_table = "inventory_stok_barang_jadi"
+        verbose_name_plural = "Stok Barang Jadi"
+        constraints = [
+            UniqueConstraint(fields=["entitas", "grup_bahan", "item", "kemasan"], name="uq_stok_jadi_unik"),
+            CheckConstraint(condition=Q(qty_unit__gte=0), name="ck_stok_jadi_unit_non_negatif"),
+            CheckConstraint(condition=Q(qty_kg__gte=0), name="ck_stok_jadi_kg_non_negatif"),
+        ]
+
+    def __str__(self):
+        return f"[{self.entitas.kode}] {self.item} - {self.qty_unit} Unit"
+
+
+class StokItemsPabrik(TimeStampedModel):
+    entitas = models.ForeignKey("core.Entitas", on_delete=models.PROTECT, related_name="stok_items_pabrik")
+    grup_bahan = models.ForeignKey("core.GrupBahan", on_delete=models.PROTECT, related_name="stok_items_pabrik")
+    item = models.ForeignKey("master.MasterProduk", on_delete=models.PROTECT, related_name="stok_items_pabrik")
+    
+    qty_kg = models.DecimalField(max_digits=18, decimal_places=3, default=D0)
+
+    class Meta:
+        db_table = "inventory_stok_items_pabrik"
+        verbose_name_plural = "Stok Items Pabrik"
+        constraints = [
+            UniqueConstraint(fields=["entitas", "grup_bahan", "item"], name="uq_stok_pabrik_unik"),
+            CheckConstraint(condition=Q(qty_kg__gte=0), name="ck_stok_pabrik_kg_non_negatif"),
+        ]
+
+    def __str__(self):
+        return f"[{self.entitas.kode}] {self.item} - {self.qty_kg} Kg"

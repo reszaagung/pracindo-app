@@ -1,16 +1,25 @@
-from django.db import transaction
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models, transaction
+from django.utils import timezone
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
+
+from core.models import CounterDokumen, DiauditModel, Entitas, TimeStampedModel
+from master.models import Produk, MasterProduk
+from produksi.models import Batch
 from . import services
-from core.models import CounterDokumen, Entitas
-from master.models import Produk
 from . import serializers as ser
 from .models import (
     Kemasan, MutasiKlaim, Packing, Pembelian, 
-    PoolResource, PoolKemasan, StatusDokumen, rp, D0
+    PoolResource, PoolKemasan, StatusDokumen, 
+    TipeMutasi, StokBarangJadi, StokItemsPabrik,
+    rp, qty, harga, D0
 )
 from .permissions import AksesInventory, SupervisorInventory
 
@@ -21,6 +30,13 @@ def _galat(e):
     kode = e.__class__.__name__
     pesan = getattr(e, "message", None) or (e.messages[0] if getattr(e, "messages", None) else str(e))
     return Response({"detail": pesan, "kode": kode, "pesan": pesan}, status=getattr(e, "http", 400))
+
+
+def _int_atau_none(nilai):
+    try:
+        return int(nilai) if nilai not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 GALAT_TERTANGANI = (services.GalatInventory, DjangoValidationError)
@@ -150,14 +166,14 @@ class PembelianViewSet(viewsets.ModelViewSet):
 
 class PackingViewSet(viewsets.ModelViewSet):
     modul = MODUL
-    queryset = Packing.objects.select_related("entitas", "batch", "kemasan").order_by("-waktu", "-id")
+    queryset = Packing.objects.select_related("entitas", "batch", "kemasan", "kemasan_dalam").order_by("-waktu", "-id")
     serializer_class = ser.PackingSerializer
     permission_classes = [AksesInventory]
 
     def get_queryset(self):
         qs = super().get_queryset()
         p = self.request.query_params
-        for param, field in (("entitas", "entitas_id"), ("batch", "batch_id"), ("status", "status")):
+        for param, field in (("entitas", "entitas_id"), ("batch", "batch_id")):
             if p.get(param):
                 qs = qs.filter(**{field: p[param]})
         if p.get("dari"):
@@ -168,22 +184,26 @@ class PackingViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        from django.utils import timezone
         d = serializer.validated_data
         ent = d["entitas"]
         tgl = d.get("tanggal") or timezone.localdate()
+        
         try:
             nomor = CounterDokumen.berikutnya(ent, "PKG", tgl)
         except DjangoValidationError as e:
             raise DRFValidationError({"kode": "PENOMORAN_GAGAL", "pesan": str(e)})
-        serializer.save(nomor=nomor, tanggal=tgl, dibuat_oleh=self.request.user)
+        packing = serializer.save(nomor=nomor, tanggal=tgl, dibuat_oleh=self.request.user)
+        try:
+            services.eksekusi_packing_langsung(packing, self.request.user)
+        except services.GALAT_TERTANGANI as e:
+            raise DRFValidationError({"kode": "GAGAL_POSTING", "pesan": str(e)})
 
+    @transaction.atomic
     def perform_destroy(self, instance):
-        if instance.status != StatusDokumen.DRAFT:
-            raise DRFValidationError({
-                "kode": "DOKUMEN_TERKUNCI",
-                "pesan": "Hanya packing DRAFT yang bisa dihapus.",
-            })
+        try:
+            services.rollback_hapus_packing(instance, self.request.user)
+        except services.GALAT_TERTANGANI as e:
+            raise DRFValidationError({"kode": "GAGAL_ROLLBACK", "pesan": str(e)})
         instance.delete()
 
     @action(detail=True, methods=["post"], url_path="post")
@@ -199,37 +219,24 @@ class PackingViewSet(viewsets.ModelViewSet):
         return Response(services.pratinjau_packing(request.query_params.get("batch"), request.query_params.get("qty") or 0))
 
     @action(detail=True, methods=['post'])
-    def vulkanisir_atau_selesai(self, request, pk=None):
-        packing = self.get_object()
-        packing.status = Packing.Status.SELESAI
-        packing.save()
-        return Response({"status": "sukses", "pesan": "Packing berhasil diselesaikan"})
-
-    @action(detail=True, methods=['post'])
     def void_dokumen(self, request, pk=None):
-        packing = self.get_object()
-        packing.status = Packing.Status.VOID
-        packing.save()
-        return Response({"status": "sukses", "pesan": "Packing dibatalkan (Void)"})
-
-    def _int_atau_none(nilai):
         try:
-            return int(nilai) if nilai not in (None, "") else None
-        except (TypeError, ValueError):
-            return None
+            alasan = request.data.get("alasan", "Dibatalkan oleh user")
+            hasil = services.void_packing(self.get_object(), alasan, user=request.user)
+        except GALAT_TERTANGANI as e:
+            return _galat(e)
+        return Response({"status": "sukses", "pesan": f"Packing {hasil.nomor} dibatalkan (Void) dan stok dikembalikan."})
 
 
 @api_view(["GET"])
 @permission_classes([AksesInventory])
 def pool_list(request):
-    """Menggantikan raw_mutasi_list lama, kini menarik dari PoolResource global."""
     return Response(services.get_pool_resource_all())
 
 
 @api_view(["GET"])
 @permission_classes([AksesInventory])
 def pool_kemasan_list(request):
-    """Endpoint baru untuk melihat saldo Pool Kemasan."""
     qs = PoolKemasan.objects.select_related("produk").all()
     return Response(ser.PoolKemasanSerializer(qs, many=True).data)
 

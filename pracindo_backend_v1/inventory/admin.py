@@ -1,9 +1,10 @@
 from django.contrib import admin
 from .models import (
     Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
-    StatusDokumen, SumberPembelian, PoolResource, PoolKemasan
+    StatusDokumen, SumberPembelian, PoolResource, PoolKemasan,
+    StokBarangJadi, StokItemsPabrik  
 )
-
+    
 class TanpaTulis:
     def has_add_permission(self, request, obj=None):
         return False
@@ -98,11 +99,18 @@ class PembelianAdmin(KunciSetelahPosting, admin.ModelAdmin):
 
 
 @admin.register(Packing)
-class PackingAdmin(KunciSetelahPosting, admin.ModelAdmin):
-    list_display = ['nomor', 'entitas', 'batch', 'kemasan', 'status'] 
-    list_filter = ['status', 'entitas']
-    list_select_related = ("entitas", "batch", "kemasan")
-    readonly_dasar = ("nomor", "harga_per_kg", "cost_nom", "menghabiskan", "status", "dibuat_oleh", "dibuat_pada", "posted_at")
+class PackingAdmin(TanpaTulis, admin.ModelAdmin):
+    # Status dan posted_at dihapus. Kemasan dalam ditambahkan.
+    list_display = ['nomor', 'tanggal', 'entitas', 'batch', 'kemasan', 'kemasan_dalam'] 
+    list_filter = ['entitas', 'tanggal']
+    search_fields = ("nomor", "batch__nomor")
+    list_select_related = ("entitas", "batch", "kemasan", "kemasan_dalam")
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return [f.name for f in obj._meta.fields]
+        return []
+
 
 @admin.register(MutasiKlaim)
 class MutasiKlaimAdmin(TanpaTulis, admin.ModelAdmin):
