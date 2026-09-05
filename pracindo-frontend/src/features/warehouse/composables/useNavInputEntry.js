@@ -1,16 +1,17 @@
-// src/features/warehouse/composables/useNavInputEntry.js
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+
 const judulHeader = ref('Input Entry')
 const breadcrumb = ref('')
 
 export function useNavInputEntry() {
     const route = useRoute()
+    
     const menus = [
         {
             id: 'goods-receipt',
             label: 'Penerimaan',
-            ikon: 'pi-box',
+            ikon: 'pi-download',
             rute: '/warehouse/input/receipt',
             activate: true
         },
@@ -28,6 +29,13 @@ export function useNavInputEntry() {
             rute: '/warehouse/input/discrepancy',
             activate: true
         },
+        {
+            id: 'qc',
+            label: 'Inspeksi QC',
+            ikon: 'pi-check-square',
+            rute: '/warehouse/input/qc',
+            activate: true
+        }
     ]
 
     const aktif = (path) => {
@@ -38,6 +46,7 @@ export function useNavInputEntry() {
         judulHeader.value = judulBaru
         breadcrumb.value = breadcrumbBaru
     }
+
     const resetNav = () => {
         judulHeader.value = 'Input Entry'
         breadcrumb.value = ''

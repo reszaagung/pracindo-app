@@ -1,15 +1,18 @@
 import uuid
 import os
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.conf import settings
 from django.http import HttpResponse
+from django.utils import timezone
+
 import django_filters
-from rest_framework import status 
-from rest_framework.response import Response
 from rest_framework import status, viewsets
+from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+
 from docxtpl import DocxTemplate
 
 from staff_user.models import Role
@@ -31,6 +34,19 @@ from .serializers import (
     BuatPOSerializer, PurchaseOrderKemasanSerializer, PengeluaranKasSerializer
 )
 
+
+_NAMA_BULAN_ID = {
+    1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",
+    7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember",
+}
+
+
+def _format_tanggal_id(tgl):
+    if not tgl:
+        return "-"
+    return f"{tgl.day:02d} {_NAMA_BULAN_ID[tgl.month]} {tgl.year}"
+
+
 def batasi_entitas(qs, request, field="entitas"):
     u = getattr(request, "user", None)
     if not (u and u.is_authenticated):
@@ -44,22 +60,32 @@ def batasi_entitas(qs, request, field="entitas"):
 
     ids = list(rel.values_list("id", flat=True))
     if not ids:
-        return qs
+        # User tidak punya entitas yang diizinkan -> jangan tampilkan apa pun.
+        # (Sebelumnya `return qs` di sini, artinya staff yang belum di-assign
+        # entitas apa pun malah melihat SEMUA entitas. Konfirmasi ulang ya.)
+        return qs.none()
     return qs.filter(**{f"{field}_id__in": ids})
+
 
 def _galat(e):
     isi = e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}
     return Response(isi, status=status.HTTP_400_BAD_REQUEST)
 
+
 def _idem(request, prefix):
     return f'{prefix}:{request.headers.get("Idempotency-Key") or uuid.uuid4()}'
 
+
 class BasisAkunting(viewsets.ModelViewSet):
+    modul = 'akunting'
+    permission_classes = [AksesModul]
+
     def filter_entitas(self, qs):
         return batasi_entitas(qs, self.request)
 
     def get_queryset(self):
         return self.filter_entitas(super().get_queryset())
+
 
 class AkunViewSet(viewsets.ReadOnlyModelViewSet):
     modul = 'akunting'
@@ -68,6 +94,7 @@ class AkunViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AkunSerializer
     filterset_fields = ['tipe', 'boleh_diposting', 'aktif']
     search_fields = ['kode', 'nama']
+
 
 class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = JurnalUmum.objects.none()
@@ -98,10 +125,12 @@ class JurnalUmumViewSet(viewsets.ReadOnlyModelViewSet):
             return _galat(e)
         return Response(JurnalUmumSerializer(balik).data, status=status.HTTP_201_CREATED)
 
+
 class PurchaseOrderFilter(django_filters.FilterSet):
     class Meta:
         model = PurchaseOrder
         fields = ['entitas', 'suplier', 'status', 'tanggal']
+
 
 class PurchaseOrderViewSet(BasisAkunting):
     serializer_class = PurchaseOrderSerializer
@@ -157,13 +186,21 @@ class PurchaseOrderViewSet(BasisAkunting):
     @action(detail=False, methods=['get'], url_path='preview-nomor')
     def preview_nomor(self, request):
         from core.models import Entitas
-        from django.utils import timezone
 
         entitas_id = request.query_params.get('entitas')
         tanggal = request.query_params.get('tanggal')
         if not entitas_id:
             return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
-        entitas = Entitas.objects.get(pk=entitas_id)
+
+        if not request.user.bisa_akses_entitas(entitas_id):
+            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            entitas = Entitas.objects.get(pk=entitas_id)
+        except Entitas.DoesNotExist:
+            return Response({'detail': 'Entitas tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
         tgl = (timezone.datetime.fromisoformat(tanggal).date() if tanggal else timezone.localdate())
         return Response({'nomor': services.preview_nomor_po(entitas, tgl),
                          'catatan': 'Preview. Nomor final ditetapkan saat simpan.'})
@@ -209,8 +246,8 @@ class PurchaseOrderViewSet(BasisAkunting):
         s.is_valid(raise_exception=True)
         try:
             po = services.tolak_po(
-                po_id=pk, 
-                user=request.user, 
+                po_id=pk,
+                user=request.user,
                 alasan=s.validated_data['alasan']
             )
         except DjangoValidationError as e:
@@ -231,7 +268,7 @@ class PurchaseOrderViewSet(BasisAkunting):
         s.is_valid(raise_exception=True)
         try:
             po = services.batalkan_po(
-                po_id=pk, 
+                po_id=pk,
                 user=request.user,
                 alasan=s.validated_data['alasan']
             )
@@ -242,76 +279,93 @@ class PurchaseOrderViewSet(BasisAkunting):
     @action(detail=True, methods=['post'], url_path='tutup-sesi')
     def tutup_sesi(self, request, pk=None):
         try:
-            po = services.tutup_paksa_po(
-                po_id=pk, 
-                user=request.user
-            )
+            po = services.tutup_paksa_po(po_id=pk, user=request.user)
             return Response(PurchaseOrderSerializer(po).data)
-        except Exception as e:
-            return Response(
-                {"detail": str(e)}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except DjangoValidationError as e:
+            return _galat(e)
 
     @action(detail=True, methods=['get'])
     def ringkasan(self, request, pk=None):
         return Response(services.ringkasan_po(pk))
 
-    @action(detail=True, methods=['get'], url_path='cetak')
+    @action(detail=True, methods=["get"], url_path="cetak")
     def cetak(self, request, pk=None):
+        po = self.get_object()  # 404/403 ditangani otomatis oleh DRF
+
         try:
-            po = self.get_object() 
-            
             items_data = []
-            total_subtotal = 0
-            
+            total_subtotal = Decimal("0")
+
             for barang in po.item.all():
-                nama_produk = barang.produk.nama if hasattr(barang, 'produk') and barang.produk else getattr(barang.kemasan, 'nama', '-')
-                
-                qty = float(barang.qty_pesan)
-                harga = float(barang.harga_per_kg) if hasattr(barang, 'harga_per_kg') else float(getattr(barang, 'harga_per_pcs', 0))
+                is_produk = bool(getattr(barang, "produk", None))
+                is_kemasan = bool(getattr(barang, "kemasan", None))
+
+                if is_produk:
+                    nama_produk = barang.produk.nama
+                elif is_kemasan:
+                    nama_produk = barang.kemasan.nama
+                else:
+                    nama_produk = "-"
+
+                qty = Decimal(str(barang.qty_pesan or 0))
+
+                if is_produk:
+                    harga = Decimal(str(barang.harga_per_kg or 0))
+                else:
+                    harga = Decimal(str(getattr(barang, "harga_per_pcs", 0) or 0))
+
                 subtotal = qty * harga
                 total_subtotal += subtotal
-                
+
                 items_data.append({
                     "nama_item": nama_produk,
-                    "kuantitas": f"{qty:g}", 
-                    "total_harga": f"Rp {subtotal:,.0f}".replace(',', '.')
+                    "kuantitas": f"{qty:g}",
+                    "total_harga": f"Rp {subtotal:,.0f}".replace(",", "."),
                 })
-            
-            persen = float(po.ppn_persen) if po.ppn_persen else 0
-            ppn_nominal = total_subtotal * (persen / 100) 
+
+            persen = Decimal(str(po.ppn_persen or 0))
+            ppn_nominal = total_subtotal * persen / Decimal("100")
             grand_total = total_subtotal + ppn_nominal
-            
+
             context = {
                 "NAMA_PIC": po.entitas.nama if po.entitas else "Pracindo Staff",
                 "NAMA_SUPPLIER": po.suplier.nama if po.suplier else "-",
                 "NO_PO": po.no_po,
-                "TANGGAL_BUAT": po.tanggal.strftime("%d %B %Y") if po.tanggal else "-",
-                "TOTAL_PPN": f"Rp {ppn_nominal:,.0f}".replace(',', '.'),
-                "TOTAL_FINAL": f"Rp {grand_total:,.0f}".replace(',', '.'),
-                "items": items_data
+                "TANGGAL_BUAT": _format_tanggal_id(po.tanggal),
+                "TOTAL_SUBTOTAL": f"Rp {total_subtotal:,.0f}".replace(",", "."),
+                "TOTAL_PPN": f"Rp {ppn_nominal:,.0f}".replace(",", "."),
+                "TOTAL_FINAL": f"Rp {grand_total:,.0f}".replace(",", "."),
+                "items": items_data,
             }
-            
-            template_path = os.path.join(settings.BASE_DIR, 'akunting', 'templates_dokumen', 'master_doc_po.docx')
-            
+
+            template_path = os.path.join(
+                settings.BASE_DIR, "akunting", "templates_dokumen", "master_doc_po.docx",
+            )
             if not os.path.exists(template_path):
-                return HttpResponse(f"Gagal: File template tidak ditemukan di {template_path}", status=404)
-                
+                return Response(
+                    {"detail": f"File template tidak ditemukan di {template_path}"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
             doc = DocxTemplate(template_path)
             doc.render(context)
-            response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-            
-            safe_filename = po.no_po.replace('/', '_').replace(' ', '_')
-            response['Content-Disposition'] = f'attachment; filename="PO_{safe_filename}.docx"'
-            
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            safe_filename = po.no_po.replace("/", "_").replace(" ", "_")
+            response["Content-Disposition"] = f'attachment; filename="PO_{safe_filename}.docx"'
             doc.save(response)
             return response
-            
+
         except Exception as e:
             import traceback
-            traceback.print_exc()  
-            return HttpResponse(f"Gagal mencetak dokumen: {str(e)}", status=500)
+            traceback.print_exc()
+            return Response(
+                {"detail": f"Gagal mencetak dokumen: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 
 class FakturPembelianViewSet(BasisAkunting):
     queryset = FakturPembelian.objects.none()
@@ -380,12 +434,13 @@ class FakturPembelianViewSet(BasisAkunting):
 
     @action(detail=False, methods=['get'], url_path='jatuh-tempo')
     def jatuh_tempo(self, request):
-        from django.utils import timezone
-
         entitas_id = request.query_params.get('entitas')
         sampai = request.query_params.get('sampai')
         if not entitas_id:
             return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not request.user.bisa_akses_entitas(entitas_id):
+            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'},
+                            status=status.HTTP_403_FORBIDDEN)
         tgl = (timezone.datetime.fromisoformat(sampai).date() if sampai else timezone.localdate())
         qs = services.faktur_jatuh_tempo(entitas_id, tgl)
         return Response(FakturListSerializer(qs, many=True).data)
@@ -395,7 +450,11 @@ class FakturPembelianViewSet(BasisAkunting):
         entitas_id = request.query_params.get('entitas')
         if not entitas_id:
             return Response({'detail': 'Parameter entitas wajib.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not request.user.bisa_akses_entitas(entitas_id):
+            return Response({'detail': 'Anda tidak punya akses ke entitas ini.'},
+                            status=status.HTTP_403_FORBIDDEN)
         return Response(services.aging_hutang(entitas_id))
+
 
 class PembayaranView(viewsets.ViewSet):
     modul = 'keuangan'
@@ -421,12 +480,17 @@ class PembayaranView(viewsets.ViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+
 class UangMukaViewSet(viewsets.ReadOnlyModelViewSet):
     modul = 'keuangan'
     permission_classes = [AksesModul]
     queryset = (UangMukaSuplier.objects.select_related('entitas', 'suplier').order_by('-tanggal'))
     serializer_class = UangMukaSerializer
     filterset_fields = ['entitas', 'suplier']
+
+    def get_queryset(self):
+        return batasi_entitas(super().get_queryset(), self.request)
+
 
 class FakturPenjualanViewSet(BasisAkunting):
     serializer_class = FakturPenjualanSerializer
@@ -474,6 +538,7 @@ class FakturPenjualanViewSet(BasisAkunting):
 
         return Response(FakturPenjualanSerializer(faktur).data, status=status.HTTP_201_CREATED)
 
+
 class PenerimaanPiutangView(viewsets.ViewSet):
     modul = 'keuangan'
     permission_classes = [AksesModul]
@@ -502,13 +567,15 @@ class PenerimaanPiutangView(viewsets.ViewSet):
 
         return Response(
             {
-                'detail': 'Pembayaran piutang berhasil dicatat.', 
+                'detail': 'Pembayaran piutang berhasil dicatat.',
                 'mutasi_id': mutasi.id
             },
             status=status.HTTP_201_CREATED,
         )
 
-class PengeluaranKasViewSet(viewsets.ModelViewSet):
+
+class PengeluaranKasViewSet(BasisAkunting):
+    modul = 'keuangan'
     queryset = PengeluaranKas.objects.select_related('entitas', 'kategori_beban', 'sumber_dana').order_by('-tanggal', '-id')
     serializer_class = PengeluaranKasSerializer
     filterset_fields = ['entitas', 'status']
@@ -525,10 +592,13 @@ class PengeluaranKasViewSet(viewsets.ModelViewSet):
         except DjangoValidationError as e:
             return Response({'detail': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
-class PurchaseOrderKemasanViewSet(viewsets.ModelViewSet):
+
+class PurchaseOrderKemasanViewSet(BasisAkunting):
+    # Asumsi: PembelianKemasan punya field `entitas` seperti model lain di modul ini.
+    # Kalau nama field-nya beda/gak ada, sesuaikan `field=` di batasi_entitas
+    # atau override get_queryset() di sini secara manual.
     queryset = PembelianKemasan.objects.all().order_by('-tanggal', '-id')
     serializer_class = PurchaseOrderKemasanSerializer
-    permission_classes = [IsAuthenticated] 
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

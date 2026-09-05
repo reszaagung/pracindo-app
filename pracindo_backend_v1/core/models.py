@@ -14,9 +14,6 @@ from django.db import models
 from django.db.models import Q
 
 
-# =========================================================
-# ABSTRACT BASE
-# =========================================================
 
 class TimeStampedModel(models.Model):
     """Untuk master data dan model tanpa jejak pengguna."""
@@ -40,10 +37,6 @@ class DiauditModel(TimeStampedModel):
         abstract = True
 
 
-# =========================================================
-# ENTITAS & POOL BAHAN
-# =========================================================
-
 class GrupBahan(TimeStampedModel):
     """
     Unit pooling bahan secara fisik. Anggota satu grup berbagi isi tanki
@@ -65,8 +58,8 @@ class GrupBahan(TimeStampedModel):
 
 
 class JenisEntitas(models.TextChoices):
-    BADAN_HUKUM = 'BADAN_HUKUM', 'Badan hukum'   # PT, CV
-    PERORANGAN  = 'PERORANGAN',  'Perorangan'    # Agus, Marsini
+    BADAN_HUKUM = 'BADAN_HUKUM', 'Badan hukum'  
+    PERORANGAN  = 'PERORANGAN',  'Perorangan'    
 
 
 class Entitas(TimeStampedModel):
@@ -134,8 +127,8 @@ class CounterDokumen(models.Model):
     """
 
     entitas = models.ForeignKey(Entitas, on_delete=models.PROTECT)
-    jenis   = models.CharField(max_length=16)   # PO | GRN | FAKTUR | JURNAL | BAS | SESI
-    periode = models.CharField(max_length=6)    # YYYYMM
+    jenis   = models.CharField(max_length=16)  
+    periode = models.CharField(max_length=6)   
     urutan  = models.PositiveIntegerField(default=0)
 
     BULAN_ROMAWI = [
@@ -143,9 +136,8 @@ class CounterDokumen(models.Model):
         'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
     ]
 
-    # Lebar nomor urut per jenis dokumen. Default 3 digit.
     LEBAR = {
-        'JURNAL': 4,    # jurnal jauh lebih banyak per bulan
+        'JURNAL': 4,    
     }
 
     class Meta:
@@ -162,8 +154,6 @@ class CounterDokumen(models.Model):
     def __str__(self):
         return f"{self.jenis}/{self.entitas.kode}/{self.periode} = {self.urutan}"
 
-    # ---------- format ----------
-
     @classmethod
     def format_nomor(cls, entitas, jenis, tanggal, urutan):
         """
@@ -175,8 +165,6 @@ class CounterDokumen(models.Model):
         romawi = cls.BULAN_ROMAWI[tanggal.month - 1]
         lebar = cls.LEBAR.get(jenis, 3)
         return f"{jenis}/{entitas.kode}/{tanggal.year}/{romawi}/{urutan:0{lebar}d}"
-
-    # ---------- penomoran ----------
 
     @classmethod
     def berikutnya(cls, entitas, jenis, tanggal):
@@ -215,10 +203,6 @@ class CounterDokumen(models.Model):
         urutan = (counter.urutan if counter else 0) + 1
         return cls.format_nomor(entitas, jenis, tanggal, urutan)
 
-
-# =========================================================
-# PERIODE AKUNTANSI
-# =========================================================
 
 class PeriodeAkuntansi(TimeStampedModel):
     """

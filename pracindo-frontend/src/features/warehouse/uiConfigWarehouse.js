@@ -7,8 +7,7 @@ export const gudangModul = {
   siap: true,
   menu: [
     { label: 'Penerimaan', rute: '/warehouse/input/receipt' },
-    { label: 'Input Packageing', rute: '/warehouse/input/packing' },
-    { label: 'Riwayat Packing', rute: '/warehouse/input/packaging/log' },
+    { label: 'Packing Barang', rute: '/warehouse/input/packing' },
     { label: 'Selisih / Retur', rute: '/warehouse/input/discrepancy' },
     { label: 'Inspeksi QC', rute: '/warehouse/input/qc' },
   ],

@@ -19,7 +19,7 @@ from rest_framework import serializers
 from akunting.models import PurchaseOrder, PurchaseOrderItem
 
 from .models import (
-    JenisKemasan, LaporanSelisih, Packaging, PenerimaanBarang, PenerimaanItem,
+    JenisKemasan, LaporanSelisih,PenerimaanBarang, PenerimaanItem,
 )
 
 
@@ -181,13 +181,3 @@ class SelesaikanSelisihSerializer(serializers.Serializer):
 class TutupSelisihSerializer(serializers.Serializer):
     alasan = serializers.CharField()
 
-
-class PackagingSerializer(serializers.ModelSerializer):
-    produk_kode = serializers.CharField(source='produk.kode', read_only=True)
-    susut = serializers.DecimalField(max_digits=14, decimal_places=3,
-                                     read_only=True)
-
-    class Meta:
-        model = Packaging
-        fields = ['id', 'tanggal', 'produk', 'produk_kode', 'grup_bahan',
-                  'qty_curah', 'qty_kemasan', 'isi_per_kemasan', 'susut']

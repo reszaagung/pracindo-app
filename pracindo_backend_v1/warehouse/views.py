@@ -1,34 +1,29 @@
-"""
-Endpoint gudang — warehouse/views.py
-
-Serializer di modul ini TIDAK PERNAH memuat harga. Payload dari gudang
-juga tidak pernah membawa angka rupiah -- nilai dihitung di server dari
-harga yang tersimpan di PO, sehingga tidak ada yang bisa dimanipulasi
-dari klien.
-
-LaporanSelisihViewSet punya DUA tampilan dari objek yang sama:
-    modul warehouse  -> tanpa nilai rupiah, gudang melaporkan fakta fisik
-    modul akunting   -> dengan nilai dan resolusi, akunting yang menilai
-"""
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Prefetch
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 
 from akunting.models import PurchaseOrder, PurchaseOrderItem
-
+from staff_user.permissions import AksesModul
 from . import services
-from .models import LaporanSelisih, Packaging, PenerimaanBarang
+from .models import (
+    LaporanSelisih,
+    PenerimaanBarang,
+)
 from .serializers import (
-    LaporanManualSerializer, LaporanSelisihAkuntingSerializer,
-    LaporanSelisihGudangSerializer, PackagingSerializer,
-    PenerimaanBarangSerializer, PenerimaanListSerializer, POGudangSerializer,
-    SelesaikanSelisihSerializer, TerimaBarangSerializer,
+    LaporanManualSerializer,
+    LaporanSelisihAkuntingSerializer,
+    LaporanSelisihGudangSerializer,
+    PenerimaanBarangSerializer,
+    PenerimaanListSerializer,
+    POGudangSerializer,
+    SelesaikanSelisihSerializer,
+    TerimaBarangSerializer,
     TutupSelisihSerializer,
 )
-from staff_user.permissions import AksesModul
-
 
 def _galat(e):
     isi = e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}
@@ -209,11 +204,3 @@ class LaporanSelisihViewSet(viewsets.ModelViewSet):
         return Response(LaporanSelisihAkuntingSerializer(lap).data)
 
 
-class PackagingViewSet(viewsets.ModelViewSet):
-    modul = 'warehouse'
-    permission_classes = [AksesModul]
-    queryset = (Packaging.objects
-                .select_related('produk', 'grup_bahan')
-                .order_by('-tanggal', '-id'))
-    serializer_class = PackagingSerializer
-    filterset_fields = ['produk', 'grup_bahan', 'tanggal']

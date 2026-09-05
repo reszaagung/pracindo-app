@@ -83,8 +83,8 @@
                             <th class="py-3 px-4 font-semibold rounded-tl-xl w-[18%]">No. PO</th>
                             <th class="py-3 px-4 font-semibold w-[12%]">Tanggal</th>
                             <th class="py-3 px-4 font-semibold w-[20%]">Supplier</th>
-                            <th class="py-3 px-4 font-semibold w-[15%] text-center">Status</th>
-                            <th class="py-3 px-4 font-semibold w-[22%] text-center">Aksi</th>
+                            <th class="py-3 px-4 font-semibold w-[20%] text-center">Status</th>
+                            <th class="py-3 px-4 font-semibold w-[17%] text-center">Aksi</th>
                             <th class="py-3 px-4 font-semibold w-[13%] text-center rounded-tr-xl">Detail</th>
                         </tr>
                     </thead>
@@ -95,68 +95,54 @@
                             <td class="py-3 px-4 text-slate-700 truncate max-w-[200px]" :title="po.suplier_nama">
                                 {{ po.suplier_nama }}
                             </td>
+                            
+                            <!-- KOLOM STATUS (Badge & Tombol Persetujuan) -->
                             <td class="py-3 px-4 text-center">
-                                <span :class="badgeColor(po.status)" class="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase whitespace-nowrap">
-                                    {{ po.status }}
-                                </span>
+                                <div class="flex flex-col items-center justify-center gap-2">
+                                    <span :class="badgeColor(po.status)" class="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase whitespace-nowrap">
+                                        {{ po.status }}
+                                    </span>
+
+                                    <!-- Tombol Alur Kerja -->
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        <!-- AKSI DRAFT -->
+                                        <template v-if="po.status === 'DRAFT'">
+                                            <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-send text-[10px] mr-1"></i> Ajukan
+                                            </button>
+                                            <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-trash text-[10px]"></i>
+                                            </button>
+                                        </template>
+
+                                        <!-- AKSI PENDING -->
+                                        <template v-else-if="po.status === 'PENDING'">
+                                            <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-check text-[10px] mr-1"></i> Setuju
+                                            </button>
+                                            <button @click="handleTolak(po.id)" title="Tolak PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-times text-[10px]"></i>
+                                            </button>
+                                        </template>
+
+                                        <!-- AKSI APPROVED -->
+                                        <template v-else-if="po.status === 'APPROVED'">
+                                            <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-envelope text-[10px] mr-1"></i> Kirim
+                                            </button>
+                                            <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center shadow-sm">
+                                                <i class="pi pi-trash text-[10px]"></i>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
                             </td>
 
-                            <!-- KOLOM AKSI -->
+                            <!-- KOLOM AKSI (Hanya Cetak) -->
                             <td class="py-3 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    
-                                    <!-- AKSI DRAFT -->
-                                    <template v-if="po.status === 'DRAFT'">
-                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak Draf" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-700 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-print text-[10px] mr-1"></i> Cetak
-                                        </button>
-                                        <button @click="handleAjukan(po.id)" title="Ajukan ke Manajer" class="px-2.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-send text-[10px] mr-1"></i> Ajukan
-                                        </button>
-                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-trash text-[10px]"></i>
-                                        </button>
-                                    </template>
-
-                                    <!-- AKSI PENDING -->
-                                    <template v-else-if="po.status === 'PENDING'">
-                                        <button @click="handleSetujui(po.id)" title="Setujui PO" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-check text-[10px] mr-1"></i> Setuju
-                                        </button>
-                                        <button @click="handleTolak(po.id)" title="Tolak PO" class="px-2.5 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-times text-[10px]"></i>
-                                        </button>
-                                    </template>
-
-                                    <!-- AKSI APPROVED -->
-                                    <template v-else-if="po.status === 'APPROVED'">
-                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-700 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-print text-[10px]"></i>
-                                        </button>
-                                        <button @click="handleKirim(po.id)" title="Kirim ke Suplier" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-envelope text-[10px] mr-1"></i> Kirim
-                                        </button>
-                                        <button @click="handleBatal(po.id)" title="Batalkan PO" class="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-trash text-[10px]"></i>
-                                        </button>
-                                    </template>
-
-                                    <!-- AKSI TERKIRIM / SEBAGIAN (Bisa Cetak & Tutup S) -->
-                                    <template v-else-if="['TERKIRIM', 'SEBAGIAN'].includes(po.status)">
-                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak PO" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-print text-[10px] mr-1"></i> Cetak
-                                        </button>
-                                    </template>
-
-                                    <!-- AKSI SELESAI / DISETUJUI (Hanya Bisa Cetak) -->
-                                    <template v-else-if="['SELESAI', 'DISETUJUI'].includes(po.status)">
-                                        <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak Dokumen PO" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors flex items-center">
-                                            <i class="pi pi-print text-[10px] mr-1.5"></i> Cetak PO
-                                        </button>
-                                    </template>
-
-                                    <span v-else class="text-xs text-slate-300">-</span>
-                                </div>
+                                <button @click="unduhDokumenPO(po.id, po.no_po)" title="Cetak Dokumen PO" class="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-full text-[11px] font-bold transition-all flex items-center justify-center mx-auto whitespace-nowrap shadow-sm">
+                                    <i class="pi pi-print text-[10px] mr-1.5"></i> Cetak PO
+                                </button>
                             </td>
 
                             <!-- KOLOM DETAIL -->
@@ -185,7 +171,7 @@ import { onMounted, ref, defineAsyncComponent } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import { usePurchaseOrder } from '@/features/accounting/composables/usePurchaseOrder'
-import api from '@/utils/api' // Digunakan untuk fungsi cetak & tutup sesi
+import api from '@/utils/api'
 
 const tampilModalDetail = ref(false)
 const poIdTerpilih = ref(null)
@@ -270,7 +256,7 @@ const handleTutupSesi = async (id) => {
         try {
             await api.post(`akunting/purchase-order/${id}/tutup-sesi/`)
             alert('Sesi Purchase Order berhasil ditutup dan status menjadi SELESAI.')
-            muatDaftarPO() // Refresh tabel agar statusnya berubah
+            muatDaftarPO()
         } catch (error) {
             console.error('Gagal menutup sesi PO:', error)
             alert(error.response?.data?.detail || 'Terjadi kesalahan saat menutup sesi PO.')

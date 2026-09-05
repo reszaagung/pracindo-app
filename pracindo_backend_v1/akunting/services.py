@@ -33,10 +33,6 @@ from .posting_rules import ATURAN
 Q2 = Decimal('0.01')
 
 
-# =========================================================
-# POSTING JURNAL
-# =========================================================
-
 @transaction.atomic
 def posting(*, kejadian, entitas_id, tanggal, referensi, nilai,
             idem_key, user, keterangan=''):
@@ -146,10 +142,6 @@ def jurnal_balik(*, jurnal_id, tanggal, alasan, user):
     return balik
 
 
-# =========================================================
-# HUTANG
-# =========================================================
-
 @transaction.atomic
 def post_pembayaran(*, faktur_id, nominal, tanggal, user, referensi, idem_key):
     """
@@ -257,18 +249,6 @@ def faktur_jatuh_tempo(entitas_id, sampai_tanggal, suplier_id=None):
     return qs.filter(suplier_id=suplier_id) if suplier_id else qs
 
 
-# =========================================================
-# PURCHASE ORDER
-# =========================================================
-#
-# Semua operasi yang mengubah state PO lewat sini -- bukan lewat
-# serializer langsung -- supaya row lock dan rekalkulasi status konsisten
-# di semua jalur, baik dipanggil dari API maupun manual.
-#
-# PO BUKAN kejadian ekonomi. Tidak ada satu pun panggilan posting() di
-# bagian ini, dan itu disengaja. Jurnal pertama lahir di
-# warehouse.terima_barang().
-
 def preview_nomor_po(entitas, tanggal):
     """
     Preview nomor untuk ditampilkan di form sebelum submit.
@@ -315,9 +295,6 @@ def buat_po(*, entitas_id, suplier_id, tanggal, items, user,
         dibuat_oleh=user,
         status=StatusPO.DRAFT,
     )
-
-    # bulk_create dilewati: PurchaseOrderItem.save() yang menghitung
-    # amount dari qty x harga, dan itu tidak boleh dipercaya dari payload.
     for it in items:
         PurchaseOrderItem(
             purchase_order=po,
@@ -511,10 +488,6 @@ def ringkasan_po(po_id):
         ],
     }
 
-
-# =========================================================
-# FAKTUR PEMBELIAN
-# =========================================================
 
 def hitung_nilai_penerimaan(penerimaan):
     """
@@ -714,9 +687,6 @@ def aging_hutang(entitas_id, per=None):
         )
         .order_by('-total')
     )
-# =========================================================
-# PIUTANG PENJUALAN (ACCOUNT RECEIVABLE)
-# =========================================================
 
 @transaction.atomic
 def terbitkan_faktur_jual(*, delivery_order_id, nomor_faktur, tanggal_faktur,
@@ -827,9 +797,6 @@ def terima_pembayaran_piutang(*, faktur_id, nominal, tanggal, user, referensi, i
 
     return mutasi
 
-# =========================================================
-# PURCHASE ORDER KEMASAN (Aset Fisik)
-# =========================================================
 
 def preview_nomor_po_kemasan(entitas, tanggal):
     """

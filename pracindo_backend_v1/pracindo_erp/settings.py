@@ -59,7 +59,7 @@ LOCAL_APPS = [
     'staff_user',
     'master',
     'dokumen',
-    'inventory',
+    'inventory.apps.InventoryConfig',
     'akunting',
     'keuangan',
     'pajak',
@@ -68,7 +68,8 @@ LOCAL_APPS = [
     'sales_order',
     'logistik',
     'work_order',
-    'retail'
+    'retail',
+    'fitur',
     
 ]
 

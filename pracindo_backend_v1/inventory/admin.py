@@ -2,9 +2,10 @@ from django.contrib import admin
 from .models import (
     Kemasan, MutasiKlaim, Packing, Pembelian, SaldoEntitas,
     StatusDokumen, SumberPembelian, PoolResource, PoolKemasan,
-    StokBarangJadi, StokItemsPabrik  
+    StokBarangJadi, StokItemsPabrik
 )
-    
+
+
 class TanpaTulis:
     def has_add_permission(self, request, obj=None):
         return False
@@ -14,6 +15,10 @@ class TanpaTulis:
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def has_view_permission(self, request, obj=None):
+        return True
+
 
 class KunciSetelahPosting:
     readonly_dasar = ()
@@ -100,9 +105,8 @@ class PembelianAdmin(KunciSetelahPosting, admin.ModelAdmin):
 
 @admin.register(Packing)
 class PackingAdmin(TanpaTulis, admin.ModelAdmin):
-    # Status dan posted_at dihapus. Kemasan dalam ditambahkan.
-    list_display = ['nomor', 'tanggal', 'entitas', 'batch', 'kemasan', 'kemasan_dalam'] 
-    list_filter = ['entitas', 'tanggal']
+    list_display = ["nomor", "tanggal", "entitas", "batch", "kemasan", "kemasan_dalam"] 
+    list_filter = ["entitas", "tanggal"]
     search_fields = ("nomor", "batch__nomor")
     list_select_related = ("entitas", "batch", "kemasan", "kemasan_dalam")
     
@@ -127,3 +131,19 @@ class MutasiKlaimAdmin(TanpaTulis, admin.ModelAdmin):
     @admin.display(description="Referensi")
     def ref(self, obj):
         return f"{obj.ref_type}#{obj.ref_id}"
+
+
+@admin.register(StokBarangJadi)
+class StokBarangJadiAdmin(TanpaTulis, admin.ModelAdmin):
+    list_display = ("entitas", "grup_bahan", "item", "kemasan", "qty_unit", "qty_kg")
+    list_filter = ("entitas", "grup_bahan", "kemasan")
+    search_fields = ("entitas__kode",)
+    list_select_related = ("entitas", "grup_bahan", "item", "kemasan")
+
+
+@admin.register(StokItemsPabrik)
+class StokItemsPabrikAdmin(TanpaTulis, admin.ModelAdmin):
+    list_display = ("entitas", "grup_bahan", "item", "qty_kg")
+    list_filter = ("entitas", "grup_bahan")
+    search_fields = ("entitas__kode",)
+    list_select_related = ("entitas", "grup_bahan", "item")
